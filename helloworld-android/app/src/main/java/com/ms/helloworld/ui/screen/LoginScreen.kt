@@ -1,4 +1,4 @@
-package com.ms.helloworld.ui.theme.screen
+package com.ms.helloworld.ui.screen
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -13,10 +13,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.navigation.NavHostController
 import com.ms.helloworld.R
+import com.ms.helloworld.navigation.Screen
 
 @Composable
-fun LoginScreen() {
+fun LoginScreen(navController: NavHostController) {
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -50,7 +52,7 @@ fun LoginScreen() {
                 // Google 로그인 버튼
                 OutlinedButton(
                     onClick = {
-                        // Todo: Google 로그인 처리
+                        navController.navigate(Screen.OnboardingScreens.route)
                     },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -126,5 +128,5 @@ fun LoginScreen() {
 @Preview(showBackground = true)
 @Composable
 fun LoginScreenPreview() {
-    LoginScreen()
+    LoginScreen(navController = null as NavHostController)
 }

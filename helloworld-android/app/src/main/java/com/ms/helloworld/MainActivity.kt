@@ -10,9 +10,9 @@ import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
-import com.ms.helloworld.ui.theme.screen.OnboardingScreens
+import androidx.navigation.compose.rememberNavController
+import com.ms.helloworld.navigation.MainNavigation
 import com.ms.helloworld.ui.theme.HelloWorldTheme
-import com.ms.helloworld.ui.screen.HomeScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -25,7 +25,8 @@ class MainActivity : ComponentActivity() {
                         .fillMaxSize()
                         .windowInsetsPadding(WindowInsets.systemBars)
                 ) {
-                    OnboardingScreens()
+                    val navController = rememberNavController()
+                    MainNavigation(navController = navController)
                 }
             }
         }

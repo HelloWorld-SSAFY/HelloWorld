@@ -1,4 +1,4 @@
-package com.ms.helloworld.ui.theme.screen
+package com.ms.helloworld.ui.screen
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -15,7 +15,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -32,7 +31,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.navigation.NavHostController
 import com.ms.helloworld.R
+import com.ms.helloworld.navigation.Screen
 import kotlinx.coroutines.launch
 
 data class OnboardingScreen(
@@ -55,7 +56,7 @@ enum class ScreenType {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun OnboardingScreens(
-    onFinish: () -> Unit = {}
+    navController: NavHostController
 ) {
     val screens = listOf(
         OnboardingScreen(
@@ -142,7 +143,7 @@ fun OnboardingScreens(
                                 animationSpec = tween(durationMillis = 500)
                             )
                         } else {
-                            onFinish()
+                            navController.navigate(Screen.HomeScreen.route)
                         }
                     }
                 },
@@ -570,6 +571,6 @@ fun IconCard(
 @Composable
 fun OnboardingScreensPreview() {
     MaterialTheme {
-        OnboardingScreens()
+        OnboardingScreens(navController = null as NavHostController)
     }
 }
