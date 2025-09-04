@@ -32,7 +32,7 @@ fun CalendarPostBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = bottomSheetState,
         dragHandle = { BottomSheetDefaults.DragHandle() },
-        windowInsets = WindowInsets(0)
+        modifier = Modifier.windowInsetsPadding(WindowInsets(0))
     ) {
         Column(
             modifier = Modifier

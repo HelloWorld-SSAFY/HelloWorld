@@ -1,5 +1,6 @@
 package com.ms.helloworld.ui.components
 
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -13,7 +14,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.material.ripple.rememberRipple
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -186,7 +186,7 @@ fun ExpandedCalendarSection(
                                         )
                                         .clickable(
                                             interactionSource = remember { MutableInteractionSource() },
-                                            indication = rememberRipple()
+                                            indication = LocalIndication.current
                                         ) { 
                                             if (isCurrentMonth) {
                                                 selectedDate = dateString
@@ -236,7 +236,7 @@ fun ExpandedCalendarSection(
                 fontSize = 16.sp,
                 modifier = Modifier.clickable(
                     interactionSource = remember { MutableInteractionSource() },
-                    indication = rememberRipple()
+                    indication = LocalIndication.current
                 ) { onCollapse() }
             )
         }

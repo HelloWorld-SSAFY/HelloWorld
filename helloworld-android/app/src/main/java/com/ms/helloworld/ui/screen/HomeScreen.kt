@@ -1,5 +1,6 @@
 package com.ms.helloworld.ui.screen
 
+import android.annotation.SuppressLint
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.layout.*
@@ -21,12 +22,15 @@ import com.ms.helloworld.data.MomProfile
 import com.ms.helloworld.ui.viewmodel.HomeViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.runtime.collectAsState
+import androidx.navigation.NavHostController
 import java.util.UUID
 import java.time.LocalDate
 
+@SuppressLint("NewApi")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
+    navController: NavHostController,
     viewModel: HomeViewModel = viewModel()
 ) {
     val backgroundColor = Color(0xFFFAEDBA)
@@ -63,9 +67,6 @@ fun HomeScreen(
                     containerColor = backgroundColor
                 )
             )
-        },
-        bottomBar = {
-            BottomNavigationBar()
         }
     ) { paddingValues ->
         Column(
@@ -171,5 +172,5 @@ fun HomeScreen(
 @Preview(showBackground = true)
 @Composable
 fun HomeScreenPreview() {
-    HomeScreen()
+    HomeScreen(navController = null as NavHostController)
 }
