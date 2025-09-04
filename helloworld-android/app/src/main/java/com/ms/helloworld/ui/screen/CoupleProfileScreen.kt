@@ -1,11 +1,15 @@
 package com.ms.helloworld.ui.screen
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,6 +30,9 @@ fun CoupleProfileScreen(
     navController: NavHostController,
     onBackClick: () -> Unit = {}
 ) {
+    var showInviteCodeBottomSheet by remember { mutableStateOf(false) }
+    var inviteCode by remember { mutableStateOf("") }
+    val bottomSheetState = rememberModalBottomSheetState()
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -106,7 +113,13 @@ fun CoupleProfileScreen(
                     Column(
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        MenuItemText("초대코드")
+                        InviteCodeButton(
+                            onClick = {
+                                // 초대코드 생성
+                                inviteCode = generateInviteCode()
+                                showInviteCodeBottomSheet = true
+                            }
+                        )
                         Spacer(modifier = Modifier.height(32.dp))
                         MenuItemText("설정")
                         Spacer(modifier = Modifier.height(32.dp))
@@ -164,6 +177,133 @@ fun CoupleProfileScreen(
             }
         }
     }
+    
+    // 초대코드 바텀시트
+    if (showInviteCodeBottomSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showInviteCodeBottomSheet = false },
+            sheetState = bottomSheetState
+        ) {
+            InviteCodeBottomSheetContent(
+                inviteCode = inviteCode,
+                onDismiss = { showInviteCodeBottomSheet = false }
+            )
+        }
+    }
+}
+
+@Composable
+private fun InviteCodeButton(onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = Color(0xFF0C7B33)
+        ),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Text(
+            text = "초대코드 생성",
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Medium,
+            color = Color.White
+        )
+    }
+}
+
+@Composable
+private fun InviteCodeBottomSheetContent(
+    inviteCode: String,
+    onDismiss: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = "초대코드",
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.Black
+        )
+        
+        Spacer(modifier = Modifier.height(24.dp))
+        
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = Color(0xFFF5F5F5)
+            ),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = inviteCode,
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF0C7B33),
+                    modifier = Modifier.weight(1f)
+                )
+                
+                IconButton(
+                    onClick = {
+                        // TODO: 클립보드에 복사 기능 구현
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Share,
+                        contentDescription = "공유",
+                        tint = Color(0xFF0C7B33)
+                    )
+                }
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        Text(
+            text = "이 코드를 파트너에게 공유해 주세요",
+            fontSize = 16.sp,
+            color = Color.Gray,
+            textAlign = TextAlign.Center
+        )
+        
+        Spacer(modifier = Modifier.height(32.dp))
+        
+        Button(
+            onClick = onDismiss,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFF0C7B33)
+            ),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Text(
+                text = "확인",
+                fontSize = 16.sp,
+                color = Color.White
+            )
+        }
+        
+        Spacer(modifier = Modifier.height(16.dp))
+    }
+}
+
+private fun generateInviteCode(): String {
+    val chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    return (1..6)
+        .map { chars.random() }
+        .joinToString("")
 }
 
 @Composable
@@ -172,9 +312,7 @@ private fun MenuItemText(text: String) {
         text = text,
         fontSize = 20.sp,
         color = Color.Black,
-        modifier = Modifier.padding(vertical = 6.dp),
-
-
+        modifier = Modifier.padding(vertical = 6.dp)
     )
 }
 
