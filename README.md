@@ -46,7 +46,7 @@
 ![로고](image/API명세서4.png)
 
 ### 3. ERD 다이어그램
-
+![로고](image/ERD.png)
 <br>
 
 ### 4. 와이어프레임
