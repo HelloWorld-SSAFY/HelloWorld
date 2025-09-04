@@ -13,6 +13,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.ms.helloworld.MainActivity
+import com.ms.helloworld.ui.screen.CoupleProfileScreen
 import com.ms.helloworld.ui.screen.HomeScreen
 import com.ms.helloworld.ui.screen.LoginScreen
 import com.ms.helloworld.ui.screen.OnboardingScreens
@@ -73,6 +74,14 @@ fun MainNavigation(
                 OnboardingScreens(navController)
             }
 
+            composable(Screen.CoupleProfileScreen.route) {
+                CoupleProfileScreen(
+                    navController = navController,
+                    onBackClick = {
+                        navController.popBackStack()
+                    }
+                )
+            }
         }
     }
 }
