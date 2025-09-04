@@ -12,6 +12,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import com.ms.helloworld.ui.theme.screen.OnboardingScreens
 import com.ms.helloworld.ui.theme.HelloWorldTheme
+import com.ms.helloworld.ui.screen.HomeScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
