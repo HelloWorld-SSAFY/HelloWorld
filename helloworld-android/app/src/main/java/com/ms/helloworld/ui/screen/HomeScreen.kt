@@ -23,6 +23,7 @@ import com.ms.helloworld.ui.viewmodel.HomeViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.runtime.collectAsState
 import androidx.navigation.NavHostController
+import com.ms.helloworld.navigation.Screen
 import java.util.UUID
 import java.time.LocalDate
 
@@ -84,10 +85,18 @@ fun HomeScreen(
                         nickname = "로딩중...",
                         pregnancyWeek = 1,
                         dueDate = LocalDate.now()
-                    )
+                    ),
+                    onClick = {
+                        navController.navigate(Screen.CoupleProfileScreen.route)
+                    }
                 )
             } else {
-                ProfileSection(momProfile = momProfile)
+                ProfileSection(
+                    momProfile = momProfile,
+                    onClick = {
+                        navController.navigate(Screen.CoupleProfileScreen.route)
+                    }
+                )
             }
 
             // 캘린더 섹션 (확장/축소 가능) - 부드러운 크기 변화

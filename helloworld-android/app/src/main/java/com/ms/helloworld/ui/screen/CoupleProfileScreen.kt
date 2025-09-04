@@ -18,10 +18,12 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import androidx.navigation.NavHostController
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CoupleProfileScreen(
+    navController: NavHostController,
     onBackClick: () -> Unit = {}
 ) {
     Column(
@@ -179,5 +181,5 @@ private fun MenuItemText(text: String) {
 @Preview(showBackground = true)
 @Composable
 fun CoupleScreenPreview() {
-    CoupleProfileScreen()
+    CoupleProfileScreen(navController = null as NavHostController)
 }
