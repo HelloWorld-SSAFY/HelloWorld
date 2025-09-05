@@ -24,7 +24,6 @@ fun CalendarPostBottomSheet(
     selectedDate: String,
     posts: List<CalendarPost>,
     onDismiss: () -> Unit,
-    onAddPost: () -> Unit,
     onDeletePost: (CalendarPost) -> Unit,
     bottomSheetState: SheetState
 ) {
@@ -41,30 +40,12 @@ fun CalendarPostBottomSheet(
                 .padding(bottom = 32.dp)
         ) {
             // 헤더
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "${formatDateForDisplay(selectedDate)} 일기",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                
-                FilledTonalButton(
-                    onClick = onAddPost,
-                    modifier = Modifier.size(40.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    contentPadding = PaddingValues(0.dp)
-                ) {
-                    Icon(
-                        Icons.Default.Add,
-                        contentDescription = "일기 추가",
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
+            Text(
+                text = "${formatDateForDisplay(selectedDate)} 일기",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.fillMaxWidth()
+            )
             
             Spacer(modifier = Modifier.height(16.dp))
             
@@ -86,7 +67,7 @@ fun CalendarPostBottomSheet(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "+ 버튼을 눌러 일기를 작성해보세요!",
+                            text = "플로팅 버튼을 눌러 일기를 작성해보세요!",
                             color = Color.Gray,
                             fontSize = 12.sp
                         )

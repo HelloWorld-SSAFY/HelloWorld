@@ -8,11 +8,16 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import com.ms.helloworld.MainActivity
+import com.ms.helloworld.ui.screen.CalendarScreen
 import com.ms.helloworld.ui.screen.CoupleProfileScreen
 import com.ms.helloworld.ui.screen.HomeScreen
 import com.ms.helloworld.ui.screen.LoginScreen
@@ -60,7 +65,11 @@ fun MainNavigation(
         NavHost(
             navController = navController,
             startDestination = Screen.LoginScreen.route,
-            modifier = Modifier.padding(innerPadding)
+            modifier = Modifier.padding(innerPadding),
+            enterTransition = { EnterTransition.None },
+            exitTransition = { ExitTransition.None },
+            popEnterTransition = { EnterTransition.None },
+            popExitTransition = { ExitTransition.None }
         ) {
             composable(Screen.LoginScreen.route) {
                 LoginScreen(navController)
@@ -81,6 +90,18 @@ fun MainNavigation(
                         navController.popBackStack()
                     }
                 )
+            }
+
+            composable(
+                route = "calendar?selectedDate={selectedDate}",
+                arguments = listOf(navArgument("selectedDate") { 
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                })
+            ) { backStackEntry ->
+                val selectedDate = backStackEntry.arguments?.getString("selectedDate")
+                CalendarScreen(navController, selectedDate)
             }
         }
     }

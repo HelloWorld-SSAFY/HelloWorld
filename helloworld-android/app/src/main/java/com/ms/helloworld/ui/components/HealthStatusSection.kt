@@ -17,12 +17,6 @@ import androidx.compose.ui.unit.sp
 
 @Composable
 fun HealthStatusSection() {
-    Text(
-        "엄마의 건강상태",
-        fontSize = 18.sp,
-        fontWeight = FontWeight.Bold
-    )
-
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Color.White),
