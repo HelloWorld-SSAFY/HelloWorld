@@ -1,10 +1,9 @@
 package com.ms.helloworld.ui.screen
 
 import android.annotation.SuppressLint
-import androidx.compose.animation.*
-import androidx.compose.animation.core.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Notifications
@@ -24,7 +23,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.runtime.collectAsState
 import androidx.navigation.NavHostController
 import com.ms.helloworld.navigation.Screen
-import java.util.UUID
 import java.time.LocalDate
 
 @SuppressLint("NewApi")
@@ -35,12 +33,7 @@ fun HomeScreen(
     viewModel: HomeViewModel = viewModel()
 ) {
     val backgroundColor = Color(0xFFFAEDBA)
-    var showFullCalendar by remember { mutableStateOf(false) }
     var posts by remember { mutableStateOf(mapOf<String, List<CalendarPost>>()) }
-    var showBottomSheet by remember { mutableStateOf(false) }
-    var showAddDialog by remember { mutableStateOf(false) }
-    var selectedDateKey by remember { mutableStateOf("") }
-    val bottomSheetState = rememberModalBottomSheetState()
     
     val momProfile by viewModel.momProfile.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
@@ -76,104 +69,121 @@ fun HomeScreen(
                 .padding(paddingValues)
                 .padding(16.dp)
                 .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // 프로필 섹션 (항상 표시)
-            if (isLoading) {
-                ProfileSection(
-                    momProfile = MomProfile(
-                        nickname = "로딩중...",
-                        pregnancyWeek = 1,
-                        dueDate = LocalDate.now()
-                    ),
-                    onClick = {
-                        navController.navigate(Screen.CoupleProfileScreen.route)
-                    }
-                )
-            } else {
-                ProfileSection(
-                    momProfile = momProfile,
-                    onClick = {
-                        navController.navigate(Screen.CoupleProfileScreen.route)
-                    }
-                )
-            }
-
-            // 캘린더 섹션 (확장/축소 가능) - 부드러운 크기 변화
-            Box(
-                modifier = Modifier.animateContentSize(
-                    animationSpec = tween(
-                        durationMillis = 500,
-                        easing = EaseOutCubic
-                    )
-                )
+            // 프로필 섹션 카드
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                shape = RoundedCornerShape(16.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
             ) {
-                if (showFullCalendar) {
-                    ExpandedCalendarSection(
-                        onCollapse = { showFullCalendar = false },
-                        onDateClick = { dateKey ->
-                            selectedDateKey = dateKey
-                            showBottomSheet = true
-                        },
-                        postsMap = posts
+                Column(
+                    modifier = Modifier.padding(20.dp)
+                ) {
+                    Text(
+                        text = "임신 정보",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
                     )
-                } else {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    if (isLoading) {
+                        ProfileSection(
+                            momProfile = MomProfile(
+                                nickname = "로딩중...",
+                                pregnancyWeek = 1,
+                                dueDate = LocalDate.now()
+                            ),
+                            onClick = {
+                                navController.navigate(Screen.CoupleProfileScreen.route)
+                            }
+                        )
+                    } else {
+                        ProfileSection(
+                            momProfile = momProfile,
+                            onClick = {
+                                navController.navigate(Screen.CoupleProfileScreen.route)
+                            }
+                        )
+                    }
+                }
+            }
+
+            // 캘린더 섹션 카드
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                shape = RoundedCornerShape(16.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp)
+                ) {
+                    Text(
+                        text = "이번 주 일정",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
                     CalendarSection(
-                        onExpand = { showFullCalendar = true },
                         onDateClick = { dateKey ->
-                            selectedDateKey = dateKey
-                            showBottomSheet = true
+                            navController.navigate(Screen.CalendarScreen.createRoute(dateKey)) {
+                                launchSingleTop = true
+                            }
                         },
                         postsMap = posts
                     )
                 }
             }
 
-            // 오늘의 추천 섹션
-            TodayRecommendationSection()
-
-            // 엄마의 건강상태 섹션
-            HealthStatusSection()
-        }
-    }
-    
-    // 바텀시트 - 게시글 목록
-    if (showBottomSheet && selectedDateKey.isNotEmpty()) {
-        CalendarPostBottomSheet(
-            selectedDate = selectedDateKey,
-            posts = posts[selectedDateKey] ?: emptyList(),
-            onDismiss = { showBottomSheet = false },
-            onAddPost = { showAddDialog = true },
-            onDeletePost = { postToDelete ->
-                val currentPosts = posts[selectedDateKey] ?: emptyList()
-                val updatedPosts = currentPosts.filter { it.id != postToDelete.id }
-                posts = if (updatedPosts.isEmpty()) {
-                    posts - selectedDateKey
-                } else {
-                    posts + (selectedDateKey to updatedPosts)
+            // 오늘의 추천 섹션 카드
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                shape = RoundedCornerShape(16.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp)
+                ) {
+                    Text(
+                        text = "오늘의 추천",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    TodayRecommendationSection()
                 }
-            },
-            bottomSheetState = bottomSheetState
-        )
-    }
-    
-    // 다이얼로그 - 게시글 추가
-    if (showAddDialog && selectedDateKey.isNotEmpty()) {
-        AddPostDialog(
-            selectedDate = selectedDateKey,
-            onDismiss = { showAddDialog = false },
-            onSave = { title, content ->
-                val newPost = CalendarPost(
-                    id = UUID.randomUUID().toString(),
-                    date = selectedDateKey,
-                    title = title,
-                    content = content
-                )
-                val currentPosts = posts[selectedDateKey] ?: emptyList()
-                posts = posts + (selectedDateKey to (currentPosts + newPost))
-                showAddDialog = false
             }
-        )
+
+            // 엄마의 건강상태 섹션 카드
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                shape = RoundedCornerShape(16.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp)
+                ) {
+                    Text(
+                        text = "건강 상태",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    HealthStatusSection()
+                }
+            }
+        }
     }
 }
 

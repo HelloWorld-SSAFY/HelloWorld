@@ -22,7 +22,6 @@ import java.util.*
 
 @Composable
 fun CalendarSection(
-    onExpand: () -> Unit = {},
     onDateClick: (String) -> Unit = {},
     postsMap: Map<String, List<Any>> = emptyMap()
 ) {
@@ -30,7 +29,6 @@ fun CalendarSection(
     val currentYear = calendar.get(Calendar.YEAR)
     val currentMonth = calendar.get(Calendar.MONTH)
     val currentDay = calendar.get(Calendar.DAY_OF_MONTH)
-    var selectedDate by remember { mutableStateOf(currentDay.toString()) }
     
     // 현재 날짜를 기준으로 일주일 날짜 생성
     val weekDates = mutableListOf<Calendar>()
@@ -48,15 +46,10 @@ fun CalendarSection(
         weekDates.add(date)
     }
     
-    Card(
+    Column(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        shape = RoundedCornerShape(12.dp)
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
             // 헤더 - ExpandedCalendarSection과 완전히 동일한 구조
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -117,8 +110,7 @@ fun CalendarSection(
                         Spacer(modifier = Modifier.height(8.dp))
 
                         val dateString = date.get(Calendar.DAY_OF_MONTH).toString()
-                        val isSelected = dateString == selectedDate && 
-                                        date.get(Calendar.MONTH) == currentMonth
+                        val isSelected = false
                         val isToday = date.get(Calendar.YEAR) == currentYear && 
                                      date.get(Calendar.MONTH) == currentMonth && 
                                      date.get(Calendar.DAY_OF_MONTH) == currentDay
@@ -141,7 +133,6 @@ fun CalendarSection(
                                     interactionSource = remember { MutableInteractionSource() },
                                     indication = LocalIndication.current
                                 ) { 
-                                    selectedDate = dateString
                                     onDateClick(dateKey)
                                 },
                             contentAlignment = Alignment.Center
@@ -174,19 +165,6 @@ fun CalendarSection(
                     }
                 }
             }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                "∨",
-                color = Color.Gray,
-                fontSize = 16.sp,
-                modifier = Modifier.clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = LocalIndication.current
-                ) { onExpand() }
-            )
-        }
     }
 }
 

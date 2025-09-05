@@ -33,14 +33,6 @@ fun TodayRecommendationSection() {
     )
 
     Column {
-        Text(
-            "오늘의 추천",
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Bold
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
         LazyRow(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
