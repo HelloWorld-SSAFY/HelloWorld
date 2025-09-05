@@ -50,3 +50,5 @@
 <br>
 
 ### 4. 와이어프레임
+![로고](image/Wireframe.png)
+<br>
