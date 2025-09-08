@@ -57,6 +57,10 @@ dependencies {
     // Navigation Compose
     implementation("androidx.navigation:navigation-compose:2.7.6")
 
+    // Android Animation
+    implementation("androidx.compose.animation:animation:1.9.0")
+
     // 개발/디버그
     debugImplementation(libs.androidx.ui.tooling)
+
 }

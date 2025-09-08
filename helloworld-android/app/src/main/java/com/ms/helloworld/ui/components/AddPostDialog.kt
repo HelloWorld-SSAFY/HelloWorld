@@ -1,5 +1,8 @@
 package com.ms.helloworld.ui.components
 
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -9,30 +12,88 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlin.math.abs
 
 @Composable
 fun AddPostDialog(
     selectedDate: String,
+    initialTitle: String = "",
+    initialContent: String = "",
     onDismiss: () -> Unit,
     onSave: (String, String) -> Unit
 ) {
-    var title by remember { mutableStateOf("") }
-    var content by remember { mutableStateOf("") }
+    var title by remember { mutableStateOf(initialTitle) }
+    var content by remember { mutableStateOf(initialContent) }
+    var offsetX by remember { mutableStateOf(0f) }
+    val screenWidth = LocalConfiguration.current.screenWidthDp.dp
+    
+    // 애니메이션 상태
+    val animatedOffset by animateFloatAsState(
+        targetValue = offsetX,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "dialog_offset"
+    )
+    
+    // 등장 애니메이션
+    var isVisible by remember { mutableStateOf(false) }
+    
+    LaunchedEffect(Unit) {
+        isVisible = true
+    }
     
     Dialog(onDismissRequest = onDismiss) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .wrapContentHeight(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White)
+        AnimatedVisibility(
+            visible = isVisible,
+            enter = slideInHorizontally(
+                initialOffsetX = { it },
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessMedium
+                )
+            ) + fadeIn(animationSpec = tween(300)),
+            exit = slideOutHorizontally(
+                targetOffsetX = { it },
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioNoBouncy,
+                    stiffness = Spring.StiffnessMedium
+                )
+            ) + fadeOut(animationSpec = tween(200))
         ) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .wrapContentHeight()
+                    .graphicsLayer {
+                        translationX = animatedOffset
+                    }
+                    .pointerInput(Unit) {
+                        detectDragGestures(
+                            onDragEnd = {
+                                if (abs(offsetX) > 200) {
+                                    onDismiss()
+                                } else {
+                                    offsetX = 0f
+                                }
+                            }
+                        ) { _, dragAmount ->
+                            offsetX += dragAmount.x
+                        }
+                    },
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White)
+            ) {
             Column(
                 modifier = Modifier.padding(24.dp)
             ) {
@@ -124,6 +185,7 @@ fun AddPostDialog(
                     ) {
                         Text("저장", fontSize = 14.sp, fontWeight = FontWeight.Medium)
                     }
+                }
                 }
             }
         }
