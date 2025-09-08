@@ -13,9 +13,11 @@ import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken.Payload;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import java.util.concurrent.ThreadLocalRandom;
@@ -143,5 +145,15 @@ public class AuthService {
                 .ifPresent(RefreshToken::revoke); // 엔티티의 revoke() 사용
     }
 
+    @Transactional
+    public void withdraw(Long memberId) {
+        // 1) RT 모두 무효화(선택: FK CASCADE면 생략 가능)
+        refreshTokenRepository.revokeAllByMemberId(memberId);
 
+        // 2) 하드 삭제
+        if (!memberRepository.existsById(memberId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        }
+        memberRepository.deleteById(memberId); // 실제 DELETE
+    }
 }
