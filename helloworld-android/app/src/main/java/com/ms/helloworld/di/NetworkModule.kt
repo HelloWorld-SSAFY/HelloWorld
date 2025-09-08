@@ -1,0 +1,76 @@
+package com.ms.helloworld.di
+
+import com.ms.helloworld.network.AuthInterceptor
+import com.ms.helloworld.network.TokenAuthenticator
+import com.ms.helloworld.network.api.AuthApi
+import com.ms.helloworld.network.api.OnboardingApiService
+import dagger.Module
+import dagger.Provides
+import dagger.hilt.InstallIn
+import dagger.hilt.components.SingletonComponent
+import okhttp3.OkHttpClient
+import okhttp3.logging.HttpLoggingInterceptor
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
+import java.util.concurrent.TimeUnit
+import javax.inject.Singleton
+
+@Module
+@InstallIn(SingletonComponent::class)
+object NetworkModule {
+
+    private const val BASE_URL = "https://api.yourserver.com/" // TODO: 실제 서버 URL로 변경
+
+    // HTTP 로깅 인터셉터
+    @Provides
+    @Singleton
+    fun provideHttpLoggingInterceptor(): HttpLoggingInterceptor {
+        return HttpLoggingInterceptor().apply {
+            level = HttpLoggingInterceptor.Level.BODY
+        }
+    }
+
+    // OkHttpClient 제공
+    @Provides
+    @Singleton
+    fun provideOkHttpClient(
+        authInterceptor: AuthInterceptor,
+        tokenAuthenticator: TokenAuthenticator,
+        loggingInterceptor: HttpLoggingInterceptor
+    ): OkHttpClient {
+        return OkHttpClient.Builder()
+            .addInterceptor(loggingInterceptor)    // HTTP 로그
+            .addInterceptor(authInterceptor)       // 토큰 자동 추가
+            .authenticator(tokenAuthenticator)     // 401시 토큰 갱신
+            .connectTimeout(30, TimeUnit.SECONDS)  // 연결 타임아웃
+            .readTimeout(30, TimeUnit.SECONDS)     // 읽기 타임아웃
+            .writeTimeout(30, TimeUnit.SECONDS)    // 쓰기 타임아웃
+            .build()
+    }
+
+    // Retrofit 제공
+    @Provides
+    @Singleton
+    fun provideRetrofit(okHttpClient: OkHttpClient): Retrofit {
+        return Retrofit.Builder()
+            .baseUrl(BASE_URL)
+            .client(okHttpClient)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+    }
+
+    /**
+     * API
+     * **/
+    @Provides
+    @Singleton
+    fun provideOnboardingApiService(retrofit: Retrofit): OnboardingApiService {
+        return retrofit.create(OnboardingApiService::class.java)
+    }
+
+    @Provides
+    @Singleton
+    fun provideAuthApi(retrofit: Retrofit): AuthApi {
+        return retrofit.create(AuthApi::class.java)
+    }
+}

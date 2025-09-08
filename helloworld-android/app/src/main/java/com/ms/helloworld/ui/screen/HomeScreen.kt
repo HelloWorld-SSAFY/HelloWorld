@@ -16,9 +16,9 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ms.helloworld.ui.components.*
-import com.ms.helloworld.data.CalendarPost
-import com.ms.helloworld.data.MomProfile
-import com.ms.helloworld.ui.viewmodel.HomeViewModel
+import com.ms.helloworld.dto.response.CalendarPost
+import com.ms.helloworld.dto.response.MomProfile
+import com.ms.helloworld.viewmodel.HomeViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.runtime.collectAsState
 import androidx.navigation.NavHostController

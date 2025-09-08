@@ -26,12 +26,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.navigation.NavHostController
-import com.ms.helloworld.data.CalendarPost
+import com.ms.helloworld.dto.response.CalendarPost
 import com.ms.helloworld.navigation.Screen
 import com.ms.helloworld.ui.components.AddPostDialog
-import com.ms.helloworld.ui.components.CalendarPostBottomSheet
 import java.text.SimpleDateFormat
-import java.time.LocalDate
 import java.util.*
 
 @SuppressLint("NewApi")

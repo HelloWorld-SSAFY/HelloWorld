@@ -12,7 +12,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.ms.helloworld.data.MomProfile
+import com.ms.helloworld.dto.response.MomProfile
 import java.time.format.DateTimeFormatter
 
 @Composable

@@ -1,6 +1,6 @@
-package com.ms.helloworld.data.repository
+package com.ms.helloworld.repository
 
-import com.ms.helloworld.data.MomProfile
+import com.ms.helloworld.dto.response.MomProfile
 import kotlinx.coroutines.delay
 import java.time.LocalDate
 

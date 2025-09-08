@@ -1,4 +1,4 @@
-package com.ms.helloworld.data
+package com.ms.helloworld.dto.response
 
 data class CalendarPost(
     val id: String = "",
