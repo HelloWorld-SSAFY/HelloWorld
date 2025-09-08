@@ -22,6 +22,7 @@ import com.ms.helloworld.ui.screen.CoupleProfileScreen
 import com.ms.helloworld.ui.screen.HomeScreen
 import com.ms.helloworld.ui.screen.LoginScreen
 import com.ms.helloworld.ui.screen.OnboardingScreens
+import com.ms.helloworld.ui.screen.WearableRecommendedScreen
 
 @Composable
 fun MainNavigation(
@@ -77,6 +78,10 @@ fun MainNavigation(
 
             composable(Screen.HomeScreen.route) {
                 HomeScreen(navController)
+            }
+
+            composable(Screen.RecommendScreen.route) {
+                WearableRecommendedScreen(navController)
             }
 
             composable(Screen.OnboardingScreens.route) {
