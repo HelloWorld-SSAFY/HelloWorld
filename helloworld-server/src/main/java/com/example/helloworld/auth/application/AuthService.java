@@ -3,6 +3,7 @@ package com.example.helloworld.auth.application;
 import com.example.helloworld.auth.application.command.LoginCommand;
 import com.example.helloworld.auth.application.result.LoginResult;
 import com.example.helloworld.auth.jwt.JwtProvider;
+import com.example.helloworld.auth.presentation.request.LogoutRequest;
 import com.example.helloworld.auth.token.*;
 import com.example.helloworld.exception.HelloWordException;
 import com.example.helloworld.exception.code.AuthErrorCode;
@@ -132,5 +133,15 @@ public class AuthService {
         );
         return new RefreshResponse(memberId, newAT, newRT);
     }
+
+    @Transactional
+    public void logout(LogoutRequest req) {
+        String rt = req.refreshToken();
+        if (rt == null || rt.isBlank()) return; // 바디 비어도 조용히 종료(정보 노출 방지)
+        String hash = TokenHashes.sha256B64(rt);
+        refreshTokenRepository.findByTokenHash(hash)
+                .ifPresent(RefreshToken::revoke); // 엔티티의 revoke() 사용
+    }
+
 
 }

@@ -1,4 +1,4 @@
-package com.example.helloworld.auth.application;
+package com.example.helloworld.auth.security;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

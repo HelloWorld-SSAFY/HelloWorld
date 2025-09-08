@@ -37,7 +37,7 @@ jwt:
     expire: ${ACCESS_EXPIRE}
   refresh:
     secret: ${REFRESH_SECRET}
-    expire: ${REFRESH_SECRET}
+    expire: ${REFRESH_EXPIRE}
 
 eureka:
   client:
