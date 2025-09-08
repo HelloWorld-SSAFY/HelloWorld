@@ -4,6 +4,9 @@ package com.example.helloworld.member.domain;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.sql.Time;
+import java.sql.Timestamp;
+
 @Entity
 @Table(
         name = "members",
@@ -26,4 +29,23 @@ public class Member {
 
     @Column(name="nickname", nullable=false)
     private String nickname;
+
+    @Column(name="gender", nullable = false)
+    private String gender;
+
+    @Column(name="image_url", nullable = false)
+    private String imageUrl;
+
+    @Column(name="created_at", nullable = false)
+    private Timestamp createdAt;
+
+    @Column(name="updated_at", nullable = false)
+    private Timestamp updatedAt;
+
+    @Column(name="menstrual_date", nullable = false)
+    private Timestamp menstrualDate;
+
+    @Column(name="is_childbirth", nullable = false)
+    private boolean isChildbirth;
+
 }
