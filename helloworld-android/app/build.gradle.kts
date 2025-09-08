@@ -101,4 +101,11 @@ dependencies {
     // DataStore
     implementation("androidx.datastore:datastore-preferences:1.0.0")
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
+
+    // Android Animation
+    implementation("androidx.compose.animation:animation:1.9.0")
+
+    // 개발/디버그
+    debugImplementation(libs.androidx.ui.tooling)
+
 }

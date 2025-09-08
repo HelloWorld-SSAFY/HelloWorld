@@ -1,6 +1,7 @@
 package com.ms.helloworld.ui.screen
 
 import android.annotation.SuppressLint
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -32,9 +33,9 @@ fun HomeScreen(
     navController: NavHostController,
     viewModel: HomeViewModel = viewModel()
 ) {
-    val backgroundColor = Color(0xFFFAEDBA)
+    val backgroundColor = Color(0xFFFFFFFF)
     var posts by remember { mutableStateOf(mapOf<String, List<CalendarPost>>()) }
-    
+
     val momProfile by viewModel.momProfile.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
 
@@ -67,121 +68,88 @@ fun HomeScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(16.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .verticalScroll(rememberScrollState())
         ) {
-            // 프로필 섹션 카드
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                shape = RoundedCornerShape(16.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+            // 프로필 섹션
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp)
             ) {
-                Column(
-                    modifier = Modifier.padding(20.dp)
-                ) {
-                    Text(
-                        text = "임신 정보",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Black
+                if (isLoading) {
+                    ProfileSection(
+                        momProfile = MomProfile(
+                            nickname = "로딩중...",
+                            pregnancyWeek = 1,
+                            dueDate = LocalDate.now()
+                        ),
+                        onClick = {
+                            navController.navigate(Screen.CoupleProfileScreen.route)
+                        }
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    if (isLoading) {
-                        ProfileSection(
-                            momProfile = MomProfile(
-                                nickname = "로딩중...",
-                                pregnancyWeek = 1,
-                                dueDate = LocalDate.now()
-                            ),
-                            onClick = {
-                                navController.navigate(Screen.CoupleProfileScreen.route)
-                            }
-                        )
-                    } else {
-                        ProfileSection(
-                            momProfile = momProfile,
-                            onClick = {
-                                navController.navigate(Screen.CoupleProfileScreen.route)
-                            }
-                        )
-                    }
-                }
-            }
-
-            // 캘린더 섹션 카드
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                shape = RoundedCornerShape(16.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(20.dp)
-                ) {
-                    Text(
-                        text = "이번 주 일정",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Black
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    CalendarSection(
-                        onDateClick = { dateKey ->
-                            navController.navigate(Screen.CalendarScreen.createRoute(dateKey)) {
-                                launchSingleTop = true
-                            }
-                        },
-                        postsMap = posts
+                } else {
+                    ProfileSection(
+                        momProfile = momProfile,
+                        onClick = {
+                            navController.navigate(Screen.CoupleProfileScreen.route)
+                        }
                     )
                 }
             }
 
-            // 오늘의 추천 섹션 카드
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                shape = RoundedCornerShape(16.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+            HorizontalDivider(
+                thickness = 1.dp,
+                color = Color.LightGray
+            )
+
+            // 캘린더 섹션
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp)
             ) {
-                Column(
-                    modifier = Modifier.padding(20.dp)
-                ) {
-                    Text(
-                        text = "오늘의 추천",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Black
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    TodayRecommendationSection()
-                }
+                CalendarSection(
+                    onDateClick = { dateKey ->
+                        navController.navigate(Screen.CalendarScreen.createRoute(dateKey)) {
+                            launchSingleTop = true
+                        }
+                    },
+                    postsMap = posts
+                )
             }
 
-            // 엄마의 건강상태 섹션 카드
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                shape = RoundedCornerShape(16.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+            // 오늘의 추천 섹션
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp)
             ) {
-                Column(
-                    modifier = Modifier.padding(20.dp)
-                ) {
-                    Text(
-                        text = "건강 상태",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Black
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    HealthStatusSection()
-                }
+                Text(
+                    text = "오늘의 추천",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.Black
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                TodayRecommendationSection()
+            }
+
+            // 건강 상태 섹션
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp)
+            ) {
+                Text(
+                    text = "건강 상태",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.Black
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                HealthStatusSection()
             }
         }
     }

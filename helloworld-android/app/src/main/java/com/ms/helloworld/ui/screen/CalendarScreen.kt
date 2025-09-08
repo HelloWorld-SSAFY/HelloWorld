@@ -39,11 +39,17 @@ fun CalendarScreen(
     navController: NavHostController,
     initialSelectedDate: String? = null
 ) {
-    val backgroundColor = Color(0xFFFAEDBA)
+    val backgroundColor = Color(0xFFFFFFFF)
     var posts by remember { mutableStateOf(mapOf<String, List<CalendarPost>>()) }
-    var showBottomSheet by remember { mutableStateOf(initialSelectedDate != null) }
     var showAddDialog by remember { mutableStateOf(false) }
-    var selectedDateKey by remember { mutableStateOf(initialSelectedDate ?: "") }
+    var selectedDateKey by remember { mutableStateOf("") }
+    var editingPost by remember { mutableStateOf<CalendarPost?>(null) }
+    var editTitle by remember { mutableStateOf("") }
+    var editContent by remember { mutableStateOf("") }
+    
+    // 기본적으로 오늘 날짜의 일정을 표시
+    val today = LocalDate.now().toString()
+    var displayDateKey by remember { mutableStateOf(initialSelectedDate ?: today) }
 
     var displayCalendar by remember {
         mutableStateOf(
@@ -113,7 +119,7 @@ fun CalendarScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(if (showBottomSheet) 0.6f else 1f)
+                    .weight(0.5f)
                     .padding(16.dp)
             ) {
                 Card(
@@ -192,92 +198,93 @@ fun CalendarScreen(
                             postsMap = posts,
                             onDateClick = { dateKey, dateString ->
                                 selectedDate = dateString
-                                selectedDateKey = dateKey
-                                showBottomSheet = true
+                                displayDateKey = dateKey
                             }
                         )
                     }
                 }
             }
 
-            // 바텀시트 영역 (non-modal)
-            if (showBottomSheet && selectedDateKey.isNotEmpty()) {
-                Card(
+            // 일정 목록 영역
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(0.5f)
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(0.4f)
-                        .padding(horizontal = 16.dp)
-                        .padding(bottom = 16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                        .fillMaxSize()
+                        .padding(16.dp)
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(16.dp)
-                    ) {
-                        // 바텀시트 핸들과 헤더
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                    // 헤더
+                    Text(
+                        text = if (displayDateKey.isNotEmpty()) "${formatDateForDisplay(displayDateKey)} 일정" else "오늘 일정",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // 게시글 목록
+                    val currentPosts = posts[displayDateKey] ?: emptyList()
+                    if (currentPosts.isEmpty()) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = "${formatDateForDisplay(selectedDateKey)} 일기",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            IconButton(
-                                onClick = { showBottomSheet = false }
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                Icon(
-                                    Icons.Default.KeyboardArrowDown,
-                                    contentDescription = "닫기"
+                                Text(
+                                    text = "작성된 일정이 없습니다.",
+                                    color = Color.Gray,
+                                    fontSize = 14.sp
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "플로팅 버튼을 눌러 일정을 추가해보세요.",
+                                    color = Color.Gray,
+                                    fontSize = 12.sp,
+                                    textAlign = TextAlign.Center
                                 )
                             }
                         }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // 게시글 목록
-                        val currentPosts = posts[selectedDateKey] ?: emptyList()
-                        if (currentPosts.isEmpty()) {
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally
-                                ) {
-                                    Text(
-                                        text = "작성된 일기가 없습니다.",
-                                        color = Color.Gray,
-                                        fontSize = 14.sp
-                                    )
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = "플로팅 버튼을 눌러 일기를 작성해보세요!",
-                                        color = Color.Gray,
-                                        fontSize = 12.sp
-                                    )
-                                }
-                            }
-                        } else {
-                            LazyColumn(
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                items(currentPosts) { post ->
-                                    PostCard(
-                                        post = post,
-                                        onDelete = {
-                                            val updatedPosts = currentPosts.filter { it.id != post.id }
-                                            posts = if (updatedPosts.isEmpty()) {
-                                                posts - selectedDateKey
-                                            } else {
-                                                posts + (selectedDateKey to updatedPosts)
-                                            }
+                    } else {
+                        LazyColumn {
+                            items(currentPosts.size) { index ->
+                                val post = currentPosts[index]
+                                
+                                PostCard(
+                                    post = post,
+                                    onEdit = {
+                                        editingPost = post
+                                        editTitle = post.title
+                                        editContent = post.content
+                                        selectedDateKey = displayDateKey
+                                        showAddDialog = true
+                                    },
+                                    onDelete = {
+                                        val updatedPosts = currentPosts.filter { it.id != post.id }
+                                        posts = if (updatedPosts.isEmpty()) {
+                                            posts - displayDateKey
+                                        } else {
+                                            posts + (displayDateKey to updatedPosts)
                                         }
+                                    }
+                                )
+                                
+                                // 마지막 아이템이 아니면 divider 추가
+                                if (index < currentPosts.size - 1) {
+                                    HorizontalDivider(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 8.dp),
+                                        thickness = 1.dp,
+                                        color = Color.LightGray
                                     )
                                 }
                             }
@@ -289,7 +296,13 @@ fun CalendarScreen(
 
         // 플로팅 버튼 (항상 위에 표시)
         FloatingActionButton(
-            onClick = { showAddDialog = true },
+            onClick = {
+                editingPost = null
+                editTitle = ""
+                editContent = ""
+                selectedDateKey = displayDateKey
+                showAddDialog = true
+            },
             containerColor = MaterialTheme.colorScheme.primary,
             contentColor = Color.White,
             modifier = Modifier
@@ -309,22 +322,44 @@ fun CalendarScreen(
         val dateKeyToUse = if (selectedDateKey.isNotEmpty()) {
             selectedDateKey
         } else {
-            SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Calendar.getInstance().time)
+            displayDateKey.ifEmpty {
+                SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Calendar.getInstance().time)
+            }
         }
 
         AddPostDialog(
             selectedDate = dateKeyToUse,
-            onDismiss = { showAddDialog = false },
-            onSave = { title, content ->
-                val newPost = CalendarPost(
-                    id = UUID.randomUUID().toString(),
-                    date = dateKeyToUse,
-                    title = title,
-                    content = content
-                )
-                val currentPosts = posts[dateKeyToUse] ?: emptyList()
-                posts = posts + (dateKeyToUse to (currentPosts + newPost))
+            initialTitle = editTitle,
+            initialContent = editContent,
+            onDismiss = { 
                 showAddDialog = false
+                editingPost = null
+            },
+            onSave = { title, content ->
+                if (editingPost != null) {
+                    // 수정 모드
+                    val currentPosts = posts[dateKeyToUse] ?: emptyList()
+                    val updatedPosts = currentPosts.map { post ->
+                        if (post.id == editingPost!!.id) {
+                            post.copy(title = title, content = content)
+                        } else {
+                            post
+                        }
+                    }
+                    posts = posts + (dateKeyToUse to updatedPosts)
+                } else {
+                    // 새로 추가 모드
+                    val newPost = CalendarPost(
+                        id = UUID.randomUUID().toString(),
+                        date = dateKeyToUse,
+                        title = title,
+                        content = content
+                    )
+                    val currentPosts = posts[dateKeyToUse] ?: emptyList()
+                    posts = posts + (dateKeyToUse to (currentPosts + newPost))
+                }
+                showAddDialog = false
+                editingPost = null
                 selectedDateKey = dateKeyToUse
             }
         )
@@ -448,40 +483,51 @@ fun CalendarGrid(
 @Composable
 fun PostCard(
     post: CalendarPost,
+    onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFF8F8F8)),
-        shape = RoundedCornerShape(12.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Top
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = post.title,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    color = Color.Black
+                )
+                if (post.content.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = post.title,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp,
-                        color = Color.Black
+                        text = post.content,
+                        fontSize = 14.sp,
+                        color = Color.Gray,
+                        lineHeight = 20.sp
                     )
-                    if (post.content.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = post.content,
-                            fontSize = 14.sp,
-                            color = Color.Gray,
-                            lineHeight = 20.sp
-                        )
-                    }
                 }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(System.currentTimeMillis())),
+                    fontSize = 12.sp,
+                    color = Color.Gray
+                )
+            }
 
+            Row {
+                TextButton(
+                    onClick = onEdit,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Text("수정", fontSize = 12.sp, color = Color.Blue)
+                }
+                
                 TextButton(
                     onClick = onDelete,
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
@@ -489,14 +535,6 @@ fun PostCard(
                     Text("삭제", fontSize = 12.sp, color = Color.Red)
                 }
             }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(System.currentTimeMillis())),
-                fontSize = 12.sp,
-                color = Color.Gray
-            )
         }
     }
 }
