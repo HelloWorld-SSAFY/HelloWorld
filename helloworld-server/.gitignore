@@ -38,3 +38,4 @@ out/
 
 # helloworld-server/.gitignore
 .env
+.yml

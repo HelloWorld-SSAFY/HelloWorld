@@ -1,0 +1,44 @@
+spring:
+  application:
+    name: helloworld
+  cloud:
+    discovery:
+      enabled: false
+
+  datasource:
+    url: ${POSTGRESGL_URL}
+    username: ${POSTGRESGL_USERNAME}
+    password: ${POSTGRESGL_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        format_sql: true
+
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+            redirect-uri: http://localhost:8080/login/oauth2/code/google
+            scope:
+              - email
+              - profile
+              - openid
+
+jwt:
+  access:
+    secret: ${ACCESS_SECRET}
+    expire: ${ACCESS_EXPIRE}
+  refresh:
+    secret: ${REFRESH_SECRET}
+    expire: ${REFRESH_SECRET}
+
+eureka:
+  client:
+    enabled: false
