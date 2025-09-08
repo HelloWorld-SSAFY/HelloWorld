@@ -79,7 +79,8 @@ fun LoginScreen(navController: NavHostController) {
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
                             text = "Google로 로그인",
-                            fontSize = 16.sp,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Normal
                         )
                     }
 
@@ -111,8 +112,8 @@ fun LoginScreen(navController: NavHostController) {
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
                             text = "Kakao로 로그인",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Medium
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Normal
                         )
                     }
 

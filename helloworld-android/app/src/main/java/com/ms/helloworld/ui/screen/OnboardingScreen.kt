@@ -1,8 +1,8 @@
 package com.ms.helloworld.ui.screen
 
+import android.util.Log
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -22,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusEvent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.res.painterResource
@@ -31,17 +32,20 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import com.ms.helloworld.R
 import com.ms.helloworld.navigation.Screen
+import com.ms.helloworld.ui.theme.MainColor
+import com.ms.helloworld.viewmodel.OnboardingState
+import com.ms.helloworld.viewmodel.OnboardingViewModel
 import kotlinx.coroutines.launch
 
 data class OnboardingScreen(
     val title: String,
     val subtitle: String = "",
     val description: String = "",
-    val screenType: ScreenType = ScreenType.TEXT_ONLY,
-    val backgroundColor: Color = Color(0xFFFAEDBA)
+    val screenType: ScreenType = ScreenType.TEXT_ONLY
 )
 
 enum class ScreenType {
@@ -53,10 +57,11 @@ enum class ScreenType {
     USER_INFO_FORM
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+private const val TAG = "싸피_OnboardingScreen"
 @Composable
 fun OnboardingScreens(
-    navController: NavHostController
+    navController: NavHostController,
+    viewModel: OnboardingViewModel = hiltViewModel()
 ) {
     val screens = listOf(
         OnboardingScreen(
@@ -93,6 +98,7 @@ fun OnboardingScreens(
 
     val pagerState = rememberPagerState(pageCount = { screens.size })
     val scope = rememberCoroutineScope()
+    val state by viewModel.state.collectAsState()
 
     // 애니메이션을 위한 알파 값
     val alpha by animateFloatAsState(
@@ -101,10 +107,26 @@ fun OnboardingScreens(
         label = "content_alpha"
     )
 
+    // API 호출 성공 시 홈 화면으로 이동
+    LaunchedEffect(state.submitSuccess) {
+        if (state.submitSuccess) {
+            navController.navigate(Screen.HomeScreen.route) {
+                popUpTo(Screen.OnboardingScreens.route) { inclusive = true }
+            }
+        }
+    }
+
+    // 에러 메시지 표시
+    state.errorMessage?.let { error ->
+        LaunchedEffect(error) {
+            viewModel.clearError()
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(screens[pagerState.currentPage].backgroundColor),
+            .background(Color.White),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -121,7 +143,9 @@ fun OnboardingScreens(
             ) { page ->
                 OnboardingPage(
                     screen = screens[page],
-                    alpha = alpha
+                    alpha = alpha,
+                    viewModel = viewModel,
+                    onboardingState = state
                 )
             }
             Spacer(modifier = Modifier.height(16.dp))
@@ -133,17 +157,24 @@ fun OnboardingScreens(
                 modifier = Modifier.padding(bottom = 24.dp)
             )
 
+            // 다음/시작하기 버튼
+            val isLastPage = pagerState.currentPage == screens.size - 1
+            val isButtonEnabled = if (isLastPage) state.isFormValid else true
+
+
             // 다음 버튼 - 하단에 고정
             Button(
                 onClick = {
                     scope.launch {
-                        if (pagerState.currentPage < screens.size - 1) {
+                        if (isLastPage) {
+                            if (state.isFormValid) {
+                                viewModel.submitUserInfo()
+                            }
+                        } else {
                             pagerState.animateScrollToPage(
                                 pagerState.currentPage + 1,
                                 animationSpec = tween(durationMillis = 500)
                             )
-                        } else {
-                            navController.navigate(Screen.HomeScreen.route)
                         }
                     }
                 },
@@ -152,14 +183,16 @@ fun OnboardingScreens(
                     .padding(bottom = 56.dp)
                     .height(56.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF0C7B33)
+                    containerColor = if (isButtonEnabled) MainColor else Color(0xFFD0D0D0),
+                    disabledContainerColor = Color(0xFFD0D0D0)
                 ),
-                shape = RoundedCornerShape(16.dp)
+                shape = RoundedCornerShape(16.dp),
+                enabled = isButtonEnabled && !state.isLoading
             ) {
                 Text(
-                    text = if (pagerState.currentPage == screens.size - 1) "시작하기" else "다음",
+                    text = if (isLastPage) "시작하기" else "다음",
                     fontSize = 16.sp,
-                    color = Color.White
+                    color = if (isButtonEnabled) Color.White else Color.White
                 )
             }
         }
@@ -169,7 +202,9 @@ fun OnboardingScreens(
 @Composable
 fun OnboardingPage(
     screen: OnboardingScreen,
-    alpha: Float
+    alpha: Float,
+    viewModel: OnboardingViewModel? = null,
+    onboardingState: OnboardingState = OnboardingState()
 ) {
     Column(
         modifier = Modifier
@@ -182,10 +217,12 @@ fun OnboardingPage(
             text = screen.title,
             fontSize = if (screen.screenType == ScreenType.USER_INFO_FORM) 20.sp else 22.sp,
             fontWeight = FontWeight.Bold,
-            color = Color(0xFF0C7B33),
             textAlign = TextAlign.Center,
             modifier = Modifier
-                .padding(bottom = 8.dp, top = if (screen.screenType == ScreenType.USER_INFO_FORM) 16.dp else 0.dp)
+                .padding(
+                    bottom = 8.dp,
+                    top = if (screen.screenType == ScreenType.USER_INFO_FORM) 16.dp else 0.dp
+                )
         )
 
         if (screen.subtitle.isNotEmpty()) {
@@ -193,7 +230,6 @@ fun OnboardingPage(
                 text = screen.subtitle,
                 fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF0C7B33),
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(bottom = 16.dp)
             )
@@ -214,7 +250,17 @@ fun OnboardingPage(
             ScreenType.WITH_WEARABLE -> WearableContent()
             ScreenType.WITH_FAMILY -> FamilyContent()
             ScreenType.WITH_NIGHT_SCENE -> NightSceneContent()
-            ScreenType.USER_INFO_FORM -> UserInfoFormContent(onFormComplete = {}, modifier = Modifier.padding(bottom = 100.dp))
+            ScreenType.USER_INFO_FORM -> {
+                if (viewModel != null) {
+                    Log.d(TAG, "OnboardingPage: ")
+                    UserInfoFormContent(
+                        viewModel = viewModel,
+                        state = onboardingState,
+                        modifier = Modifier.padding(bottom = 100.dp)
+                    )
+                }
+            }
+
             else -> Spacer(modifier = Modifier.height(100.dp))
         }
     }
@@ -222,133 +268,107 @@ fun OnboardingPage(
 
 @Composable
 fun UserInfoFormContent(
-    onFormComplete: (Boolean) -> Unit,
+    viewModel: OnboardingViewModel,
+    state: OnboardingState,
     modifier: Modifier = Modifier
 ) {
-    var nickname by remember { mutableStateOf("") }
-    var selectedGender by remember { mutableStateOf("아빠") } // 아빠가 선택된 상태
-    var age by remember { mutableStateOf("") }
-    var isFirstPregnancy by remember { mutableStateOf<Boolean?>(true) } // 첫아이가 선택된 상태
-    var pregnancyCount by remember { mutableStateOf("") }
-    var lastMenstrualDate by remember { mutableStateOf("") }
-    var menstrualCycle by remember { mutableStateOf("") }
 
-    // 스크롤 가능한 카드 형태의 폼
-    Card(
+    LazyColumn(
         modifier = Modifier
-            .fillMaxSize()
-            .heightIn(max = 500.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        shape = RoundedCornerShape(8.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+            .fillMaxWidth()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            item {
-                // 태명
-                FormFieldUpdated(
-                    label = "태명",
-                    value = nickname,
-                    onValueChange = { nickname = it }
-                )
-            }
+        item {
+            // 태명
+            FormFieldUpdated(
+                label = "태명",
+                value = state.nickname,
+                onValueChange = { viewModel.updateNickname(it) }
+            )
+        }
 
-            item {
-                // 성별
-                Column {
-                    Text(
-                        text = "성별",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = Color(0xFF2E7D32),
-                        modifier = Modifier.padding(bottom = 12.dp)
+        item {
+            // 성별
+            Column {
+                Text(
+                    text = "성별",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    SelectionButton(
+                        text = "엄마",
+                        isSelected = state.selectedGender == "엄마",
+                        onClick = { viewModel.updateGender("엄마") }
                     )
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        SelectionButton(
-                            text = "엄마",
-                            isSelected = selectedGender == "엄마",
-                            onClick = { selectedGender = "엄마" }
-                        )
-                        SelectionButton(
-                            text = "아빠",
-                            isSelected = selectedGender == "아빠",
-                            onClick = { selectedGender = "아빠" }
-                        )
-                    }
-                }
-            }
-
-            item {
-                // 나이
-                FormFieldUpdated(
-                    label = "나이",
-                    value = age,
-                    onValueChange = { age = it }
-                )
-            }
-
-            item {
-                // 출산 경험 여부
-                Column {
-                    Text(
-                        text = "출산 경험 여부",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = Color(0xFF2E7D32),
-                        modifier = Modifier.padding(bottom = 12.dp)
+                    SelectionButton(
+                        text = "아빠",
+                        isSelected = state.selectedGender == "아빠",
+                        onClick = { viewModel.updateGender("아빠") }
                     )
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        SelectionButton(
-                            text = "있어요",
-                            isSelected = isFirstPregnancy == true,
-                            onClick = { isFirstPregnancy = true }
-                        )
-                        SelectionButton(
-                            text = "없어요",
-                            isSelected = isFirstPregnancy == false,
-                            onClick = { isFirstPregnancy = false }
-                        )
-                    }
                 }
-            }
-
-            item {
-                // 출산 경험 횟수
-                FormFieldUpdated(
-                    label = "출산 경험 횟수",
-                    value = pregnancyCount,
-                    onValueChange = { pregnancyCount = it }
-                )
-            }
-
-            item {
-                // 마지막 생리일
-                FormFieldUpdated(
-                    label = "마지막 생리일",
-                    value = lastMenstrualDate,
-                    onValueChange = { lastMenstrualDate = it },
-                    isDateField = true
-                )
-            }
-
-            item {
-                // 생리주기(일)
-                FormFieldUpdated(
-                    label = "생리주기(일)",
-                    value = menstrualCycle,
-                    onValueChange = { menstrualCycle = it }
-                )
             }
         }
+
+        item {
+            // 나이
+            FormFieldUpdated(
+                label = "나이",
+                value = state.age,
+                onValueChange = { viewModel.updateAge(it) }
+            )
+        }
+
+        item {
+            // 출산 경험 여부
+            Column {
+                Text(
+                    text = "출산 경험 여부",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    SelectionButton(
+                        text = "있어요",
+                        isSelected = state.isFirstPregnancy == true,
+                        onClick = { viewModel.updatePregnancyExperience(true) }
+                    )
+                    SelectionButton(
+                        text = "없어요",
+                        isSelected = state.isFirstPregnancy == false,
+                        onClick = { viewModel.updatePregnancyExperience(false) }
+                    )
+                }
+            }
+        }
+
+        item {
+            // 마지막 생리일
+            FormFieldUpdated(
+                label = "마지막 생리일",
+                value = state.lastMenstrualDate,
+                onValueChange = { viewModel.updateLastMenstrualDate(it) },
+                isDateField = true
+            )
+        }
+
+        item {
+            // 생리주기(일)
+            FormFieldUpdated(
+                label = "생리주기(일)",
+                value = state.menstrualCycle,
+                onValueChange = { viewModel.updateMenstrualCycle(it) }
+            )
+        }
     }
+
 }
 
 @Composable
@@ -358,12 +378,22 @@ fun FormFieldUpdated(
     onValueChange: (String) -> Unit,
     isDateField: Boolean = false
 ) {
+    var isFocused by remember { mutableStateOf(false) }
+
+    // 플레이스홀더 텍스트 정의
+    val placeholder = when (label) {
+        "태명" -> "태명을 입력해주세요"
+        "나이" -> "나이를 입력해주세요"
+        "마지막 생리일" -> "연도-월-일"
+        "생리주기(일)" -> "일수를 입력해주세요"
+        else -> ""
+    }
+
     Column {
         Text(
             text = label,
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
-            color = Color(0xFF2E7D32),
             modifier = Modifier.padding(bottom = 8.dp)
         )
 
@@ -372,12 +402,12 @@ fun FormFieldUpdated(
                 .fillMaxWidth()
                 .height(48.dp)
                 .background(
-                    Color(0xFFF8F8F8),
+                    Color(0xFFFFFFFF), // 배경색 변경
                     RoundedCornerShape(8.dp)
                 )
                 .border(
                     1.dp,
-                    Color(0xFFE0E0E0),
+                    if (isFocused) Color(0xFFF49699) else Color(0xFFD0D0D0), // 외곽선 색상 변경
                     RoundedCornerShape(8.dp)
                 )
                 .padding(horizontal = 16.dp),
@@ -388,15 +418,35 @@ fun FormFieldUpdated(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                BasicTextField(
-                    value = value,
-                    onValueChange = onValueChange,
-                    textStyle = TextStyle(
-                        fontSize = 14.sp,
-                        color = Color.Black
-                    ),
-                    modifier = Modifier.weight(1f)
-                )
+                Box(
+                    modifier = Modifier.weight(1f),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    // 플레이스홀더 텍스트
+                    if (value.isEmpty() && !isFocused) {
+                        Text(
+                            text = placeholder,
+                            fontSize = 14.sp,
+                            color = Color(0xFF808080)
+                        )
+                    }
+
+                    BasicTextField(
+                        value = value,
+                        onValueChange = onValueChange,
+                        textStyle = TextStyle(
+                            fontSize = 14.sp,
+                            color = Color.Black
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onFocusEvent { focusState ->
+                                isFocused = focusState.isFocused
+                            },
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(Color.Black),
+                        singleLine = true
+                    )
+                }
 
                 if (isDateField) {
                     Icon(
@@ -421,12 +471,12 @@ fun SelectionButton(
         modifier = Modifier
             .clickable { onClick() }
             .background(
-                if (isSelected) Color(0xFF2E7D32) else Color.Transparent,
+                if (isSelected) MainColor else Color.Transparent,
                 RoundedCornerShape(12.dp)
             )
             .border(
                 1.dp,
-                if (isSelected) Color(0xFF2E7D32) else Color(0xFFE0E0E0),
+                if (isSelected) MainColor else Color(0xFFE0E0E0),
                 RoundedCornerShape(12.dp)
             )
             .padding(horizontal = 18.dp, vertical = 8.dp)
@@ -456,7 +506,7 @@ fun ProgressIndicator(
                     .size(8.dp)
                     .clip(CircleShape)
                     .background(
-                        if (index == currentStep) Color(0xFF0C7B33)
+                        if (index == currentStep) MainColor
                         else Color(0xFFE0E0E0)
                     )
             )

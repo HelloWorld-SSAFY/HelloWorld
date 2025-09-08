@@ -1,9 +1,9 @@
-package com.ms.helloworld.ui.viewmodel
+package com.ms.helloworld.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.ms.helloworld.data.MomProfile
-import com.ms.helloworld.data.repository.MomProfileRepository
+import com.ms.helloworld.dto.response.MomProfile
+import com.ms.helloworld.repository.MomProfileRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow

@@ -1,4 +1,4 @@
-package com.ms.helloworld.data
+package com.ms.helloworld.dto.response
 
 import java.time.LocalDate
 import kotlin.math.abs
