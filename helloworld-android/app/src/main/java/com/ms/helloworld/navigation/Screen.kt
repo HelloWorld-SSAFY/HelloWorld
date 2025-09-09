@@ -9,6 +9,13 @@ sealed class Screen(val route: String) {
             return "diary_detail/$day"
         }
     }
+    object DiaryRegisterScreen : Screen("diary_register") {
+        fun createRoute(
+            diaryType: String, // "birth" | "observation"
+            day: Int,
+            isEdit: Boolean = false
+        ): String = "diary_register/$diaryType/$day/$isEdit"
+    }
     object RecommendScreen : Screen("recommend")
     object CalendarScreen : Screen("calendar") {
         fun createRoute(selectedDate: String? = null): String {

@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.navigation.navDeepLink
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
@@ -21,6 +22,8 @@ import com.ms.helloworld.ui.screen.CalendarScreen
 import com.ms.helloworld.ui.screen.CoupleProfileScreen
 import com.ms.helloworld.ui.screen.DiaryScreen
 import com.ms.helloworld.ui.screen.DiaryDetailScreen
+import com.ms.helloworld.ui.screen.DiaryRegisterScreen
+import com.ms.helloworld.ui.screen.DiaryRegisterScreenPreview
 import com.ms.helloworld.ui.screen.HomeScreen
 import com.ms.helloworld.ui.screen.LoginScreen
 import com.ms.helloworld.ui.screen.OnboardingScreens
@@ -95,6 +98,26 @@ fun MainNavigation(
             ) { backStackEntry ->
                 val day = backStackEntry.arguments?.getInt("day") ?: 1
                 DiaryDetailScreen(navController, initialDay = day)
+            }
+
+            composable(
+                route = "diary_register/{diaryType}/{day}/{isEdit}",
+                arguments = listOf(
+                    navArgument("diaryType") { type = NavType.StringType },
+                    navArgument("day") { type = NavType.IntType },
+                    navArgument("isEdit") { type = NavType.BoolType }
+                )
+            ) { backStackEntry ->
+                val diaryType = backStackEntry.arguments?.getString("diaryType") ?: "birth"
+                val day = backStackEntry.arguments?.getInt("day") ?: 1
+                val isEdit = backStackEntry.arguments?.getBoolean("isEdit") ?: false
+
+                DiaryRegisterScreen(
+                    navController = navController,
+                    diaryType = diaryType,
+                    day = day,
+                    isEdit = isEdit
+                )
             }
 
             composable(Screen.RecommendScreen.route) {

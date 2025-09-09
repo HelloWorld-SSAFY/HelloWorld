@@ -21,6 +21,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
+import com.ms.helloworld.navigation.Screen
 
 // 데이터 클래스들
 data class DiaryEntry(
@@ -124,11 +125,22 @@ fun DiaryDetailScreen(
             borderColor = Color(0xFFF49699),
             onAddClick = {
                 // 출산일기 작성 화면으로 이동
-                navController.navigate("write_birth_diary/$currentDay")
-            },
+                navController.navigate(
+                    Screen.DiaryRegisterScreen.createRoute(
+                        diaryType = "birth",
+                        day = currentDay,
+                        isEdit = false
+                    )
+                )            },
             onEditClick = {
                 // 출산일기 수정 화면으로 이동
-                navController.navigate("edit_birth_diary/$currentDay")
+                navController.navigate(
+                    Screen.DiaryRegisterScreen.createRoute(
+                        diaryType = "birth",
+                        day = currentDay,
+                        isEdit = true
+                    )
+                )
             }
         )
 
@@ -139,11 +151,23 @@ fun DiaryDetailScreen(
             borderColor = Color(0xFF88A9F8),
             onAddClick = {
                 // 관찰일기 작성 화면으로 이동
-                navController.navigate("write_observation_diary/$currentDay")
+                navController.navigate(
+                    Screen.DiaryRegisterScreen.createRoute(
+                        diaryType = "observation",
+                        day = currentDay,
+                        isEdit = false
+                    )
+                )
             },
             onEditClick = {
                 // 관찰일기 수정 화면으로 이동
-                navController.navigate("edit_observation_diary/$currentDay")
+                navController.navigate(
+                    Screen.DiaryRegisterScreen.createRoute(
+                        diaryType = "observation",
+                        day = currentDay,
+                        isEdit = true
+                    )
+                )
             }
         )
         }
