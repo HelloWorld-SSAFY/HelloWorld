@@ -23,6 +23,7 @@ import com.ms.helloworld.ui.screen.HomeScreen
 import com.ms.helloworld.ui.screen.LoginScreen
 import com.ms.helloworld.ui.screen.OnboardingScreens
 import com.ms.helloworld.ui.screen.WearableRecommendedScreen
+import com.ms.helloworld.ui.screen.RecordDetailScreen
 
 @Composable
 fun MainNavigation(
@@ -95,6 +96,10 @@ fun MainNavigation(
                         navController.popBackStack()
                     }
                 )
+            }
+
+            composable(Screen.RecordDetailScreen.route) {
+                RecordDetailScreen(navController)
             }
 
             composable(

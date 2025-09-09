@@ -21,12 +21,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.style.TextAlign
 import androidx.navigation.NavHostController
+import com.ms.helloworld.navigation.Screen
 
 @SuppressLint("NewApi")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WearableRecommendedScreen(
-    navController: NavHostController
+    navController: NavHostController?
 ) {
     val backgroundColor = Color(0xFFF5F5F5)
 
@@ -62,7 +63,7 @@ fun WearableRecommendedScreen(
             OutdoorRecommendationSection()
 
             // 태동/진통 기록 섹션
-            RecordSection()
+            RecordSection(navController)
         }
     }
 }
@@ -275,7 +276,7 @@ fun OutdoorRecommendationSection() {
 }
 
 @Composable
-fun RecordSection() {
+fun RecordSection(navController: NavHostController?) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -298,7 +299,9 @@ fun RecordSection() {
                 )
                 Row(
                     modifier = Modifier
-                        .clickable { },
+                        .clickable { 
+                            navController?.navigate(Screen.RecordDetailScreen.route)
+                        },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(

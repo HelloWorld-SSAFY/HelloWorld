@@ -107,7 +107,8 @@ fun OnboardingScreens(
         label = "content_alpha"
     )
 
-    // API 호출 성공 시 홈 화면으로 이동
+    // API 호출 성공 시 홈 화면으로 이동 (주석처리)
+    /*
     LaunchedEffect(state.submitSuccess) {
         if (state.submitSuccess) {
             navController.navigate(Screen.HomeScreen.route) {
@@ -115,6 +116,7 @@ fun OnboardingScreens(
             }
         }
     }
+    */
 
     // 에러 메시지 표시
     state.errorMessage?.let { error ->
@@ -159,7 +161,7 @@ fun OnboardingScreens(
 
             // 다음/시작하기 버튼
             val isLastPage = pagerState.currentPage == screens.size - 1
-            val isButtonEnabled = if (isLastPage) state.isFormValid else true
+            val isButtonEnabled = true // 항상 활성화
 
 
             // 다음 버튼 - 하단에 고정
@@ -167,8 +169,9 @@ fun OnboardingScreens(
                 onClick = {
                     scope.launch {
                         if (isLastPage) {
-                            if (state.isFormValid) {
-                                viewModel.submitUserInfo()
+                            // API 호출 없이 바로 홈화면으로 이동
+                            navController.navigate(Screen.HomeScreen.route) {
+                                popUpTo(Screen.OnboardingScreens.route) { inclusive = true }
                             }
                         } else {
                             pagerState.animateScrollToPage(
@@ -187,7 +190,7 @@ fun OnboardingScreens(
                     disabledContainerColor = Color(0xFFD0D0D0)
                 ),
                 shape = RoundedCornerShape(16.dp),
-                enabled = isButtonEnabled && !state.isLoading
+                enabled = isButtonEnabled
             ) {
                 Text(
                     text = if (isLastPage) "시작하기" else "다음",
