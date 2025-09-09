@@ -19,6 +19,8 @@ import androidx.compose.animation.ExitTransition
 import com.ms.helloworld.MainActivity
 import com.ms.helloworld.ui.screen.CalendarScreen
 import com.ms.helloworld.ui.screen.CoupleProfileScreen
+import com.ms.helloworld.ui.screen.DiaryScreen
+import com.ms.helloworld.ui.screen.DiaryDetailScreen
 import com.ms.helloworld.ui.screen.HomeScreen
 import com.ms.helloworld.ui.screen.LoginScreen
 import com.ms.helloworld.ui.screen.OnboardingScreens
@@ -79,6 +81,20 @@ fun MainNavigation(
 
             composable(Screen.HomeScreen.route) {
                 HomeScreen(navController)
+            }
+
+            composable(Screen.DiaryScreen.route) {
+                DiaryScreen(navController)
+            }
+
+            composable(
+                route = "diary_detail/{day}",
+                arguments = listOf(navArgument("day") { 
+                    type = NavType.IntType
+                })
+            ) { backStackEntry ->
+                val day = backStackEntry.arguments?.getInt("day") ?: 1
+                DiaryDetailScreen(navController, initialDay = day)
             }
 
             composable(Screen.RecommendScreen.route) {

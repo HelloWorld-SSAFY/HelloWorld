@@ -617,7 +617,7 @@ fun ContractionScatterChart(
     onPointSelected: (ContractionEvent?) -> Unit
 ) {
     val maxX = 60 // x축 최대값 (간격 시간: 60분)
-    val minY = 40 // y축 최소값 (40초)
+    val minY = 0 // y축 최소값 (0초)
     val maxY = 120 // y축 최대값 (120초 = 2분)
     val chartWidth = 280.dp
     val chartHeight = 220.dp
@@ -632,14 +632,14 @@ fun ContractionScatterChart(
         Box(
             modifier = Modifier.size(chartWidth + 60.dp, chartHeight + 60.dp)
         ) {
-            // y축 눈금 (세로) - 40초부터 120초까지 10초 단위
+            // y축 눈금 (세로) - 0초부터 120초까지 20초 단위
             Column(
                 modifier = Modifier
                     .height(chartHeight)
                     .offset(x = 35.dp, y = 10.dp),
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
-                for (i in maxY downTo minY step 10) {
+                for (i in maxY downTo minY step 20) {
                     Text(
                         text = "${i}초",
                         fontSize = 11.sp,
@@ -686,14 +686,14 @@ fun ContractionScatterChart(
                     )
                 }
 
-                // 가로선 (10초 단위)
-                for (i in 0..((maxY - minY) / 10)) {
+                // 가로선 (20초 단위)
+                for (i in 0..((maxY - minY) / 20)) {
                     Box(
                         modifier = Modifier
                             .height(1.dp)
                             .fillMaxWidth()
                             .background(Color(0xFFE0E0E0))
-                            .offset(y = (i * chartHeight.value / ((maxY - minY) / 10)).dp)
+                            .offset(y = (i * chartHeight.value / ((maxY - minY) / 20)).dp)
                     )
                 }
 

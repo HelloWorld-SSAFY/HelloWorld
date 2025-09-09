@@ -4,6 +4,11 @@ package com.ms.helloworld.navigation
 sealed class Screen(val route: String) {
     object HomeScreen : Screen("home")
     object DiaryScreen : Screen("diary")
+    object DiaryDetailScreen : Screen("diary_detail") {
+        fun createRoute(day: Int): String {
+            return "diary_detail/$day"
+        }
+    }
     object RecommendScreen : Screen("recommend")
     object CalendarScreen : Screen("calendar") {
         fun createRoute(selectedDate: String? = null): String {
