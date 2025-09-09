@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import com.ms.helloworld.navigation.Screen
+import com.ms.helloworld.ui.components.CustomTopAppBar
 
 // 데이터 클래스들
 data class DiaryEntry(
@@ -72,104 +73,85 @@ fun DiaryDetailScreen(
 
     val currentDiary = diaryData[currentDay] ?: DailyDiary(currentDay, null, null)
 
-    Scaffold(
-        containerColor = backgroundColor,
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = "${currentDay}일차 일기",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = Color.Black
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(
-                            Icons.Default.ArrowBack,
-                            contentDescription = "뒤로가기",
-                            tint = Color.Black
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.White
-                )
-            )
-        }
-    ) { paddingValues ->
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+    ) {
+        CustomTopAppBar(
+            title = "diary",
+            navController = navController
+        )
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
+                .padding(start = 16.dp, end = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-        // 일자 네비게이션
-        DayNavigationHeader(
-            currentDay = currentDay,
-            onPreviousDay = {
-                if (currentDay > 1) currentDay--
-            },
-            onNextDay = {
-                if (currentDay < 7) currentDay++
-            }
-        )
+            // 일자 네비게이션
+            DayNavigationHeader(
+                currentDay = currentDay,
+                onPreviousDay = {
+                    if (currentDay > 1) currentDay--
+                },
+                onNextDay = {
+                    if (currentDay < 7) currentDay++
+                }
+            )
 
-        // 출산일기 섹션
-        DiarySection(
-            title = "출산일기",
-            diary = currentDiary.birthDiary,
-            borderColor = Color(0xFFF49699),
-            onAddClick = {
-                // 출산일기 작성 화면으로 이동
-                navController.navigate(
-                    Screen.DiaryRegisterScreen.createRoute(
-                        diaryType = "birth",
-                        day = currentDay,
-                        isEdit = false
+            // 출산일기 섹션
+            DiarySection(
+                title = "출산일기",
+                diary = currentDiary.birthDiary,
+                borderColor = Color(0xFFF49699),
+                onAddClick = {
+                    // 출산일기 작성 화면으로 이동
+                    navController.navigate(
+                        Screen.DiaryRegisterScreen.createRoute(
+                            diaryType = "birth",
+                            day = currentDay,
+                            isEdit = false
+                        )
                     )
-                )            },
-            onEditClick = {
-                // 출산일기 수정 화면으로 이동
-                navController.navigate(
-                    Screen.DiaryRegisterScreen.createRoute(
-                        diaryType = "birth",
-                        day = currentDay,
-                        isEdit = true
+                },
+                onEditClick = {
+                    // 출산일기 수정 화면으로 이동
+                    navController.navigate(
+                        Screen.DiaryRegisterScreen.createRoute(
+                            diaryType = "birth",
+                            day = currentDay,
+                            isEdit = true
+                        )
                     )
-                )
-            }
-        )
+                }
+            )
 
-        // 관찰일기 섹션
-        DiarySection(
-            title = "관찰일기",
-            diary = currentDiary.observationDiary,
-            borderColor = Color(0xFF88A9F8),
-            onAddClick = {
-                // 관찰일기 작성 화면으로 이동
-                navController.navigate(
-                    Screen.DiaryRegisterScreen.createRoute(
-                        diaryType = "observation",
-                        day = currentDay,
-                        isEdit = false
+            // 관찰일기 섹션
+            DiarySection(
+                title = "관찰일기",
+                diary = currentDiary.observationDiary,
+                borderColor = Color(0xFF88A9F8),
+                onAddClick = {
+                    // 관찰일기 작성 화면으로 이동
+                    navController.navigate(
+                        Screen.DiaryRegisterScreen.createRoute(
+                            diaryType = "observation",
+                            day = currentDay,
+                            isEdit = false
+                        )
                     )
-                )
-            },
-            onEditClick = {
-                // 관찰일기 수정 화면으로 이동
-                navController.navigate(
-                    Screen.DiaryRegisterScreen.createRoute(
-                        diaryType = "observation",
-                        day = currentDay,
-                        isEdit = true
+                },
+                onEditClick = {
+                    // 관찰일기 수정 화면으로 이동
+                    navController.navigate(
+                        Screen.DiaryRegisterScreen.createRoute(
+                            diaryType = "observation",
+                            day = currentDay,
+                            isEdit = true
+                        )
                     )
-                )
-            }
-        )
+                }
+            )
         }
     }
 }
