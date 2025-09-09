@@ -1,13 +1,9 @@
 package com.ms.helloworld.ui.screen
 
 import android.annotation.SuppressLint
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -27,7 +23,6 @@ import com.ms.helloworld.navigation.Screen
 import java.time.LocalDate
 
 @SuppressLint("NewApi")
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     navController: NavHostController,
@@ -39,118 +34,96 @@ fun HomeScreen(
     val momProfile by viewModel.momProfile.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
 
-    Scaffold(
-        containerColor = backgroundColor,
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        "로고",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp
-                    )
-                },
-                actions = {
-                    IconButton(onClick = { }) {
-                        Icon(
-                            Icons.Default.Notifications,
-                            contentDescription = "알림"
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = backgroundColor
-                )
-            )
-        }
-    ) { paddingValues ->
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+    ) {
+        CustomTopAppBar(
+            title = "home",
+            navController = navController
+        )
+        // 프로필 섹션
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .verticalScroll(rememberScrollState())
+                .fillMaxWidth()
+                .padding(20.dp)
         ) {
-            // 프로필 섹션
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp)
-            ) {
-                if (isLoading) {
-                    ProfileSection(
-                        momProfile = MomProfile(
-                            nickname = "로딩중...",
-                            pregnancyWeek = 1,
-                            dueDate = LocalDate.now()
-                        ),
-                        onClick = {
-                            navController.navigate(Screen.CoupleProfileScreen.route)
-                        }
-                    )
-                } else {
-                    ProfileSection(
-                        momProfile = momProfile,
-                        onClick = {
-                            navController.navigate(Screen.CoupleProfileScreen.route)
-                        }
-                    )
-                }
+            if (isLoading) {
+                ProfileSection(
+                    momProfile = MomProfile(
+                        nickname = "로딩중...",
+                        pregnancyWeek = 1,
+                        dueDate = LocalDate.now()
+                    ),
+                    onClick = {
+                        navController.navigate(Screen.CoupleProfileScreen.route)
+                    }
+                )
+            } else {
+                ProfileSection(
+                    momProfile = momProfile,
+                    onClick = {
+                        navController.navigate(Screen.CoupleProfileScreen.route)
+                    }
+                )
             }
+        }
 
-            HorizontalDivider(
-                thickness = 1.dp,
-                color = Color.LightGray
+        HorizontalDivider(
+            thickness = 1.dp,
+            color = Color.LightGray
+        )
+
+        // 캘린더 섹션
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp)
+        ) {
+            CalendarSection(
+                onDateClick = { dateKey ->
+                    navController.navigate(Screen.CalendarScreen.createRoute(dateKey)) {
+                        launchSingleTop = true
+                    }
+                },
+                postsMap = posts
             )
+        }
 
-            // 캘린더 섹션
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp)
-            ) {
-                CalendarSection(
-                    onDateClick = { dateKey ->
-                        navController.navigate(Screen.CalendarScreen.createRoute(dateKey)) {
-                            launchSingleTop = true
-                        }
-                    },
-                    postsMap = posts
-                )
-            }
+        // 오늘의 추천 섹션
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp)
+        ) {
+            Text(
+                text = "오늘의 추천",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.Black
+            )
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // 오늘의 추천 섹션
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp)
-            ) {
-                Text(
-                    text = "오늘의 추천",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.Black
-                )
-                Spacer(modifier = Modifier.height(16.dp))
+            TodayRecommendationSection()
+        }
 
-                TodayRecommendationSection()
-            }
+        // 건강 상태 섹션
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp)
+        ) {
+            Text(
+                text = "건강 상태",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.Black
+            )
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // 건강 상태 섹션
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp)
-            ) {
-                Text(
-                    text = "건강 상태",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.Black
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-
-                HealthStatusSection()
-            }
+            HealthStatusSection()
         }
     }
 }
