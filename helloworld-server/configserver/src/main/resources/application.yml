@@ -8,7 +8,7 @@ spring:
     config:
       server:
         git:
-          uri: https://lab.ssafy.com/eunsolhh/helloworld-config-repo
+          uri: https://lab.ssafy.com/eunsolhh/helloworld-config-repo.git
           username: ${GIT_USERNAME}
           password: ${GIT_TOKEN}
-          default-label: main
+          default-label: master

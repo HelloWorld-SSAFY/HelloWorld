@@ -9,16 +9,29 @@ spring:
     import: "configserver:" #Spring Cloud Config 서버를 사용하겠다.
   cloud:
     config:
-      uri: http://config-server:8888  # localhost → config-server로 변경
+      discovery:
+        enabled: true
+        service-id: configserver
+
+#  cloud:
+#    config:
+#      uri: http://config-server:8888  # localhost → config-server로 변경
 #         uri: ${CONFIG_SERVER_URL}:8888 # 환경변수로 설정
 
-springdoc:
-  api-docs:
-    path: /v3/api-docs
-  swagger-ui:
-    path: /swagger-ui.html
-    urls:
-      - name: tangram-server
-        #        url: ${CONFIG_SERVER_URL}:8082/v3/api-docs
-        url: /tangram-server/v3/api-docs
-      - name: user-server
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka
+
+
+#springdoc:
+#  api-docs:
+#    path: /v3/api-docs
+#  swagger-ui:
+#    path: /swagger-ui.html
+#    urls:
+#      - name: tangram-server
+#        #        url: ${CONFIG_SERVER_URL}:8082/v3/api-docs
+#        url: /tangram-server/v3/api-docs
+#      - name: user-server
