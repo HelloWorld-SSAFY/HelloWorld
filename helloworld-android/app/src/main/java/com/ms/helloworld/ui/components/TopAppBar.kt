@@ -1,7 +1,9 @@
 package com.ms.helloworld.ui.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsEndWidth
@@ -9,6 +11,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -50,9 +53,20 @@ fun CustomTopAppBar(
                             .fillMaxWidth()
                     )
                 }
-                "calendar" -> {
+                "wearable" -> {
                     Text(
-                        text = "일정관리",
+                        text = "웨어러블 기반 추천",
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        fontSize = 20.sp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(end = 16.dp)
+                    )
+                }
+                "출산일기", "관찰일기", "임신 통계" -> {
+                    Text(
+                        text = title,
                         fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.Center,
                         fontSize = 20.sp,
@@ -61,9 +75,10 @@ fun CustomTopAppBar(
                             .padding(end = 40.dp)
                     )
                 }
-                "wearable" -> {
+                "calendar", "diary" -> {}
+                else -> {
                     Text(
-                        text = "웨어러블 기반 추천",
+                        text = title,
                         fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.Center,
                         fontSize = 20.sp,
@@ -76,7 +91,7 @@ fun CustomTopAppBar(
         },
         navigationIcon = {
             when(title) {
-                "profile", "calendar" -> {
+                "profile", "calendar", "diary", "출산일기", "관찰일기", "임신 통계" -> {
                     Icon(
                         painter = painterResource(R.drawable.ic_back),
                         contentDescription = "뒤로가기",

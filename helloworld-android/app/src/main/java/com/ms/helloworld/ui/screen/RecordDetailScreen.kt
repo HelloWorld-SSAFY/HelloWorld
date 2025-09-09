@@ -26,6 +26,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
+import com.ms.helloworld.ui.components.CustomTopAppBar
 
 // 데이터 클래스들
 data class FetalMovementData(
@@ -136,38 +137,14 @@ fun RecordDetailScreen(
         refreshData(selectedTab)
     }
 
-    Scaffold(
-        containerColor = backgroundColor,
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = "임신 통계",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = Color.Black
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(
-                            Icons.Default.ArrowBack,
-                            contentDescription = "뒤로가기",
-                            tint = Color.Black
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.White
-                )
-            )
-        }
-    ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
         ) {
+            CustomTopAppBar(
+                title = "임신 통계",
+                navController = navController
+            )
             // 커스텀 탭 버튼들
             Row(
                 modifier = Modifier
@@ -223,7 +200,6 @@ fun RecordDetailScreen(
                     )
                 }
             }
-        }
     }
 }
 

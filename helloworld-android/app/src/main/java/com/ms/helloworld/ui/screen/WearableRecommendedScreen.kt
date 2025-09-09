@@ -32,32 +32,36 @@ fun WearableRecommendedScreen(
     val backgroundColor = Color(0xFFF5F5F5)
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-
-            .padding(16.dp)
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(20.dp)
+        modifier = Modifier.fillMaxSize()
     ) {
         CustomTopAppBar(
             title = "wearable",
             navController = navController
         )
 
-        // 실시간 상태 섹션
-        RealTimeStatusSection()
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
+        ) {
 
-        // 건강 지표 섹션
-        HealthMetricsSection()
+            // 실시간 상태 섹션
+            RealTimeStatusSection()
 
-        // 음악 추천 섹션
-        MusicRecommendationSection()
+            // 건강 지표 섹션
+            HealthMetricsSection()
 
-        // 나들이 추천 섹션
-        OutdoorRecommendationSection()
+            // 음악 추천 섹션
+            MusicRecommendationSection()
 
-        // 태동/진통 기록 섹션
-        RecordSection(navController)
+            // 나들이 추천 섹션
+            OutdoorRecommendationSection()
+
+            // 태동/진통 기록 섹션
+            RecordSection(navController)
+        }
     }
 }
 

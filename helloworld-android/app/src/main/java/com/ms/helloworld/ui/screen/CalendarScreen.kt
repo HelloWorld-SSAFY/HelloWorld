@@ -99,7 +99,7 @@ fun CalendarScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(0.5f)
-                    .padding(16.dp)
+
             ) {
                 Card(
                     modifier = Modifier.fillMaxSize(),
