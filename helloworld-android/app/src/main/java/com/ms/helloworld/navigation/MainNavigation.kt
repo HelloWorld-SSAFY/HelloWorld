@@ -29,6 +29,8 @@ import com.ms.helloworld.ui.screen.LoginScreen
 import com.ms.helloworld.ui.screen.OnboardingScreens
 import com.ms.helloworld.ui.screen.WearableRecommendedScreen
 import com.ms.helloworld.ui.screen.RecordDetailScreen
+import com.ms.helloworld.ui.screen.HealthStatusScreen
+import com.ms.helloworld.ui.screen.HealthRegisterScreen
 
 @Composable
 fun MainNavigation(
@@ -151,6 +153,14 @@ fun MainNavigation(
             ) { backStackEntry ->
                 val selectedDate = backStackEntry.arguments?.getString("selectedDate")
                 CalendarScreen(navController, selectedDate)
+            }
+
+            composable(Screen.HealthStatusScreen.route) {
+                HealthStatusScreen(navController)
+            }
+
+            composable(Screen.HealthRegisterScreen.route) {
+                HealthRegisterScreen(navController)
             }
         }
     }
