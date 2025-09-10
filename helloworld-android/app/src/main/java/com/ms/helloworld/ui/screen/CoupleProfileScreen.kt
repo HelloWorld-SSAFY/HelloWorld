@@ -24,6 +24,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
+import com.ms.helloworld.ui.components.CustomTopAppBar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,45 +40,15 @@ fun CoupleProfileScreen(
     // 테스트용 파트너 연결 상태 (실제로는 ViewModel에서 관리)
     var isPartnerConnected by remember { mutableStateOf(false) }
 
-    Scaffold(
-        containerColor = backgroundColor,
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        "커플 프로필",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(
-                            imageVector = Icons.Default.ArrowBack,
-                            contentDescription = "뒤로가기"
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { /* TODO: 설정 페이지로 이동 */ }) {
-                        Icon(
-                            Icons.Default.Settings,
-                            contentDescription = "설정"
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = backgroundColor
-                )
-            )
-        }
-    ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
                 .verticalScroll(rememberScrollState())
         ) {
+            CustomTopAppBar(
+                title = "profile",
+                navController = navController
+            )
             // 커플 프로필 섹션
             Column(
                 modifier = Modifier
@@ -290,7 +261,6 @@ fun CoupleProfileScreen(
                 }
             }
         }
-    }
     
     // 초대코드 바텀시트
     if (showInviteCodeBottomSheet) {

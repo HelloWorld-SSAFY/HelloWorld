@@ -22,6 +22,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
+import com.ms.helloworld.ui.components.CustomTopAppBar
 
 // 데이터 클래스들
 data class PregnancyWeek(
@@ -81,39 +82,50 @@ fun DiaryScreen(
     )
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(backgroundColor)
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp)
+        modifier = Modifier.fillMaxWidth()
     ) {
-        // 임신 주차 헤더
-        PregnancyWeekHeader(
-            currentWeek = currentWeek,
-            onWeekListClick = {
-                // 주차 리스트로 이동
-                navController.navigate("week_list")
-            }
+        CustomTopAppBar(
+            title = "${currentWeek.week}주차 (${currentWeek.dayCount}일째)",
+            navController = navController
         )
 
-        // 일주일 일기 체크 카드
-        WeeklyDiaryCard(
-            weeklyStatus = weeklyDiaryStatus,
-            onDayClick = { day ->
-                // 특정 일자 일기로 이동
-                navController.navigate("diary_detail/$day")
-            }
-        )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(backgroundColor)
+                .verticalScroll(rememberScrollState())
+                .padding(start = 16.dp, end = 16.dp),
+        ) {
 
-        // 산모 데이터 요약 카드
-        MomDataSummaryCard(
-            momData = momData,
-            onAddDataClick = {
-                // 데이터 추가 화면으로 이동
-                navController.navigate("add_data")
-            }
-        )
+            // 임신 주차 헤더
+            PregnancyWeekHeader(
+                currentWeek = currentWeek,
+                onWeekListClick = {
+                    // 주차 리스트로 이동
+                    navController.navigate("week_list")
+                }
+            )
+
+            // 일주일 일기 체크 카드
+            WeeklyDiaryCard(
+                weeklyStatus = weeklyDiaryStatus,
+                onDayClick = { day ->
+                    // 특정 일자 일기로 이동
+                    navController.navigate("diary_detail/$day")
+                }
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 산모 데이터 요약 카드
+            MomDataSummaryCard(
+                momData = momData,
+                onAddDataClick = {
+                    // 데이터 추가 화면으로 이동
+                    navController.navigate("add_data")
+                }
+            )
+        }
     }
 }
 
@@ -126,15 +138,6 @@ fun PregnancyWeekHeader(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(
-            text = "${currentWeek.week}주차 (${currentWeek.dayCount}일째)",
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color.Black,
-            textAlign = TextAlign.Center
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
 
         // 주차 리스트로 이동 버튼 (선택사항)
         TextButton(

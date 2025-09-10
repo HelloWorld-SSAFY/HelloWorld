@@ -29,6 +29,7 @@ import androidx.navigation.NavHostController
 import com.ms.helloworld.dto.response.CalendarPost
 import com.ms.helloworld.navigation.Screen
 import com.ms.helloworld.ui.components.AddPostDialog
+import com.ms.helloworld.ui.components.CustomTopAppBar
 import java.text.SimpleDateFormat
 import java.time.LocalDate
 import java.util.*
@@ -89,39 +90,16 @@ fun CalendarScreen(
             modifier = Modifier.fillMaxSize()
         ) {
             // 상단 앱바
-            TopAppBar(
-                title = {
-                    Text(
-                        "일정 관리",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = {
-                        navController.navigate(Screen.HomeScreen.route) {
-                            popUpTo(Screen.HomeScreen.route) {
-                                inclusive = true
-                            }
-                            launchSingleTop = true
-                        }
-                    }) {
-                        Icon(
-                            Icons.Default.ArrowBack,
-                            contentDescription = "뒤로 가기"
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = backgroundColor
-                )
+            CustomTopAppBar(
+                title = "calendar",
+                navController = navController,
             )
             // 캘린더 영역
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(0.5f)
-                    .padding(16.dp)
+
             ) {
                 Card(
                     modifier = Modifier.fillMaxSize(),

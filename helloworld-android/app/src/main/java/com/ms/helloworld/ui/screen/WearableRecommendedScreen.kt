@@ -22,39 +22,34 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.style.TextAlign
 import androidx.navigation.NavHostController
 import com.ms.helloworld.navigation.Screen
+import com.ms.helloworld.ui.components.CustomTopAppBar
 
 @SuppressLint("NewApi")
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WearableRecommendedScreen(
-    navController: NavHostController?
+    navController: NavHostController
 ) {
     val backgroundColor = Color(0xFFF5F5F5)
 
-    Scaffold(
-        containerColor = backgroundColor,
-        topBar = {
-            TopAppBar(
-                title = { },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = backgroundColor
-                )
-            )
-        }
-    ) { paddingValues ->
+    Column(
+        modifier = Modifier.fillMaxSize()
+    ) {
+        CustomTopAppBar(
+            title = "wearable",
+            navController = navController
+        )
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
-                .padding(horizontal = 16.dp)
+                .padding(16.dp)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            // 상단 여백 추가
-            Spacer(modifier = Modifier.height(4.dp))
+
             // 실시간 상태 섹션
             RealTimeStatusSection()
-            
+
             // 건강 지표 섹션
             HealthMetricsSection()
 
@@ -304,7 +299,7 @@ fun RecordSection(navController: NavHostController?) {
                 )
                 Row(
                     modifier = Modifier
-                        .clickable { 
+                        .clickable {
                             navController?.navigate(Screen.RecordDetailScreen.route)
                         },
                     verticalAlignment = Alignment.CenterVertically
@@ -341,9 +336,9 @@ fun RecordSection(navController: NavHostController?) {
                         fontWeight = FontWeight.Medium,
                         color = Color.Gray
                     )
-                    
+
                     Spacer(modifier = Modifier.height(8.dp))
-                    
+
                     Box(
                         modifier = Modifier.height(36.dp),
                         contentAlignment = Alignment.Center
@@ -355,9 +350,9 @@ fun RecordSection(navController: NavHostController?) {
                             color = Color.Black
                         )
                     }
-                    
+
                     Spacer(modifier = Modifier.height(4.dp))
-                    
+
                     Text(
                         text = "주간 평균",
                         fontSize = 12.sp,
@@ -384,9 +379,9 @@ fun RecordSection(navController: NavHostController?) {
                         fontWeight = FontWeight.Medium,
                         color = Color.Gray
                     )
-                    
+
                     Spacer(modifier = Modifier.height(8.dp))
-                    
+
                     Box(
                         modifier = Modifier.height(36.dp),
                         contentAlignment = Alignment.Center
@@ -398,9 +393,9 @@ fun RecordSection(navController: NavHostController?) {
                             color = Color.Black
                         )
                     }
-                    
+
                     Spacer(modifier = Modifier.height(4.dp))
-                    
+
                     Text(
                         text = "오늘 총 횟수",
                         fontSize = 12.sp,
