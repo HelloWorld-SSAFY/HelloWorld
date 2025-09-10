@@ -10,8 +10,8 @@ sealed class BottomNavItem(
     @DrawableRes val selectedIconRes: Int
 ){
     object Home : BottomNavItem("홈", Screen.HomeScreen.route, R.drawable.ic_home, R.drawable.ic_home_selected)
-    object Diary : BottomNavItem("출산일기", Screen.DiaryScreen.route, R.drawable.ic_home, R.drawable.ic_home_selected)
-    object Recommend : BottomNavItem("추천", Screen.RecommendScreen.route, R.drawable.ic_home, R.drawable.ic_home_selected)
+    object Diary : BottomNavItem("출산일기", Screen.DiaryScreen.route, R.drawable.ic_diary, R.drawable.ic_diary_selected)
+    object Recommend : BottomNavItem("추천", Screen.RecommendScreen.route, R.drawable.ic_wearable, R.drawable.ic_wearable_selected)
 
     companion object {
         val items = listOf(Home, Diary, Recommend)
