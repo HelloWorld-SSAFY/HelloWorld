@@ -6,6 +6,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -26,7 +28,9 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
+import kotlinx.coroutines.launch
 import com.ms.helloworld.ui.components.CustomTopAppBar
+
 
 // 데이터 클래스들
 data class FetalMovementData(
@@ -59,6 +63,8 @@ fun RecordDetailScreen(
     // 상태 관리
     var selectedTab by remember { mutableStateOf(0) }
     val tabs = listOf("태동 기록", "진통 기록")
+    val pagerState = rememberPagerState(pageCount = { tabs.size })
+    val coroutineScope = rememberCoroutineScope()
 
     // 데이터 상태 (실제로는 ViewModel이나 Repository에서 가져올 데이터)
     var fetalMovementData by remember {
@@ -106,7 +112,7 @@ fun RecordDetailScreen(
                         System.currentTimeMillis() - 3600000L + 3045000L
                     ), // 50분 위치, 45초 지속
                 ),
-                dailyMessage = "어떤 진통을 기록해 보신 것을 자주 겪는\n기록이야 좀더 해 좋습니다. 많이 잘 한것은\n해보신것이니까요. 그런일이죠?"
+                dailyMessage = "진통 간격이 짧아지면 병원에 가보세요"
             )
         )
     }
@@ -130,6 +136,12 @@ fun RecordDetailScreen(
             }
         }
         isLoading = false
+    }
+
+    // pager 상태와 selectedTab 동기화
+    LaunchedEffect(pagerState.currentPage) {
+        selectedTab = pagerState.currentPage
+        refreshData(pagerState.currentPage)
     }
 
     // 초기 데이터 로드
@@ -157,7 +169,9 @@ fun RecordDetailScreen(
                     Button(
                         onClick = {
                             selectedTab = index
-                            refreshData(index) // 탭 변경 시 데이터 새로고침
+                            coroutineScope.launch {
+                                pagerState.animateScrollToPage(index)
+                            }
                         },
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.buttonColors(
@@ -187,17 +201,22 @@ fun RecordDetailScreen(
                     CircularProgressIndicator(color = Color(0xFFFF6B9D))
                 }
             } else {
-                // 탭 내용
-                when (selectedTab) {
-                    0 -> FetalMovementContent(
-                        data = fetalMovementData,
-                        onRefresh = { refreshData(0) }
-                    )
+                // HorizontalPager로 스와이프 가능한 탭 내용
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize()
+                ) { page ->
+                    when (page) {
+                        0 -> FetalMovementContent(
+                            data = fetalMovementData,
+                            onRefresh = { refreshData(0) }
+                        )
 
-                    1 -> ContractionContent(
-                        data = contractionData,
-                        onRefresh = { refreshData(1) }
-                    )
+                        1 -> ContractionContent(
+                            data = contractionData,
+                            onRefresh = { refreshData(1) }
+                        )
+                    }
                 }
             }
     }
@@ -621,7 +640,11 @@ fun ContractionScatterChart(
                         fontSize = 11.sp,
                         color = Color.Black,
                         fontWeight = FontWeight.Medium,
-                        modifier = Modifier.offset(x = (-30).dp)
+                        textAlign = TextAlign.End,
+                        maxLines = 1,
+                        modifier = Modifier
+                            .offset(x = (-40).dp)
+                            .width(35.dp)
                     )
                 }
             }
@@ -786,26 +809,27 @@ fun ContractionScatterChart(
                 }
             }
 
-            // 축 라벨 - 지속시간을 간격시간 왼쪽에 배치
-            Row(
+            // 지속시간 라벨 - y축 밑에 세로로 배치
+            Text(
+                text = "지속 시간 (초)",
+                fontSize = 13.sp,
+                color = Color.Black,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .offset(x = 5.dp, y = 15.dp)
+            )
+            
+            // 간격시간 라벨 - x축 밑에 배치
+            Text(
+                text = "간격 시간 (분)",
+                fontSize = 13.sp,
+                color = Color.Black,
+                fontWeight = FontWeight.Bold,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .offset(y = (-5).dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Text(
-                    text = "지속 시간 (초)",
-                    fontSize = 13.sp,
-                    color = Color.Black,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "간격 시간 (분)",
-                    fontSize = 13.sp,
-                    color = Color.Black,
-                    fontWeight = FontWeight.Bold
-                )
-            }
+                    .offset(y = 15.dp)
+            )
         }
 
         // 선택된 점의 정보 표시

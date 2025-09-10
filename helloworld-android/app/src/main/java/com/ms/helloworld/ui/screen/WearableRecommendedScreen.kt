@@ -61,6 +61,9 @@ fun WearableRecommendedScreen(
 
             // 태동/진통 기록 섹션
             RecordSection(navController)
+            
+            // 하단 여백 추가하여 바텀 네비게이션 영역까지 스크롤 가능하도록
+            Spacer(modifier = Modifier.height(80.dp))
         }
     }
 }
