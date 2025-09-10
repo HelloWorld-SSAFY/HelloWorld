@@ -31,6 +31,7 @@ import com.ms.helloworld.ui.screen.WearableRecommendedScreen
 import com.ms.helloworld.ui.screen.RecordDetailScreen
 import com.ms.helloworld.ui.screen.HealthStatusScreen
 import com.ms.helloworld.ui.screen.HealthRegisterScreen
+import com.ms.helloworld.ui.screen.DiaryBoardScreen
 
 @Composable
 fun MainNavigation(
@@ -161,6 +162,23 @@ fun MainNavigation(
 
             composable(Screen.HealthRegisterScreen.route) {
                 HealthRegisterScreen(navController)
+            }
+
+            composable(
+                route = "diary_board/{diaryType}/{day}",
+                arguments = listOf(
+                    navArgument("diaryType") { type = NavType.StringType },
+                    navArgument("day") { type = NavType.IntType }
+                )
+            ) { backStackEntry ->
+                val diaryType = backStackEntry.arguments?.getString("diaryType") ?: "birth"
+                val day = backStackEntry.arguments?.getInt("day") ?: 1
+                
+                DiaryBoardScreen(
+                    navController = navController,
+                    diaryType = diaryType,
+                    day = day
+                )
             }
         }
     }

@@ -32,4 +32,9 @@ sealed class Screen(val route: String) {
     object RecordDetailScreen : Screen("record_detail")
     object HealthStatusScreen : Screen("health_status")
     object HealthRegisterScreen : Screen("health_register")
+    object DiaryBoardScreen : Screen("diary_board") {
+        fun createRoute(diaryType: String, day: Int): String {
+            return "diary_board/$diaryType/$day"
+        }
+    }
 }

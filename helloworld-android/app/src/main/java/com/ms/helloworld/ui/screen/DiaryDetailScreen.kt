@@ -1,7 +1,6 @@
 package com.ms.helloworld.ui.screen
 
 import android.annotation.SuppressLint
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -123,6 +122,15 @@ fun DiaryDetailScreen(
                             isEdit = true
                         )
                     )
+                },
+                onContentClick = {
+                    // DiaryBoardScreen으로 이동
+                    navController.navigate(
+                        Screen.DiaryBoardScreen.createRoute(
+                            diaryType = "birth",
+                            day = currentDay
+                        )
+                    )
                 }
             )
 
@@ -148,6 +156,15 @@ fun DiaryDetailScreen(
                             diaryType = "observation",
                             day = currentDay,
                             isEdit = true
+                        )
+                    )
+                },
+                onContentClick = {
+                    // DiaryBoardScreen으로 이동
+                    navController.navigate(
+                        Screen.DiaryBoardScreen.createRoute(
+                            diaryType = "observation",
+                            day = currentDay
                         )
                     )
                 }
@@ -207,7 +224,8 @@ fun DiarySection(
     diary: DiaryEntry?,
     borderColor: Color,
     onAddClick: () -> Unit,
-    onEditClick: () -> Unit
+    onEditClick: () -> Unit,
+    onContentClick: () -> Unit
 ) {
     Card(
         modifier = Modifier
@@ -258,7 +276,10 @@ fun DiarySection(
             // 일기 내용 또는 빈 상태
             if (diary != null) {
                 // 일기가 있는 경우
-                DiaryContent(diary = diary)
+                DiaryContent(
+                    diary = diary,
+                    onClick = onContentClick
+                )
             } else {
                 // 일기가 없는 경우
                 EmptyDiaryState()
@@ -268,9 +289,14 @@ fun DiarySection(
 }
 
 @Composable
-fun DiaryContent(diary: DiaryEntry) {
+fun DiaryContent(
+    diary: DiaryEntry,
+    onClick: () -> Unit
+) {
     Column(
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier
+            .fillMaxSize()
+            .clickable { onClick() }
     ) {
         // 일기 제목
         if (diary.title.isNotEmpty()) {
