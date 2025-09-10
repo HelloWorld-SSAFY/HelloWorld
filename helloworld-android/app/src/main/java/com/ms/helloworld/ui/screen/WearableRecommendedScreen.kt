@@ -46,10 +46,12 @@ fun WearableRecommendedScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(16.dp)
+                .padding(horizontal = 16.dp)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
+            // 상단 여백 추가
+            Spacer(modifier = Modifier.height(4.dp))
             // 실시간 상태 섹션
             RealTimeStatusSection()
             
@@ -64,6 +66,9 @@ fun WearableRecommendedScreen(
 
             // 태동/진통 기록 섹션
             RecordSection(navController)
+            
+            // 하단 여백 추가하여 바텀 네비게이션 영역까지 스크롤 가능하도록
+            Spacer(modifier = Modifier.height(80.dp))
         }
     }
 }
