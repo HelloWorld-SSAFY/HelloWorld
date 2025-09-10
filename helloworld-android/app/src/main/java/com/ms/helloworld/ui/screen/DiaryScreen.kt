@@ -120,9 +120,13 @@ fun DiaryScreen(
             // 산모 데이터 요약 카드
             MomDataSummaryCard(
                 momData = momData,
+                onCardClick = {
+                    // HealthStatusScreen으로 이동
+                    navController.navigate("health_status")
+                },
                 onAddDataClick = {
-                    // 데이터 추가 화면으로 이동
-                    navController.navigate("add_data")
+                    // HealthRegisterScreen으로 이동
+                    navController.navigate("health_register")
                 }
             )
         }
@@ -276,10 +280,13 @@ fun DiaryStatusCircle(
 @Composable
 fun MomDataSummaryCard(
     momData: MomData,
+    onCardClick: () -> Unit,
     onAddDataClick: () -> Unit
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onCardClick() },
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
