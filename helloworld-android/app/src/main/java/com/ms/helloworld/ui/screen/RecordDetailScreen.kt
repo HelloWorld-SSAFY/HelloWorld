@@ -312,14 +312,14 @@ fun FetalMovementContent(
             // 주간 평균 카드
             StatCard(
                 modifier = Modifier.weight(1f),
-                value = data.weeklyAverage.toString(),
+                value = "${data.weeklyAverage}회",
                 label = "주간 평균"
             )
 
             // 지난주 대비 카드
             StatCard(
                 modifier = Modifier.weight(1f),
-                value = "+${data.weeklyChange}",
+                value = "+${data.weeklyChange}회",
                 label = "지난주 대비",
                 valueColor = Color(0xFF4CAF50)
             )

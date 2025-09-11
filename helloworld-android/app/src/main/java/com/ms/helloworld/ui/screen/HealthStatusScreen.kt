@@ -21,6 +21,9 @@ import androidx.compose.animation.core.*
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -96,12 +99,13 @@ fun HealthStatusScreen(
     Column(
         modifier = Modifier.fillMaxWidth()
     ) {
-        // 뒤로가기 버튼만 있는 TopAppBar (축소)
+        // TopAppBar with back button and + button
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 8.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
             IconButton(
                 onClick = { navController.popBackStack() },
@@ -110,6 +114,18 @@ fun HealthStatusScreen(
                 Icon(
                     Icons.Default.ArrowBack,
                     contentDescription = "뒤로가기",
+                    tint = Color.Black,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            
+            IconButton(
+                onClick = { navController.navigate("health_register") },
+                modifier = Modifier.size(40.dp)
+            ) {
+                Icon(
+                    Icons.Default.Add,
+                    contentDescription = "건강 데이터 추가",
                     tint = Color.Black,
                     modifier = Modifier.size(20.dp)
                 )
@@ -180,6 +196,9 @@ fun HealthStatusScreen(
             onTypeSelected = { 
                 targetHealthType = it
                 selectedHealthType = it 
+            },
+            onDataPointClick = { dataPoint ->
+                selectedDataPoint = dataPoint
             }
         )
 
@@ -245,7 +264,8 @@ fun HealthStatusScreen(
 fun HealthTypeSelector(
     healthDataList: List<HealthData>,
     selectedType: HealthType,
-    onTypeSelected: (HealthType) -> Unit
+    onTypeSelected: (HealthType) -> Unit,
+    onDataPointClick: (HealthData) -> Unit
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -259,7 +279,15 @@ fun HealthTypeSelector(
                 modifier = Modifier
                     .weight(1f)
                     .height(75.dp)
-                    .clickable { onTypeSelected(type) }
+                    .clickable { 
+                        if (selectedType == type) {
+                            // 이미 선택된 타입을 다시 클릭하면 오늘 데이터 표시
+                            val todayData = healthDataList.lastOrNull()
+                            todayData?.let { onDataPointClick(it) }
+                        } else {
+                            onTypeSelected(type)
+                        }
+                    }
                     .border(
                         width = if (isSelected) 2.dp else 1.dp,
                         color = if (isSelected) Color(0xFFF49699) else Color(0xFFE0E0E0),
@@ -419,31 +447,98 @@ fun LineChart(
             val chartWidth = 280.dp
             val chartHeight = 300.dp
 
-            // 격자선 그리기 (세로선)
-            for (i in 0..6) {
-                val xPosition = (i * chartWidth.value / 6).dp
+            // 차트 배경 박스 (모눈종이 격자 포함)
+            Box(
+                modifier = Modifier
+                    .size(chartWidth, chartHeight)
+                    .background(Color.White)
+            ) {
+                // 가로 격자선 (세밀한 모눈종이 효과)
+                for (i in 0..20) {
+                    val yPosition = (i * chartHeight.value / 20).dp
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(0.5.dp)
+                            .background(Color(0xFFF0F0F0))
+                            .offset(y = yPosition)
+                    )
+                }
+                
+                // 세로 격자선 (세밀한 모눈종이 효과)
+                for (i in 0..28) {
+                    val xPosition = (i * chartWidth.value / 28).dp
+                    Box(
+                        modifier = Modifier
+                            .width(0.5.dp)
+                            .fillMaxHeight()
+                            .background(Color(0xFFF0F0F0))
+                            .offset(x = xPosition)
+                    )
+                }
+                
+                // 주요 가로선 (값 구분선)
+                for (i in 0..5) {
+                    val yPosition = (i * chartHeight.value / 5).dp
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .background(Color(0xFFD0D0D0))
+                            .offset(y = yPosition)
+                    )
+                }
+                
+                // 주요 세로선 (일별 구분선)
+                for (i in 0..6) {
+                    val xPosition = (i * chartWidth.value / 6).dp
+                    Box(
+                        modifier = Modifier
+                            .width(1.dp)
+                            .fillMaxHeight()
+                            .background(Color(0xFFD0D0D0))
+                            .offset(x = xPosition)
+                    )
+                }
+            }
+
+            // 연결선 그리기 (Box 방식으로 단순화)
+            data.zipWithNext().forEach { (current, next) ->
+                val (currentDay, currentValue) = current
+                val (nextDay, nextValue) = next
+                
+                val currentX = ((currentDay - 1) * chartWidth.value / 6).dp
+                val currentY = ((maxValue - currentValue) / (maxValue - minValue) * chartHeight.value).dp
+                val nextX = ((nextDay - 1) * chartWidth.value / 6).dp
+                val nextY = ((maxValue - nextValue) / (maxValue - minValue) * chartHeight.value).dp
+                
+                val lineWidth = kotlin.math.sqrt(
+                    ((nextX.value - currentX.value) * (nextX.value - currentX.value) + 
+                     (nextY.value - currentY.value) * (nextY.value - currentY.value)).toDouble()
+                ).dp
+                
+                val angle = kotlin.math.atan2(
+                    nextY.value - currentY.value,
+                    nextX.value - currentX.value
+                ) * 180 / kotlin.math.PI
+                
                 Box(
                     modifier = Modifier
-                        .width(1.dp)
-                        .height(chartHeight)
-                        .background(Color(0xFFE0E0E0))
-                        .offset(x = xPosition)
+                        .width(lineWidth)
+                        .height(2.dp)
+                        .offset(
+                            x = currentX,
+                            y = currentY
+                        )
+                        .graphicsLayer {
+                            rotationZ = angle.toFloat()
+                            transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f)
+                        }
+                        .background(Color.LightGray)
                 )
             }
 
-            // 격자선 그리기 (가로선)
-            for (i in 0..5) {
-                val yPosition = (i * chartHeight.value / 5).dp
-                Box(
-                    modifier = Modifier
-                        .height(1.dp)
-                        .width(chartWidth)
-                        .background(Color(0xFFE0E0E0))
-                        .offset(y = yPosition)
-                )
-            }
-
-            // 데이터 점들과 선
+            // 데이터 점들 (격자 위에 배치)
             data.forEachIndexed { index, (day, value) ->
                 val xPosition = ((day - 1) * chartWidth.value / 6).dp
                 val yPosition = ((maxValue - value) / (maxValue - minValue) * chartHeight.value).dp
@@ -469,19 +564,17 @@ fun LineChart(
                         }
                 )
 
-                // 값 표시 (선택된 점만 표시)
-                if (isSelected) {
-                    Text(
-                        text = String.format("%.1f", value),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Black,
-                        modifier = Modifier
-                            .offset(x = xPosition - 20.dp, y = yPosition - 25.dp)
-                            .width(40.dp),
-                        textAlign = TextAlign.Center
-                    )
-                }
+                // 값 표시 (모든 점에 표시)
+                Text(
+                    text = String.format("%.1f", value),
+                    fontSize = 10.sp,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                    color = if (isSelected) Color.Black else Color.Gray,
+                    modifier = Modifier
+                        .offset(x = xPosition - 20.dp, y = yPosition - 25.dp)
+                        .width(40.dp),
+                    textAlign = TextAlign.Center
+                )
             }
         }
     }
