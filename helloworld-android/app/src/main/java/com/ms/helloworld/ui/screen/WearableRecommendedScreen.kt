@@ -287,7 +287,10 @@ fun RecordSection(navController: NavHostController?) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 10.dp),
+            .padding(horizontal = 10.dp)
+            .clickable {
+                navController?.navigate(Screen.RecordDetailScreen.route)
+            },
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -307,10 +310,6 @@ fun RecordSection(navController: NavHostController?) {
                     color = Color.Black
                 )
                 Row(
-                    modifier = Modifier
-                        .clickable {
-                            navController?.navigate(Screen.RecordDetailScreen.route)
-                        },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
@@ -318,6 +317,7 @@ fun RecordSection(navController: NavHostController?) {
                         fontSize = 12.sp,
                         color = Color.Gray
                     )
+                    Spacer(modifier = Modifier.width(4.dp))
                     Icon(
                         Icons.Default.KeyboardArrowRight,
                         contentDescription = "더보기",

@@ -123,10 +123,6 @@ fun DiaryScreen(
                 onCardClick = {
                     // HealthStatusScreen으로 이동
                     navController.navigate("health_status")
-                },
-                onAddDataClick = {
-                    // HealthRegisterScreen으로 이동
-                    navController.navigate("health_register")
                 }
             )
         }
@@ -280,8 +276,7 @@ fun DiaryStatusCircle(
 @Composable
 fun MomDataSummaryCard(
     momData: MomData,
-    onCardClick: () -> Unit,
-    onAddDataClick: () -> Unit
+    onCardClick: () -> Unit
 ) {
     Card(
         modifier = Modifier
@@ -305,14 +300,20 @@ fun MomDataSummaryCard(
                     fontWeight = FontWeight.Bold,
                     color = Color.Black
                 )
-                IconButton(
-                    onClick = onAddDataClick,
-                    modifier = Modifier.size(24.dp)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
+                    Text(
+                        text = "더보기",
+                        fontSize = 12.sp,
+                        color = Color.Gray
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
                     Icon(
-                        Icons.Default.Add,
-                        contentDescription = "데이터 추가",
-                        tint = Color.Black
+                        Icons.Default.KeyboardArrowRight,
+                        contentDescription = "더보기",
+                        modifier = Modifier.size(16.dp),
+                        tint = Color.Gray
                     )
                 }
             }
