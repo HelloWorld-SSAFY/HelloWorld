@@ -34,6 +34,14 @@ import java.text.SimpleDateFormat
 import java.time.LocalDate
 import java.util.*
 
+// 달력 데이터 클래스 - 성능 최적화를 위해 추가
+data class CalendarData(
+    val year: Int,
+    val month: Int,
+    val day: Int,
+    val dateKey: String
+)
+
 @SuppressLint("NewApi")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -352,66 +360,84 @@ fun CalendarGrid(
     postsMap: Map<String, List<CalendarPost>>,
     onDateClick: (String, String) -> Unit
 ) {
-    val monthCalendar = Calendar.getInstance().apply {
-        time = displayCalendar.time
-        set(Calendar.DAY_OF_MONTH, 1)
-    }
-    val firstDayOfWeek = monthCalendar.get(Calendar.DAY_OF_WEEK) - 1 // 0=일요일
-    val daysInMonth = monthCalendar.getActualMaximum(Calendar.DAY_OF_MONTH)
-    val today = Calendar.getInstance()
-
-    val weeks = mutableListOf<List<Calendar?>>()
-    var currentWeek = mutableListOf<Calendar?>()
-
-    // 첫 주의 빈 날짜들
-    repeat(firstDayOfWeek) {
-        currentWeek.add(null)
-    }
-
-    // 월의 모든 날짜들
-    for (day in 1..daysInMonth) {
-        val dayCalendar = Calendar.getInstance().apply {
+    // 달력 데이터를 remember로 캐시하여 불필요한 재계산 방지
+    val calendarData = remember(displayCalendar.get(Calendar.YEAR), displayCalendar.get(Calendar.MONTH)) {
+        val monthCalendar = Calendar.getInstance().apply {
             time = displayCalendar.time
-            set(Calendar.DAY_OF_MONTH, day)
+            set(Calendar.DAY_OF_MONTH, 1)
         }
-        currentWeek.add(dayCalendar)
-        if (currentWeek.size == 7) {
-            weeks.add(currentWeek.toList())
-            currentWeek = mutableListOf()
-        }
-    }
+        val firstDayOfWeek = monthCalendar.get(Calendar.DAY_OF_WEEK) - 1 // 0=일요일
+        val daysInMonth = monthCalendar.getActualMaximum(Calendar.DAY_OF_MONTH)
 
-    // 마지막 주의 빈 날짜들
-    if (currentWeek.isNotEmpty()) {
-        while (currentWeek.size < 7) {
+        val weeks = mutableListOf<List<CalendarData?>>()
+        var currentWeek = mutableListOf<CalendarData?>()
+
+        // 첫 주의 빈 날짜들
+        repeat(firstDayOfWeek) {
             currentWeek.add(null)
         }
-        weeks.add(currentWeek.toList())
+
+        // 월의 모든 날짜들
+        for (day in 1..daysInMonth) {
+            val dayCalendar = Calendar.getInstance().apply {
+                time = displayCalendar.time
+                set(Calendar.DAY_OF_MONTH, day)
+            }
+            val calendarData = CalendarData(
+                year = dayCalendar.get(Calendar.YEAR),
+                month = dayCalendar.get(Calendar.MONTH),
+                day = dayCalendar.get(Calendar.DAY_OF_MONTH),
+                dateKey = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(dayCalendar.time)
+            )
+            currentWeek.add(calendarData)
+            if (currentWeek.size == 7) {
+                weeks.add(currentWeek.toList())
+                currentWeek = mutableListOf()
+            }
+        }
+
+        // 마지막 주의 빈 날짜들
+        if (currentWeek.isNotEmpty()) {
+            while (currentWeek.size < 7) {
+                currentWeek.add(null)
+            }
+            weeks.add(currentWeek.toList())
+        }
+        weeks
     }
 
+    // 오늘 날짜 정보도 remember로 캐시
+    val today = remember {
+        val cal = Calendar.getInstance()
+        Triple(cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH))
+    }
+
+    // 주의 개수에 따라 높이를 동적으로 조정
+    val weekCount = calendarData.size
+    val cellHeight = if (weekCount > 5) 35.dp else 42.dp
+    
     Column {
-        weeks.forEach { week ->
+        calendarData.forEach { week ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                week.forEach { date ->
+                week.forEach { dateData ->
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .aspectRatio(1f)
+                            .height(cellHeight)
                             .padding(2.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        if (date != null) {
-                            val dateString = date.get(Calendar.DAY_OF_MONTH).toString()
+                        if (dateData != null) {
+                            val dateString = dateData.day.toString()
                             val isSelected = dateString == selectedDate &&
-                                           date.get(Calendar.MONTH) == displayCalendar.get(Calendar.MONTH)
-                            val isToday = date.get(Calendar.YEAR) == today.get(Calendar.YEAR) &&
-                                         date.get(Calendar.MONTH) == today.get(Calendar.MONTH) &&
-                                         date.get(Calendar.DAY_OF_MONTH) == today.get(Calendar.DAY_OF_MONTH)
-                            val dateKey = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(date.time)
-                            val hasPost = postsMap[dateKey]?.isNotEmpty() == true
+                                           dateData.month == displayCalendar.get(Calendar.MONTH)
+                            val isToday = dateData.year == today.first &&
+                                         dateData.month == today.second &&
+                                         dateData.day == today.third
+                            val hasPost = postsMap[dateData.dateKey]?.isNotEmpty() == true
 
                             Box(
                                 modifier = Modifier
@@ -427,7 +453,7 @@ fun CalendarGrid(
                                     .clickable(
                                         interactionSource = remember { MutableInteractionSource() },
                                         indication = LocalIndication.current
-                                    ) { onDateClick(dateKey, dateString) },
+                                    ) { onDateClick(dateData.dateKey, dateString) },
                                 contentAlignment = Alignment.Center
                             ) {
                                 Column(
