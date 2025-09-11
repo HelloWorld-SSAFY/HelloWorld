@@ -46,6 +46,7 @@ data class DiaryBoardData(
     val diaryType: String // "birth" 또는 "observation"
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @SuppressLint("NewApi")
 @Composable
 fun DiaryBoardScreen(
@@ -54,6 +55,7 @@ fun DiaryBoardScreen(
     day: Int
 ) {
     val backgroundColor = Color(0xFFF5F5F5)
+    val title = if (diaryType == "birth") "출산일기" else "관찰일기"
 
     // 샘플 데이터
     val diaryData = remember {
@@ -69,13 +71,57 @@ fun DiaryBoardScreen(
         )
     }
 
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(backgroundColor)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp)
-    ) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { 
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = title,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowBack,
+                            contentDescription = "뒤로가기"
+                        )
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { 
+                        // 일기 수정 화면으로 이동
+                        navController.navigate("diary_register/$diaryType/$day/true")
+                    }) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "수정"
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.White,
+                    titleContentColor = Color.Black,
+                    navigationIconContentColor = Color.Black,
+                    actionIconContentColor = Color.Black
+                )
+            )
+        }
+    ) { paddingValues ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(backgroundColor)
+                .padding(paddingValues)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
+        ) {
         // 사진 섹션
         if (diaryData.photos.isNotEmpty()) {
             item {
@@ -97,9 +143,10 @@ fun DiaryBoardScreen(
             )
         }
 
-        // 하단 여백
-        item {
-            Spacer(modifier = Modifier.height(50.dp))
+            // 하단 여백
+            item {
+                Spacer(modifier = Modifier.height(50.dp))
+            }
         }
     }
 }
