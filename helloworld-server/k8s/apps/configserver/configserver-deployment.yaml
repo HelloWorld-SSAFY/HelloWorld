@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: configserver
+  namespace: apps
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels: { app: configserver }
+  template:
+    metadata:
+      labels: { app: configserver }
+    spec:
+      imagePullSecrets:
+      - name: regcred
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: configserver
+        # 단일 리포지토리 + 서비스 접두 태그 배포시 configserver-<SHA>로
+        image: docker.io/opensongce/msa:configserver-latest
+        imagePullPolicy: IfNotPresent
+        ports: [{ containerPort: 8888 }]
+        readinessProbe:
+          httpGet: { path: /actuator/health/readiness, port: 8888 }
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        livenessProbe:
+          httpGet: { path: /actuator/health/liveness,  port: 8888 }
+          initialDelaySeconds: 20
+          periodSeconds: 10
+        lifecycle:
+          preStop:
+            exec: { command: ["sh","-lc","sleep 5"] }
