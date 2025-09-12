@@ -1,7 +1,0 @@
-spring:
-  application:
-    name: "calendar-diary-server"
-  config:
-    import: "configserver:"
-  cloud:
-    config:
