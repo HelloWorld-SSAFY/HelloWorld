@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: gatewayserver-svc
+  namespace: apps
+spec:
+  selector: { app: gatewayserver }
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP

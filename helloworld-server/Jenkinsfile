@@ -1,13 +1,107 @@
 pipeline {
   agent any
-  options { timestamps() }
+  options { timestamps(); ansiColor('xterm') }
+
+  environment {
+    // 단일 Docker Hub 리포
+    REGISTRY = "docker.io"
+    IMAGE_REPO = "opensongce/msa"
+    KUBECONFIG = "/var/jenkins_home/.kube/config"
+    K8S_NS = "apps"
+    DH_CREDS = "dockerhub-ci"
+  }
+
   stages {
-    stage('Sanity') {
+    stage('Checkout') {
       steps {
-        sh 'echo "Triggered by webhook at $(date)"'
-        sh 'kubectl get nodes || true'
-        sh 'docker version --format "{{.Server.Version}}" || true'
+        checkout scm
+        sh 'git --version; git rev-parse --short HEAD'
       }
+    }
+
+    stage('Detect changed services') {
+      steps {
+        script {
+          // 직전 커밋과 비교(첫 빌드면 HEAD 기준)
+          sh '''
+            cd helloworld-server
+            base=$(git rev-parse HEAD~1 || echo HEAD)
+            git diff --name-only $base...HEAD \
+              | grep -E '^helloworld-server/services/[^/]+/' \
+              | awk -F/ '{print $1"/"$2"/"$3"/"$4}' \
+              | sort -u > changed.txt || true
+            echo "Changed dirs:"; cat changed.txt || true
+          '''
+          env.CHANGED_DIRS = sh(script: "cat helloworld-server/changed.txt 2>/dev/null | tr '\\n' ' '", returnStdout: true).trim()
+          if (!env.CHANGED_DIRS) {
+            echo "No service changes detected."
+          } else {
+            echo "Detected: ${env.CHANGED_DIRS}"
+          }
+        }
+      }
+    }
+
+    stage('Docker build & push (single repo, service tags)') {
+      when { expression { return (env.CHANGED_DIRS ?: "").trim() } }
+      steps {
+        withCredentials([usernamePassword(credentialsId: env.DH_CREDS, usernameVariable: 'DH_USER', passwordVariable: 'DH_TOKEN')]) {
+          sh '''
+            set -e
+            echo "$DH_TOKEN" | docker login -u "$DH_USER" --password-stdin
+            SHA=$(git -C helloworld-server rev-parse --short HEAD)
+
+            for dir in ${CHANGED_DIRS}; do
+              svc=$(basename "$dir")                                  # userserver, gatewayserver, configserver ...
+              ctx="$dir"                                              # helloworld-server/services/<svc>
+              img="${REGISTRY}/${IMAGE_REPO}:${svc}-${SHA}"           # docker.io/opensongce/msa:userserver-<SHA>
+              latest="${REGISTRY}/${IMAGE_REPO}:${svc}-latest"
+
+              echo "==> Building $img from $ctx"
+              docker build -t "$img" -t "$latest" "$ctx"
+              docker push "$img"
+              docker push "$latest"
+            done
+
+            docker logout || true
+          '''
+        }
+      }
+    }
+
+    stage('Deploy to k3s') {
+      when { expression { return (env.CHANGED_DIRS ?: "").trim() } }
+      steps {
+        sh '''
+          set -e
+          SHA=$(git -C helloworld-server rev-parse --short HEAD)
+          for dir in ${CHANGED_DIRS}; do
+            svc=$(basename "$dir")
+            img="${REGISTRY}/${IMAGE_REPO}:${svc}-${SHA}"
+
+            # 최초 배포(매니페스트가 있으면 apply)
+            if ! kubectl -n ${K8S_NS} get deploy/${svc} >/dev/null 2>&1; then
+              [ -f "helloworld-server/k8s/apps/${svc}/${svc}-deployment.yaml" ] && \
+                kubectl -n ${K8S_NS} apply -f "helloworld-server/k8s/apps/${svc}/${svc}-deployment.yaml" || true
+              [ -f "helloworld-server/k8s/apps/${svc}/${svc}-service.yaml" ] && \
+                kubectl -n ${K8S_NS} apply -f "helloworld-server/k8s/apps/${svc}/${svc}-service.yaml" || true
+            fi
+
+            echo "==> Rolling ${svc} -> ${img}"
+            kubectl -n ${K8S_NS} set image deploy/${svc} ${svc}=${img}
+            kubectl -n ${K8S_NS} rollout status deploy/${svc} --timeout=180s
+          done
+        '''
+      }
+    }
+  }
+
+  post {
+    failure {
+      script { currentBuild.description = "Failed" }
+    }
+    success {
+      script { currentBuild.description = "OK" }
     }
   }
 }

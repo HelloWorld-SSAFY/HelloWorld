@@ -17,21 +17,24 @@ spec:
       labels: { app: configserver }
     spec:
       imagePullSecrets:
-      - name: regcred
+      - name: dockerhub-cred
       terminationGracePeriodSeconds: 30
       containers:
       - name: configserver
-        # 단일 리포지토리 + 서비스 접두 태그 배포시 configserver-<SHA>로
         image: docker.io/opensongce/msa:configserver-latest
         imagePullPolicy: IfNotPresent
-        ports: [{ containerPort: 8888 }]
+        ports:
+        - containerPort: 8888
+        envFrom:
+        - secretRef:
+            name: configserver-git
         readinessProbe:
           httpGet: { path: /actuator/health/readiness, port: 8888 }
-          initialDelaySeconds: 10
+          initialDelaySeconds: 15
           periodSeconds: 5
         livenessProbe:
           httpGet: { path: /actuator/health/liveness,  port: 8888 }
-          initialDelaySeconds: 20
+          initialDelaySeconds: 30
           periodSeconds: 10
         lifecycle:
           preStop:

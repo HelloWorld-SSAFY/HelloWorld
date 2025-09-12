@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gatewayserver
+  namespace: apps
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
+  selector:
+    matchLabels: { app: gatewayserver }
+  template:
+    metadata:
+      labels: { app: gatewayserver }
+    spec:
+      imagePullSecrets:
+      - name: dockerhub-cred
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: gatewayserver
+        image: docker.io/opensongce/msa:gatewayserver-latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+        env:
+        - name: SPRING_CONFIG_IMPORT
+          value: "optional:configserver:http://configserver-svc.apps.svc.cluster.local:8888"
+        - name: SPRING_CLOUD_CONFIG_FAIL_FAST
+          value: "true"
+        - name: SPRING_CLOUD_CONFIG_RETRY_INITIAL_INTERVAL
+          value: "1000"
+        - name: SPRING_CLOUD_CONFIG_RETRY_MAX_ATTEMPTS
+          value: "10"
+        - name: SPRING_CLOUD_CONFIG_RETRY_MULTIPLIER
+          value: "1.5"
+        - name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
+          value: "http://eurekaserver-svc.apps.svc.cluster.local:8761/eureka/"
+        readinessProbe:
+          httpGet: { path: /actuator/health/readiness, port: 8080 }
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        livenessProbe:
+          httpGet: { path: /actuator/health/liveness,  port: 8080 }
+          initialDelaySeconds: 20
+          periodSeconds: 10
+        lifecycle:
+          preStop:
+            exec: { command: ["sh","-lc","sleep 5"] }
+        # 필요시 리소스 가드라인
+        # resources:
+        #   requests: { cpu: "100m", memory: "256Mi" }
+        #   limits:   { cpu: "500m", memory: "512Mi" }
