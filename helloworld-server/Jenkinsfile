@@ -3,12 +3,16 @@ pipeline {
   options { timestamps(); ansiColor('xterm') }
 
   environment {
-    // 단일 Docker Hub 리포
-    REGISTRY = "docker.io"
-    IMAGE_REPO = "opensongce/msa"
-    KUBECONFIG = "/var/jenkins_home/.kube/config"
-    K8S_NS = "apps"
-    DH_CREDS = "dockerhub-ci"
+    // Docker Registry
+    REGISTRY    = "docker.io"
+    IMAGE_REPO  = "opensongce/msa"
+
+    // Kubernetes
+    KUBECONFIG  = "/var/jenkins_home/.kube/config"
+    K8S_NS      = "apps"
+
+    // Jenkins Credentials ID for DockerHub
+    DH_CREDS    = "dockerhub-ci"
   }
 
   stages {
@@ -19,26 +23,62 @@ pipeline {
       }
     }
 
-  stage('Detect changed services') {
-    steps {
-      script {
-        sh '''
-          base=$(git rev-parse HEAD~1 || echo HEAD)
-          git diff --name-only $base...HEAD \
-            | grep -E '^helloworld-server/[^/]+/' \
-            | awk -F/ '{print $1"/"$2"/"$3"/"$4}' \
-            | sort -u > helloworld-server/changed.txt || true
-          echo "Changed dirs:"; cat helloworld-server/changed.txt || true
-        '''
-        env.CHANGED_DIRS = sh(script: "cat helloworld-server/changed.txt 2>/dev/null | tr '\\n' ' '", returnStdout: true).trim()
-        echo env.CHANGED_DIRS ? "Detected: ${env.CHANGED_DIRS}" : "No service changes detected."
+    stage('Detect changed (code/k8s/ingress)') {
+      steps {
+        script {
+          sh '''
+            set -e
+            # 기준: 최근 "성공" 커밋. 없으면 최초 커밋
+            base=${GIT_PREVIOUS_SUCCESSFUL_COMMIT:-$(git rev-list --max-parents=0 HEAD)}
+            changed_files=$(git diff --name-only "$base"...HEAD || true)
+
+            # 1) 서비스 코드 변경: helloworld-server/<svc>/...
+            svc_from_code=$(printf "%s\n" "$changed_files" \
+              | grep -E '^helloworld-server/[^/]+/' \
+              | awk -F/ '{print $2}' \
+              | grep -vE '^(k8s)$' \
+              | sort -u || true)
+
+            # 2) k8s 매니페스트 변경: helloworld-server/k8s/apps/<svc>/**.yaml (파일명 자유)
+            svc_from_k8s=$(printf "%s\n" "$changed_files" \
+              | grep -E '^helloworld-server/k8s/apps/[^/]+/.*\\.ya?ml$' \
+              | awk -F/ '{print $4}' \
+              | sort -u || true)
+
+            # 3) ingress 변경 (예: helloworld-server/k8s/ingress/gateway.yaml)
+            ingress_changed=$(printf "%s\n" "$changed_files" \
+              | grep -E '^helloworld-server/k8s/ingress/.*\\.ya?ml$' || true)
+
+            # 결과 저장
+            mkdir -p helloworld-server
+            echo "$svc_from_code" | tr '\\n' ' ' > helloworld-server/changed_code.txt
+            echo "$svc_from_k8s"  | tr '\\n' ' ' > helloworld-server/changed_k8s.txt
+            if [ -n "$ingress_changed" ]; then echo "true" > helloworld-server/ingress_changed; else : > helloworld-server/ingress_changed; fi
+
+            echo "Code-changed services: $(cat helloworld-server/changed_code.txt)"
+            echo "K8s-changed services : $(cat helloworld-server/changed_k8s.txt)"
+            echo "Ingress changed      : $(cat helloworld-server/ingress_changed | tr -d '\\n' | sed -e 's/^$/false/')"
+          '''
+
+          env.CHANGED_CODE    = sh(script: "cat helloworld-server/changed_code.txt 2>/dev/null", returnStdout: true).trim()
+          env.CHANGED_K8S     = sh(script: "cat helloworld-server/changed_k8s.txt  2>/dev/null", returnStdout: true).trim()
+          env.INGRESS_CHANGED = sh(script: "cat helloworld-server/ingress_changed 2>/dev/null", returnStdout: true).trim()
+
+          // 빌드는 "코드 변경"만, 배포는 "코드 ∪ k8s"
+          def buildSet  = (env.CHANGED_CODE ?: "").trim()
+          def deploySet = ((env.CHANGED_CODE + " " + env.CHANGED_K8S).trim()).split().unique().join(" ")
+
+          env.BUILD_SERVICES  = buildSet
+          env.DEPLOY_SERVICES = deploySet
+
+          echo "BUILD_SERVICES : ${env.BUILD_SERVICES ?: '<none>'}"
+          echo "DEPLOY_SERVICES: ${env.DEPLOY_SERVICES ?: '<none>'}"
+        }
       }
     }
-  }
 
-
-    stage('Docker build & push (single repo, service tags)') {
-      when { expression { return (env.CHANGED_DIRS ?: "").trim() } }
+    stage('Docker build & push') {
+      when { expression { return (env.BUILD_SERVICES ?: "").trim() } }
       steps {
         withCredentials([usernamePassword(credentialsId: env.DH_CREDS, usernameVariable: 'DH_USER', passwordVariable: 'DH_TOKEN')]) {
           sh '''
@@ -46,10 +86,14 @@ pipeline {
             echo "$DH_TOKEN" | docker login -u "$DH_USER" --password-stdin
             SHA=$(git -C helloworld-server rev-parse --short HEAD)
 
-            for dir in ${CHANGED_DIRS}; do
-              svc=$(basename "$dir")                                  # userserver, gatewayserver, configserver ...
-              ctx="$dir"                                              # helloworld-server/services/<svc>
-              img="${REGISTRY}/${IMAGE_REPO}:${svc}-${SHA}"           # docker.io/opensongce/msa:userserver-<SHA>
+            for svc in ${BUILD_SERVICES}; do
+              ctx="helloworld-server/${svc}"                      # 예: helloworld-server/userserver
+              if [ ! -d "$ctx" ]; then
+                echo "skip: $ctx not found"
+                continue
+              fi
+
+              img="${REGISTRY}/${IMAGE_REPO}:${svc}-${SHA}"
               latest="${REGISTRY}/${IMAGE_REPO}:${svc}-latest"
 
               echo "==> Building $img from $ctx"
@@ -64,39 +108,68 @@ pipeline {
       }
     }
 
-    stage('Deploy to k3s') {
-      when { expression { return (env.CHANGED_DIRS ?: "").trim() } }
+    stage('Ensure namespace') {
+      steps {
+        sh '''
+          set -e
+          # 레포에 파일이 있으면 선언대로 적용, 없으면 존재 여부만 체크해서 생성
+          if [ -f "helloworld-server/k8s/ns.yaml" ]; then
+            kubectl apply -f helloworld-server/k8s/ns.yaml
+          else
+            kubectl get ns ${K8S_NS} || kubectl create namespace ${K8S_NS}
+          fi
+        '''
+      }
+    }
+
+    stage('Deploy to k3s (services)') {
+      when { expression { return (env.DEPLOY_SERVICES ?: "").trim() } }
       steps {
         sh '''
           set -e
           SHA=$(git -C helloworld-server rev-parse --short HEAD)
-          for dir in ${CHANGED_DIRS}; do
-            svc=$(basename "$dir")
+
+          for svc in ${DEPLOY_SERVICES}; do
+            man_dir="helloworld-server/k8s/apps/${svc}"
             img="${REGISTRY}/${IMAGE_REPO}:${svc}-${SHA}"
 
-            # 최초 배포(매니페스트가 있으면 apply)
-            if ! kubectl -n ${K8S_NS} get deploy/${svc} >/dev/null 2>&1; then
-              [ -f "helloworld-server/k8s/apps/${svc}/${svc}-deployment.yaml" ] && \
-                kubectl -n ${K8S_NS} apply -f "helloworld-server/k8s/apps/${svc}/${svc}-deployment.yaml" || true
-              [ -f "helloworld-server/k8s/apps/${svc}/${svc}-service.yaml" ] && \
-                kubectl -n ${K8S_NS} apply -f "helloworld-server/k8s/apps/${svc}/${svc}-service.yaml" || true
+            # 매니페스트 디렉터리 전체 적용(파일명 자유: *-deployment.yaml, *-service.yaml 등)
+            if [ -d "$man_dir" ]; then
+              echo "==> kubectl apply -f ${man_dir}"
+              kubectl -n ${K8S_NS} apply -f "${man_dir}"
             fi
 
+            # 이미지 롤링 (규칙: Deployment 이름 == 컨테이너 이름 == svc)
             echo "==> Rolling ${svc} -> ${img}"
-            kubectl -n ${K8S_NS} set image deploy/${svc} ${svc}=${img}
-            kubectl -n ${K8S_NS} rollout status deploy/${svc} --timeout=180s
+            if kubectl -n ${K8S_NS} get deploy/${svc} >/dev/null 2>&1; then
+              kubectl -n ${K8S_NS} set image deploy/${svc} ${svc}=${img}
+              kubectl -n ${K8S_NS} rollout status deploy/${svc} --timeout=180s
+            else
+              echo "warn: deploy/${svc} not found; skip rolling"
+            fi
           done
+        '''
+      }
+    }
+
+    stage('Deploy to k3s (ingress)') {
+      when { expression { return (env.INGRESS_CHANGED ?: "").trim() } }
+      steps {
+        sh '''
+          set -e
+          if [ -d "helloworld-server/k8s/ingress" ]; then
+            echo "==> Ingress changed: applying helloworld-server/k8s/ingress"
+            kubectl -n ${K8S_NS} apply -f helloworld-server/k8s/ingress
+          else
+            echo "skip: ingress dir not found"
+          fi
         '''
       }
     }
   }
 
   post {
-    failure {
-      script { currentBuild.description = "Failed" }
-    }
-    success {
-      script { currentBuild.description = "OK" }
-    }
+    failure { script { currentBuild.description = "Failed" } }
+    success { script { currentBuild.description = "OK" } }
   }
 }
