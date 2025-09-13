@@ -65,8 +65,9 @@ pipeline {
           env.INGRESS_CHANGED = sh(script: "cat helloworld-server/ingress_changed 2>/dev/null", returnStdout: true).trim()
 
           // 빌드는 "코드 변경"만, 배포는 "코드 ∪ k8s"
-          def buildSet  = (env.CHANGED_CODE ?: "").trim()
-          def deploySet = ((env.CHANGED_CODE + " " + env.CHANGED_K8S).trim()).split().unique().join(" ")
+          def buildSet = (env.CHANGED_CODE ?: "").trim()
+          def merged   = (env.CHANGED_CODE + " " + env.CHANGED_K8S).trim()
+          def deploySet = merged ? merged.tokenize().unique().join(' ') : ''
 
           env.BUILD_SERVICES  = buildSet
           env.DEPLOY_SERVICES = deploySet
