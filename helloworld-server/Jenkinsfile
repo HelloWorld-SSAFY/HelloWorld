@@ -151,26 +151,26 @@ spec:
             sh '''
 set -eux
 
-# 1) Docker auth for Kaniko (no heredoc; safe for ash)
+# 1) Docker auth JSON (정확한 따옴표/형식)
 rm -f /kaniko/.docker/config.json
 mkdir -p /kaniko/.docker
 auth="$(printf "%s:%s" "$DH_USER" "$DH_TOKEN" | base64 | tr -d '\n')"
-printf '%s' "{\"auths\":{\"https://index.docker.io/v1/\":{\"auth\":\"${auth}\"}}}" > /kaniko/.docker/config.json
-ls -l /kaniko/.docker/config.json || true
 
-# 2) Tag & targets
+cat >/kaniko/.docker/config.json <<EOF
+{"auths":{"https://index.docker.io/v1/":{"auth":"$auth"}}}
+EOF
+
+# 확인
+cat /kaniko/.docker/config.json
+
+# 2) 빌드/푸시
 SHA="${GIT_COMMIT:0:7}"
 echo "[kaniko] BUILD_SERVICES=${BUILD_SERVICES}  SHA=${SHA}"
 
-# 3) Build loop (ash-compatible)
 for svc in ${BUILD_SERVICES}; do
   ctx="helloworld-server/${svc}"
   df="${ctx}/Dockerfile"
-
-  if [ ! -f "${df}" ]; then
-    echo "[kaniko] skip: ${df} not found (svc=${svc})"
-    continue
-  fi
+  [ -f "${df}" ] || { echo "[kaniko] skip: ${df} not found (svc=${svc})"; continue; }
 
   img="${REGISTRY}/${IMAGE_REPO}:${svc}-${SHA}"
   latest="${REGISTRY}/${IMAGE_REPO}:${svc}-latest"
@@ -189,6 +189,7 @@ done
         }
       }
     }
+
 
 
 
