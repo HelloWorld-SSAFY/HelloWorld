@@ -19,28 +19,23 @@ pipeline {
       }
     }
 
-    stage('Detect changed services') {
-      steps {
-        script {
-          // 직전 커밋과 비교(첫 빌드면 HEAD 기준)
-          sh '''
-            cd helloworld-server
-            base=$(git rev-parse HEAD~1 || echo HEAD)
-            git diff --name-only $base...HEAD \
-              | grep -E '^helloworld-server/services/[^/]+/' \
-              | awk -F/ '{print $1"/"$2"/"$3"/"$4}' \
-              | sort -u > changed.txt || true
-            echo "Changed dirs:"; cat changed.txt || true
-          '''
-          env.CHANGED_DIRS = sh(script: "cat helloworld-server/changed.txt 2>/dev/null | tr '\\n' ' '", returnStdout: true).trim()
-          if (!env.CHANGED_DIRS) {
-            echo "No service changes detected."
-          } else {
-            echo "Detected: ${env.CHANGED_DIRS}"
-          }
-        }
+  stage('Detect changed services') {
+    steps {
+      script {
+        sh '''
+          base=$(git rev-parse HEAD~1 || echo HEAD)
+          git diff --name-only $base...HEAD \
+            | grep -E '^helloworld-server/[^/]+/' \
+            | awk -F/ '{print $1"/"$2"/"$3"/"$4}' \
+            | sort -u > helloworld-server/changed.txt || true
+          echo "Changed dirs:"; cat helloworld-server/changed.txt || true
+        '''
+        env.CHANGED_DIRS = sh(script: "cat helloworld-server/changed.txt 2>/dev/null | tr '\\n' ' '", returnStdout: true).trim()
+        echo env.CHANGED_DIRS ? "Detected: ${env.CHANGED_DIRS}" : "No service changes detected."
       }
     }
+  }
+
 
     stage('Docker build & push (single repo, service tags)') {
       when { expression { return (env.CHANGED_DIRS ?: "").trim() } }
