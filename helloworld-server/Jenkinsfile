@@ -28,7 +28,6 @@ spec:
           mountPath: /kaniko/.docker    # DockerHub 인증 파일 위치
     - name: kubectl
       image: bitnami/kubectl:1.29
-      command: ["cat"]     # stage에서 kubectl 명령 실행
       tty: true
   volumes:
     - name: docker-config
