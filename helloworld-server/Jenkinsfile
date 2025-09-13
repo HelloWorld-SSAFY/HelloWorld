@@ -60,6 +60,20 @@ spec:
       }
     }
 
+    stage('Kube debug') {
+      steps {
+        container('kubectl') {
+          sh '''
+            which sh || true
+            ls -ld /home/jenkins/agent || true
+            kubectl version --client --short || true
+            kubectl auth can-i get ns || true
+          '''
+        }
+      }
+    }
+
+
     stage('Detect changed (code/k8s/ingress)') {
       steps {
         script {
