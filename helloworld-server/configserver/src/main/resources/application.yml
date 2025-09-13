@@ -21,10 +21,9 @@ management:
   endpoints:
     web:
       exposure:
-        include: "health,info"  # 필요한 엔드포인트만 노출
+        include: health,info  # 필요한 엔드포인트만 노출
   health:
     livenessstate:
       enabled: true
     readinessstate:
       enabled: true
-      
