@@ -51,6 +51,12 @@ spec:
     DH_CREDS   = "dockerhub-ci"
   }
 
+  stage('Debug') {
+    steps {
+      sh 'sleep 300'
+    }
+  }
+
   stages {
     stage('Checkout') {
       steps {
