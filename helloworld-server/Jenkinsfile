@@ -51,17 +51,17 @@ spec:
     DH_CREDS   = "dockerhub-ci"
   }
 
-  stage('Debug') {
-    steps {
-      sh 'sleep 300'
-    }
-  }
-
   stages {
     stage('Checkout') {
       steps {
         checkout scm
         sh 'git --version; git rev-parse --short HEAD'
+      }
+    }
+
+    stage('Debug') {
+      steps {
+        sh 'sleep 300'
       }
     }
 
