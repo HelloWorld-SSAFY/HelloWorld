@@ -14,20 +14,36 @@ spec:
   # apps 네임스페이스에 있는 ServiceAccount (RBAC 미리 생성 필요)
   serviceAccountName: jenkins
   restartPolicy: Never
+
+  securityContext:
+    fsGroup: 1000
+
+
   containers:
     - name: jnlp
       image: jenkins/inbound-agent:latest
       tty: true
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+
     - name: kaniko
       image: gcr.io/kaniko-project/executor:debug
       command: ["sh","-c","trap : TERM INT; sleep infinity & wait"]
       volumeMounts:
         - name: docker-config
-          mountPath: /kaniko/.docker    # DockerHub 인증 파일 위치
+          mountPath: /kaniko/.docker
+      securityContext:
+        runAsUser: 0
+
     - name: kubectl
       image: bitnami/kubectl:latest
       command: ["/bin/sh", "-lc", "sleep infinity"]
       tty: true
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+
   volumes:
     - name: docker-config
       emptyDir: {}
