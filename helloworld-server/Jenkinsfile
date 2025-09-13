@@ -22,8 +22,6 @@ spec:
       tty: true
     - name: kaniko
       image: gcr.io/kaniko-project/executor:latest
-      command: ["sleep"]
-      args: ["infinity"]                  # 실제 실행은 stage에서 /kaniko/executor 호출
       volumeMounts:
         - name: docker-config
           mountPath: /kaniko/.docker    # DockerHub 인증 파일 위치
