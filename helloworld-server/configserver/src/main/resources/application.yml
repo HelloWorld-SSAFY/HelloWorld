@@ -21,9 +21,12 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info  # 필요한 엔드포인트만 노출
+        include: health,info
   health:
+    probes:
+      enabled: true
     livenessstate:
       enabled: true
     readinessstate:
       enabled: true
+
