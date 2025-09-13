@@ -28,7 +28,7 @@ spec:
           mountPath: /kaniko/.docker    # DockerHub 인증 파일 위치
     - name: kubectl
       image: bitnami/kubectl:latest
-      command: ["/bin/sh","-c","tail -f /dev/null"]
+      command: ["/bin/sh", "-lc", "sleep infinity"]
       tty: true
   volumes:
     - name: docker-config
