@@ -27,3 +27,4 @@ management:
       enabled: true
     readinessstate:
       enabled: true
+      
