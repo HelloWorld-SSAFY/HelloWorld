@@ -22,7 +22,7 @@ spring:
           filters:
             - StripPrefix=1
 
-        - id: diary-swagger
+        - id: calendar-swagger
           uri: http://calendar-diary-server-svc.apps.svc.cluster.local:8080
           predicates:
             - Path=/calendar/swagger-ui/**,/calendar/api-docs
