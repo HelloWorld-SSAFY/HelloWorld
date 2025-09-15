@@ -22,13 +22,6 @@ spring:
           filters:
             - StripPrefix=1
 
-        - id: calendar-swagger
-          uri: http://calendar-diary-server-svc.apps.svc.cluster.local:8080
-          predicates:
-            - Path=/calendar/swagger-ui/**,/calendar/api-docs
-          filters:
-            - RewritePath=/calendar/swagger-ui/(?<remains>.*), /swagger-ui/${remains}
-            - RewritePath=/calendar/api-docs, /api-docs
 
 #  cloud:
 #    config:
