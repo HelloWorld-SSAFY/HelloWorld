@@ -44,15 +44,24 @@ spec:
           value: "1.5"
         - name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
           value: "http://eurekaserver-svc.apps.svc.cluster.local:8761/eureka/"
+
+        - name: MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED
+          value: "true"
+        - name: MANAGEMENT_HEALTH_LIVENESSSTATE_ENABLED
+          value: "true"
+        - name: MANAGEMENT_HEALTH_READINESSSTATE_ENABLED
+          value: "true"
+
         readinessProbe:
           httpGet: { path: /actuator/health/readiness, port: 8080 }
-          initialDelaySeconds: 10
+          initialDelaySeconds: 15
           periodSeconds: 5
           failureThreshold: 6
         livenessProbe:
           httpGet: { path: /actuator/health/liveness,  port: 8080 }
-          initialDelaySeconds: 20
+          initialDelaySeconds: 40
           periodSeconds: 10
+          failureThreshold: 6
         lifecycle:
           preStop:
             exec: { command: ["sh","-lc","sleep 5"] }
