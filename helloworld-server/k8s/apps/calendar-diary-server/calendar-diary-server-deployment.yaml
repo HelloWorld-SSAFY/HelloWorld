@@ -51,12 +51,12 @@ spec:
 
         # Actuator가 있다면 /actuator/health 사용, 없으면 / 로 교체
         readinessProbe:
-          httpGet: { path: /actuator/health, port: 8080 }
+          httpGet: { path: /, port: 8080 }
           initialDelaySeconds: 15
           periodSeconds: 5
           failureThreshold: 6
         livenessProbe:
-          httpGet: { path: /actuator/health, port: 8080 }
+          httpGet: { path: /, port: 8080 }
           initialDelaySeconds: 40
           periodSeconds: 10
           failureThreshold: 6
