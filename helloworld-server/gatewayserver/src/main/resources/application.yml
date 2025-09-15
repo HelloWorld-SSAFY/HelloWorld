@@ -12,6 +12,23 @@ spring:
 #      discovery:
 #        enabled: true
 #        service-id: configserver
+  cloud:
+    gateway:
+      routes:
+        - id: diary
+          uri: http://calendar-diary-server-svc.apps.svc.cluster.local:8080
+          predicates:
+            - Path=/diary/**
+          filters:
+            - StripPrefix=1
+
+        - id: diary-swagger
+          uri: http://calendar-diary-server-svc.apps.svc.cluster.local:8080
+          predicates:
+            - Path=/diary/swagger-ui/**,/diary/api-docs
+          filters:
+            - RewritePath=/diary/swagger-ui/(?<remains>.*), /swagger-ui/${remains}
+            - RewritePath=/diary/api-docs, /api-docs
 
 #  cloud:
 #    config:
