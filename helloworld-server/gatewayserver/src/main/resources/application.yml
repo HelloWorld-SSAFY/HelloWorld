@@ -15,20 +15,20 @@ spring:
   cloud:
     gateway:
       routes:
-        - id: diary
+        - id: calendar
           uri: http://calendar-diary-server-svc.apps.svc.cluster.local:8080
           predicates:
-            - Path=/diary/**
+            - Path=/calendar/**
           filters:
             - StripPrefix=1
 
         - id: diary-swagger
           uri: http://calendar-diary-server-svc.apps.svc.cluster.local:8080
           predicates:
-            - Path=/diary/swagger-ui/**,/diary/api-docs
+            - Path=/calendar/swagger-ui/**,/calendar/api-docs
           filters:
-            - RewritePath=/diary/swagger-ui/(?<remains>.*), /swagger-ui/${remains}
-            - RewritePath=/diary/api-docs, /api-docs
+            - RewritePath=/calendar/swagger-ui/(?<remains>.*), /swagger-ui/${remains}
+            - RewritePath=/calendar/api-docs, /api-docs
 
 #  cloud:
 #    config:
