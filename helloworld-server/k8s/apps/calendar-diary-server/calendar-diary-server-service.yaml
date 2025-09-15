@@ -1,11 +1,11 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: calendarserver-svc
+  name: calendar-diary-server-svc
   namespace: apps
 spec:
   selector:
-    app: calendarserver
+    app: calendar-diary-server
   ports:
   - port: 8080
     targetPort: 8080
