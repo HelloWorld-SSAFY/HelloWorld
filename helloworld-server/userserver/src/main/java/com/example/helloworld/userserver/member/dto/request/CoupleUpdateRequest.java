@@ -1,4 +1,4 @@
-package com.example.helloworld.userserver.member.dto;
+package com.example.helloworld.userserver.member.dto.request;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;

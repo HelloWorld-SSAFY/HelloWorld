@@ -24,8 +24,8 @@ public class Couple {
             foreignKey = @ForeignKey(name = "fk_couple_user_a"))
     private Member userA;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id_b")
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
+    @JoinColumn(name = "user_id_b", nullable = true)
     private Member userB;
 
     @Column(name = "pregnancy_week")
@@ -46,6 +46,8 @@ public class Couple {
         this.pregnancyWeek = week;
         this.dueDate = due;
     }
+
+    public void setUserB(Member userB) { this.userB = userB; }
 }
 
 

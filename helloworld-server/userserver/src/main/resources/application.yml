@@ -35,6 +35,12 @@ spring:
               - profile
               - openid
 
+app:
+  invite-code:
+    ttl-minutes: 1440   # 기본 24h
+    code-length: 8
+    revoke-previous: true  # 새로 발급 시 기존 미사용 코드 무효화
+
 jwt:
   access:
     secret: ${ACCESS_SECRET}
@@ -42,3 +48,5 @@ jwt:
   refresh:
     secret: ${REFRESH_SECRET}
     expire: ${REFRESH_EXPIRE}
+
+

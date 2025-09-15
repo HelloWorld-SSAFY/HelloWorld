@@ -1,8 +1,10 @@
 package com.example.helloworld.userserver.member.service;
 
-import com.example.helloworld.userserver.member.dto.CoupleUpdateRequest;
-import com.example.helloworld.userserver.member.dto.MemberRegisterRequest;
-import com.example.helloworld.userserver.member.dto.MemberUpdateRequest;
+import com.example.helloworld.userserver.member.dto.request.AvatarUrlRequest;
+import com.example.helloworld.userserver.member.dto.request.CoupleUpdateRequest;
+import com.example.helloworld.userserver.member.dto.response.AvatarUrlResponse;
+import com.example.helloworld.userserver.member.dto.response.MemberProfileResponse;
+import com.example.helloworld.userserver.member.dto.request.MemberRegisterRequest;
 import com.example.helloworld.userserver.member.entity.Couple;
 import com.example.helloworld.userserver.member.entity.Member;
 import com.example.helloworld.userserver.member.persistence.CoupleRepository;
@@ -12,9 +14,13 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.Locale;
 
-import java.time.LocalDate;
+import java.util.Optional;
+
 @Service
 @RequiredArgsConstructor
 public class MemberServiceImpl implements MemberService {
@@ -68,7 +74,7 @@ public class MemberServiceImpl implements MemberService {
 
     @Transactional
     @Override
-    public Long updateProfile(Long memberId, MemberUpdateRequest req) {
+    public Long updateProfile(Long memberId, MemberProfileResponse.MemberUpdateRequest req) {
         Member me = memberRepository.findById(memberId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Member not found"));
 
@@ -107,6 +113,75 @@ public class MemberServiceImpl implements MemberService {
 
         couple.updateSharing(week, due);
         return couple.getId();
+    }
+
+    @Transactional(readOnly = true)
+    @Override
+    public MemberProfileResponse getMyOverview(Long memberId) {
+        Member me = memberRepository.findById(memberId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Member not found"));
+
+        // 내가 속한 커플 찾기: 우선 A(여성), 없으면 B(남성)
+        Optional<Couple> asA = coupleRepository.findByUserAId(me.getId());
+        Optional<Couple> asB = coupleRepository.findByUserBId(me.getId());
+        Couple couple = asA.or(() -> asB).orElse(null);
+
+        // member block
+        MemberProfileResponse.MemberBlock memberBlock = new MemberProfileResponse.MemberBlock(
+                me.getId(),
+                me.getGoogleEmail(),
+                me.getNickname(),
+                me.getGender() != null ? me.getGender().name().toLowerCase() : null,
+                me.getAge(),
+                me.getMenstrualDate(),
+                me.isChildbirth(),
+                me.getImageUrl()
+        );
+
+        // couple block (없을 수 있음)
+        MemberProfileResponse.CoupleBlock coupleBlock = null;
+        if (couple != null) {
+            boolean iAmA = couple.getUserA() != null && couple.getUserA().getId().equals(me.getId());
+            String role = iAmA ? "A" : "B";
+            boolean isActive = couple.getUserB() != null; // 남성이 연결되었는지
+            // 파트너 계산
+            Member partner = iAmA ? couple.getUserB() : couple.getUserA();
+
+            coupleBlock = new MemberProfileResponse.CoupleBlock(
+                    couple.getId(),
+                    couple.getPregnancyWeek(),
+                    MemberProfileResponse.toLocalDate(couple.getDueDate())
+            );
+        }
+
+        return new MemberProfileResponse(memberBlock, coupleBlock);
+    }
+
+    @Transactional
+    @Override
+    public AvatarUrlResponse setAvatarUrl(Long memberId, AvatarUrlRequest req) {
+        Member me = memberRepository.findById(memberId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Member not found"));
+
+        String url = normalizeUrl(req.imageUrl()); // 빈 값 허용(해제)
+        // (선택) URL 필수로 강제하고 싶으면 빈 값이면 400 던지면 됨
+
+        me.updateImageUrl(url);
+        return new AvatarUrlResponse(me.getImageUrl() == null ? "" : me.getImageUrl());
+    }
+
+    private static String normalizeUrl(String s) {
+        if (s == null || s.isBlank()) return ""; // 비우기(해제) 허용
+        try {
+            URI u = new URI(s.trim());
+            String scheme = (u.getScheme() == null) ? "" : u.getScheme().toLowerCase();
+            if (!scheme.equals("http") && !scheme.equals("https")) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "image_url must be http/https");
+            }
+            return u.toString();
+        } catch (URISyntaxException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid image_url");
+        }
     }
 
     private static Member.Gender toGender(String s) {

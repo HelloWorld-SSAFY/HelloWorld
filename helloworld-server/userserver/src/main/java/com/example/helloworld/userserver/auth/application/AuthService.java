@@ -55,21 +55,7 @@ public class AuthService {
         Member member = memberRepository.findByGoogleEmail(googleEmail).orElse(null);
 
         if (member == null) {
-            String name = firstNonBlank(googleName, emailLocalPart(googleEmail));
-            String nickname = generateNickname();
-
-            member = Member.builder()
-                    .googleEmail(googleEmail)
-                    .nickname(nickname)
-                    .build();
-
-            try {
-                memberRepository.save(member);
-            } catch (DataIntegrityViolationException e) {
-                Member existing = memberRepository.findByGoogleEmail(googleEmail).orElse(null);
-                if (existing == null) throw e;
-                member = existing;
-            }
+            member = createMemberWithRetry(googleEmail, googleName); // <-- 새 헬퍼로 위임
         }
 
         String accessToken  = jwtProvider.issueAccessToken(member.getId());
@@ -154,5 +140,25 @@ public class AuthService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND);
         }
         memberRepository.deleteById(memberId); // 실제 DELETE
+    }
+
+    private Member createMemberWithRetry(String googleEmail, String googleName) {
+        for (int i = 0; i < 5; i++) {
+            try {
+                Member toSave = Member.builder()
+                        .googleEmail(googleEmail)
+                        .nickname(generateNickname())
+                        .build();
+                return memberRepository.save(toSave); // 성공 시 즉시 반환
+            } catch (DataIntegrityViolationException ex) {
+                // 1) 이메일 경합: 누군가 먼저 가입
+                Member existing = memberRepository.findByGoogleEmail(googleEmail).orElse(null);
+                if (existing != null) return existing;
+
+                // 2) 닉네임 UNIQUE 충돌 등 → 닉네임 재생성 후 재시도
+                if (i == 4) throw ex; // 마지막에도 실패면 그대로 던져 트랜잭션 롤백
+            }
+        }
+        throw new IllegalStateException("회원 생성 재시도 초과");
     }
 }

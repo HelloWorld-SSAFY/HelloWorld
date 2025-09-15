@@ -29,7 +29,7 @@ public class Member {
     private String nickname;
 
     @Enumerated(EnumType.STRING)
-    @Column(name="gender", nullable=false, length=10)
+    @Column(name="gender", nullable=true, length=10)
     private Gender gender;
 
     @Column(name="image_url", columnDefinition = "TEXT")
@@ -38,7 +38,6 @@ public class Member {
     @Column(name="age")
     private Integer age;
 
-    // 날짜를 LocalDate로 유지(시간 의미 없음). DB는 DATE로 매핑 권장
     @Column(name="menstrual_date")
     private LocalDate menstrualDate;
 
@@ -65,5 +64,10 @@ public class Member {
     public void ensureImageUrlNotNull() {
         if (this.imageUrl == null) this.imageUrl = "";
     }
+
+    public void updateImageUrl(String url) {
+        this.imageUrl = (url == null || url.isBlank()) ? "" : url.trim();
+    }
+
 }
 

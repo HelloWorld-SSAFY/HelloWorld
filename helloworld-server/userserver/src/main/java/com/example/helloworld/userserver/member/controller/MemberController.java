@@ -1,10 +1,12 @@
 package com.example.helloworld.userserver.member.controller;
 
 import com.example.helloworld.userserver.auth.jwt.JwtProvider;
-import com.example.helloworld.userserver.member.dto.CoupleUpdateRequest;
-import com.example.helloworld.userserver.member.dto.MemberRegisterRequest;
-import com.example.helloworld.userserver.member.dto.MemberRegisterResponse;
-import com.example.helloworld.userserver.member.dto.MemberUpdateRequest;
+import com.example.helloworld.userserver.member.dto.request.AvatarUrlRequest;
+import com.example.helloworld.userserver.member.dto.request.CoupleUpdateRequest;
+import com.example.helloworld.userserver.member.dto.request.MemberRegisterRequest;
+import com.example.helloworld.userserver.member.dto.response.AvatarUrlResponse;
+import com.example.helloworld.userserver.member.dto.response.MemberProfileResponse;
+import com.example.helloworld.userserver.member.dto.response.MemberRegisterResponse;
 import com.example.helloworld.userserver.member.service.MemberService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -88,7 +90,7 @@ public class MemberController {
             content = @Content(schema = @Schema(implementation = MemberRegisterResponse.class)))
     public ResponseEntity<MemberRegisterResponse> updateMe(
             @RequestHeader("Authorization") String authz,
-            @Valid @RequestBody MemberUpdateRequest req
+            @Valid @RequestBody MemberProfileResponse.MemberUpdateRequest req
     ) {
         String token = extractBearer(authz);
         Long memberId = jwtProvider.parseAccessSubject(token);
@@ -114,6 +116,38 @@ public class MemberController {
         return ResponseEntity.ok(MemberRegisterResponse.ok(memberId, coupleId));
     }
 
+    @Operation(
+            summary = "내 정보 통합 조회 (프로필+커플)",
+            description = "액세스 토큰 기준으로 회원 프로필과 커플/파트너 정보를 한 번에 반환합니다."
+    )
+    @ApiResponse(responseCode = "200", description = "조회 성공",
+            content = @Content(schema = @Schema(implementation = MemberProfileResponse.class)))
+    @GetMapping("/info")
+    @SecurityRequirement(name = "bearerAuth")
+    public ResponseEntity<MemberProfileResponse> getMe(
+            @RequestHeader("Authorization") String authz
+    ) {
+        String token = extractBearer(authz);
+        Long memberId = jwtProvider.parseAccessSubject(token);
+        return ResponseEntity.ok(userService.getMyOverview(memberId));
+    }
+
+    @PutMapping("/profile-image")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(
+            summary = "프로필 이미지 URL 설정(등록/변경/해제)",
+            description = "기본 url은 '', put으로 바꾸기만 하면 됨."
+    )
+    @ApiResponse(responseCode = "200", description = "설정 성공",
+            content = @Content(schema = @Schema(implementation = AvatarUrlResponse.class)))
+    public ResponseEntity<AvatarUrlResponse> putAvatarUrl(
+            @RequestHeader("Authorization") String authz,
+            @RequestBody AvatarUrlRequest req
+    ) {
+        String token = extractBearer(authz);
+        Long memberId = jwtProvider.parseAccessSubject(token);
+        return ResponseEntity.ok(userService.setAvatarUrl(memberId, req));
+    }
 
 
     private static String extractBearer(String authz) {
