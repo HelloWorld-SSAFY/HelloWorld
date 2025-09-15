@@ -8,7 +8,7 @@ metadata:
     # TLS 쓸 때는 websecure로 바꾸고 cert-manager 추가
 spec:
   rules:
-  - host: api.43.203.238.139.sslip.io
+  - host: j13d204.p.ssafy.io
     http:
       paths:
       - path: /
