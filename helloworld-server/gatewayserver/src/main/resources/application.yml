@@ -21,6 +21,9 @@ spring:
             - Path=/calendar/**
           filters:
             - StripPrefix=1
+            - RewritePath=/swagger-ui/swagger-config, /v3/api-docs/swagger-config
+            - AddRequestHeader=X-Forwarded-Prefix, /calendar   # (권장) springdoc가 접두사 인지
+            - AddRequestHeader=X-Forwarded-Proto, http         # (옵션)
 
 
 #  cloud:
