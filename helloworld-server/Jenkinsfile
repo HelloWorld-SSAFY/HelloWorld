@@ -207,39 +207,66 @@ done
     }
 
     stage('Deploy to k3s (services)') {
-      when { expression { return (env.DEPLOY_SERVICES ?: "").trim() } }
-      steps {
-        container('kubectl') {
-          sh '''
-set -e
+        when { expression { return (env.DEPLOY_SERVICES ?: "").trim() } }
+        steps {
+            container('kubectl') {
+                sh '''
+set -euo pipefail
 SHA=$(git -C helloworld-server rev-parse --short HEAD)
+ns="${K8S_NS}"
 
 for svc in ${DEPLOY_SERVICES}; do
   man_dir="helloworld-server/k8s/apps/${svc}"
   img="${REGISTRY}/${IMAGE_REPO}:${svc}-${SHA}"
 
+  # 1) 매니페스트 적용(디렉터리면 -f로 한번에)
   if [ -d "$man_dir" ]; then
     echo "==> apply ${man_dir}"
-    kubectl -n ${K8S_NS} apply -f "${man_dir}"
+    kubectl -n "${ns}" apply -f "${man_dir}"
+  else
+    echo "warn: manifest dir not found: ${man_dir}"
+    continue
   fi
 
-  # 코드 변경 여부 확인 후에만 이미지 교체
+  # 2) 워크로드 타입 판별 (StatefulSet 우선, 없으면 Deployment)
+  if kubectl -n "${ns}" get statefulset "${svc}" >/dev/null 2>&1; then
+    kind="statefulset"
+  elif kubectl -n "${ns}" get deploy "${svc}" >/dev/null 2>&1; then
+    kind="deploy"
+  else
+    echo "warn: no Deployment/StatefulSet named ${svc} (skip rolling)"
+    continue
+  fi
+
+  # 3) 코드 변경된 서비스만 이미지 롤링
   if echo " ${CHANGED_CODE} " | grep -q " ${svc} "; then
     echo "==> Rolling (code-changed) ${svc} -> ${img}"
-    if kubectl -n ${K8S_NS} get deploy/${svc} >/dev/null 2>&1; then
-      kubectl -n ${K8S_NS} set image deploy/${svc} ${svc}=${img}
-      kubectl -n ${K8S_NS} rollout status deploy/${svc} --timeout=180s
+    # 컨테이너 이름은 매니페스트의 containers[].name과 동일해야 함 (권장: svc와 동일)
+    if [ "${kind}" = "statefulset" ]; then
+      kubectl -n "${ns}" set image statefulset/${svc} ${svc}="${img}"
+      kubectl -n "${ns}" rollout status statefulset/${svc} --timeout=300s
     else
-      echo "warn: deploy/${svc} not found; skip rolling"
+      kubectl -n "${ns}" set image deploy/${svc} ${svc}="${img}"
+      kubectl -n "${ns}" rollout status deploy/${svc} --timeout=300s
     fi
   else
-    echo "==> K8s-only change: skip image update for ${svc}"
+    echo "==> K8s-only change for ${svc}: skip image update"
+    # 매니페스트만 바뀐 경우에도 새 템플릿이면 자동 롤아웃됨.
+    # 강제로 재시작하고 싶다면 아래를 주석 해제:
+    # if [ "${kind}" = "statefulset" ]; then
+    #   kubectl -n "${ns}" rollout restart statefulset/${svc}
+    #   kubectl -n "${ns}" rollout status  statefulset/${svc} --timeout=300s
+    # else
+    #   kubectl -n "${ns}" rollout restart deploy/${svc}
+    #   kubectl -n "${ns}" rollout status  deploy/${svc} --timeout=300s
+    # fi
   fi
 done
 '''
+            }
         }
-      }
     }
+
 
 
     stage('Deploy to k3s (ingress)') {
