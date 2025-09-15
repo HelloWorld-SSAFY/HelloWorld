@@ -1,0 +1,105 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: calendarserver
+  namespace: apps
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
+  selector:
+    matchLabels: { app: calendarserver }
+  template:
+    metadata:
+      labels: { app: calendarserver }
+    spec:
+      imagePullSecrets:
+      - name: dockerhub-cred
+      terminationGracePeriodSeconds: 30
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector: { matchLabels: { app: calendarserver } }
+      containers:
+      - name: calendarserver
+        image: docker.io/opensongce/msa:calendarserver-latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+
+        env:
+        # Spring Cloud Config/Eureka OFF (앱 yml과 중복이지만 확실히 고정)
+        - name: SPRING_CLOUD_CONFIG_ENABLED
+          value: "false"
+        - name: EUREKA_CLIENT_ENABLED
+          value: "false"
+
+        # Datasource (Service DNS 사용, 비번은 Secret에서)
+        - name: SPRING_DATASOURCE_URL
+          value: "jdbc:postgresql://calendar-postgres-svc.apps.svc.cluster.local:5432/calendar_db"
+        - name: SPRING_DATASOURCE_USERNAME
+          value: "postgres"
+        - name: SPRING_DATASOURCE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: APP_DB_PASSWORD
+
+        # (Actuator가 있을 때) 프로브 경로
+        readinessProbe:
+          httpGet: { path: /actuator/health, port: 8080 }
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          failureThreshold: 6
+        livenessProbe:
+          httpGet: { path: /actuator/health, port: 8080 }
+          initialDelaySeconds: 40
+          periodSeconds: 10
+          failureThreshold: 6
+
+        lifecycle:
+          preStop:
+            exec: { command: ["sh","-lc","sleep 5"] }
+
+        # 필요시 리소스 가드레일
+        # resources:
+        #   requests: { cpu: "100m", memory: "256Mi" }
+        #   limits:   { cpu: "500m", memory: "512Mi" }
+---
+# === PDB: 최소 2개 유지 (무중단/노드 드레인 대비) ===
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: calendarserver-pdb
+  namespace: apps
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: calendarserver
+---
+# === HPA: 자동 확장 (CPU 60% 기준) ===
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: calendarserver
+  namespace: apps
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: calendarserver
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 60
+

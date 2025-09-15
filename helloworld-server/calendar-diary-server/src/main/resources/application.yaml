@@ -10,9 +10,9 @@ spring:
       enabled: false
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/calendar_diary
+    url: jdbc:postgresql://calendar-postgres-svc.apps.svc.cluster.local:5432/calendar_db
     username: postgres
-    password: root
+    password: ${APP_DB_PASSWORD:strong_calendar_pw}
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
@@ -39,3 +39,21 @@ springdoc:
 eureka:
   client:
     enabled: false       # Eureka 클라이언트 완전 OFF local에서는
+
+
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  health:
+    probes:
+      enabled: true
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
