@@ -47,7 +47,7 @@ spec:
           valueFrom:
             secretKeyRef:
               name: postgres-secret
-              key: APP_DB_PASSWORD
+              key: POSTGRES_PASSWORD
 
         # Actuator가 있다면 /actuator/health 사용, 없으면 / 로 교체
         readinessProbe:

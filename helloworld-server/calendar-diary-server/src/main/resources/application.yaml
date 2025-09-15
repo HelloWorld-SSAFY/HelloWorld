@@ -12,7 +12,7 @@ spring:
   datasource:
     url: jdbc:postgresql://calendar-postgres-svc.apps.svc.cluster.local:5432/calendar_db
     username: postgres
-    password: ${APP_DB_PASSWORD:strong_calendar_pw}
+    password: ${POSTGRES_PASSWORD:strong_calendar_pw}
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
