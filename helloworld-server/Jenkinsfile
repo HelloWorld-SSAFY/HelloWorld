@@ -211,7 +211,7 @@ done
         steps {
             container('kubectl') {
                 sh '''
-set -euo pipefail
+bash -euo pipefail -c '
 SHA=$(git -C helloworld-server rev-parse --short HEAD)
 ns="${K8S_NS}"
 
@@ -241,7 +241,6 @@ for svc in ${DEPLOY_SERVICES}; do
   # 3) 코드 변경된 서비스만 이미지 롤링
   if echo " ${CHANGED_CODE} " | grep -q " ${svc} "; then
     echo "==> Rolling (code-changed) ${svc} -> ${img}"
-    # 컨테이너 이름은 매니페스트의 containers[].name과 동일해야 함 (권장: svc와 동일)
     if [ "${kind}" = "statefulset" ]; then
       kubectl -n "${ns}" set image statefulset/${svc} ${svc}="${img}"
       kubectl -n "${ns}" rollout status statefulset/${svc} --timeout=300s
@@ -251,21 +250,14 @@ for svc in ${DEPLOY_SERVICES}; do
     fi
   else
     echo "==> K8s-only change for ${svc}: skip image update"
-    # 매니페스트만 바뀐 경우에도 새 템플릿이면 자동 롤아웃됨.
-    # 강제로 재시작하고 싶다면 아래를 주석 해제:
-    # if [ "${kind}" = "statefulset" ]; then
-    #   kubectl -n "${ns}" rollout restart statefulset/${svc}
-    #   kubectl -n "${ns}" rollout status  statefulset/${svc} --timeout=300s
-    # else
-    #   kubectl -n "${ns}" rollout restart deploy/${svc}
-    #   kubectl -n "${ns}" rollout status  deploy/${svc} --timeout=300s
-    # fi
   fi
 done
+'
 '''
             }
         }
     }
+
 
 
 
