@@ -21,6 +21,8 @@ spring:
             - Path=/calendar/**
           filters:
             - StripPrefix=1
+            - AddRequestHeader=X-Forwarded-Prefix, /calendar
+            - AddRequestHeader=X-Forwarded-Proto, http   # https면 https
 
 
         - id: user
@@ -29,6 +31,8 @@ spring:
             - Path=/user/**
           filters:
             - StripPrefix=1
+            - AddRequestHeader=X-Forwarded-Prefix, /user
+            - AddRequestHeader=X-Forwarded-Proto, http   # https면 https
 
 
 
