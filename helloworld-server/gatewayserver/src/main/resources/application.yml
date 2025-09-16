@@ -12,6 +12,27 @@ spring:
 #      discovery:
 #        enabled: true
 #        service-id: configserver
+  cloud:
+    gateway:
+      routes:
+        - id: calendar
+          uri: http://calendar-diary-server-svc.apps.svc.cluster.local:8080
+          predicates:
+            - Path=/calendar/**
+          filters:
+            - StripPrefix=1
+
+
+
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui                # 공용 UI 경로 (원하면 /docs 로 바꿔도 됨)
+    display-request-duration: true
+    urls:
+      - name: calendar
+        url: /calendar/v3/api-docs
+
 
 #  cloud:
 #    config:
