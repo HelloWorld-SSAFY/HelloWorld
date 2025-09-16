@@ -3,6 +3,12 @@ package com.example.helloworld.healthserver.entity;
 
 import jakarta.persistence.Entity;
 import lombok.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Index;
+import jakarta.persistence.Table;
 
 import java.math.BigDecimal;
 import java.time.Instant;
