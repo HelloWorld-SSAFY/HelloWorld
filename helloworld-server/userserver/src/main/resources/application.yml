@@ -1,5 +1,6 @@
 server:
   port: 8080
+  forward-headers-strategy: framework
 spring:
   application:
     name: "user-server"
@@ -32,7 +33,7 @@ spring:
             client-id: ${GOOGLE_CLIENT_ID}
             client-secret: ${GOOGLE_CLIENT_SECRET}
             # 배포 도메인으로 교체 (게이트웨이 경유)
-            redirect-uri: http://j13d204.p.ssafy.io/user/login/oauth2/code/google
+            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
             scope: [ email, profile, openid ]
 
 app:
