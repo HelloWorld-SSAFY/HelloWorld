@@ -24,6 +24,7 @@ spring:
         show_sql: true
     database-platform: org.hibernate.dialect.PostgreSQLDialect
 
+
 # 로그 보기 편하게
 logging:
   level:
