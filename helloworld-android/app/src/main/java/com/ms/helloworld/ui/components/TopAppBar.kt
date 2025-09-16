@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import com.ms.helloworld.R
+import com.ms.helloworld.navigation.Screen
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -75,6 +76,17 @@ fun CustomTopAppBar(
                             .padding(end = 40.dp)
                     )
                 }
+                "알림" -> {
+                    Text(
+                        text = title,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        fontSize = 20.sp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(end = 16.dp)
+                    )
+                }
                 "calendar", "diary" -> {}
                 else -> {
                     Text(
@@ -91,7 +103,7 @@ fun CustomTopAppBar(
         },
         navigationIcon = {
             when(title) {
-                "profile", "calendar", "diary", "출산일기", "관찰일기", "임신 통계" -> {
+                "profile", "calendar", "diary", "출산일기", "관찰일기", "임신 통계", "알림" -> {
                     Icon(
                         painter = painterResource(R.drawable.ic_back),
                         contentDescription = "뒤로가기",
@@ -114,7 +126,9 @@ fun CustomTopAppBar(
                         tint = Color.Unspecified,
                         modifier = Modifier
                             .padding(end = 16.dp)
-                            .clickable{}
+                            .clickable{
+                                navController.navigate(Screen.NotificationScreen.route)
+                            }
                     )
                 }
                 "profile" -> {

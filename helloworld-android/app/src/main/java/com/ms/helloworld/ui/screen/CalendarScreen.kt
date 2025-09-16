@@ -7,13 +7,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,11 +22,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
-import com.ms.helloworld.dto.response.CalendarPost
-import com.ms.helloworld.navigation.Screen
-import com.ms.helloworld.ui.components.AddPostDialog
+import com.ms.helloworld.dto.response.CalendarEventResponse
+import com.ms.helloworld.ui.components.AddCalendarEventDialog
 import com.ms.helloworld.ui.components.CustomTopAppBar
+import com.ms.helloworld.viewmodel.CalendarViewModel
 import java.text.SimpleDateFormat
 import java.time.LocalDate
 import java.util.*
@@ -47,19 +46,44 @@ data class CalendarData(
 @Composable
 fun CalendarScreen(
     navController: NavHostController,
-    initialSelectedDate: String? = null
+    initialSelectedDate: String? = null,
+    viewModel: CalendarViewModel = hiltViewModel()
 ) {
     val backgroundColor = Color(0xFFFFFFFF)
-    var posts by remember { mutableStateOf(mapOf<String, List<CalendarPost>>()) }
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    
     var showAddDialog by remember { mutableStateOf(false) }
     var selectedDateKey by remember { mutableStateOf("") }
-    var editingPost by remember { mutableStateOf<CalendarPost?>(null) }
+    var editingEvent by remember { mutableStateOf<CalendarEventResponse?>(null) }
     var editTitle by remember { mutableStateOf("") }
     var editContent by remember { mutableStateOf("") }
+    var editStartTime by remember { mutableStateOf("09:00") }
+    var editEndTime by remember { mutableStateOf("10:00") }
+    var editIsRemind by remember { mutableStateOf(false) }
+    var editOrderNo by remember { mutableStateOf(1) }
     
     // 기본적으로 오늘 날짜의 일정을 표시
     val today = LocalDate.now().toString()
     var displayDateKey by remember { mutableStateOf(initialSelectedDate ?: today) }
+    
+    // 초기 날짜 설정
+    LaunchedEffect(initialSelectedDate) {
+        initialSelectedDate?.let {
+            viewModel.selectDate(it)
+            displayDateKey = it
+        }
+    }
+    
+    // 에러 메시지 표시
+    state.errorMessage?.let { errorMessage ->
+        LaunchedEffect(errorMessage) {
+            // 에러 발생 시 스낵바나 토스트 표시 가능
+            // 여기서는 콘솔에 로그만 출력
+            println("Calendar Error: $errorMessage")
+            // 에러 표시 후 클리어
+            viewModel.clearError()
+        }
+    }
 
     var displayCalendar by remember {
         mutableStateOf(
@@ -182,10 +206,11 @@ fun CalendarScreen(
                         CalendarGrid(
                             displayCalendar = displayCalendar,
                             selectedDate = selectedDate,
-                            postsMap = posts,
+                            eventsMap = state.events,
                             onDateClick = { dateKey, dateString ->
                                 selectedDate = dateString
                                 displayDateKey = dateKey
+                                viewModel.selectDate(dateKey)
                             }
                         )
                     }
@@ -216,9 +241,9 @@ fun CalendarScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // 게시글 목록
-                    val currentPosts = posts[displayDateKey] ?: emptyList()
-                    if (currentPosts.isEmpty()) {
+                    // 일정 목록
+                    val currentEvents = state.events[displayDateKey] ?: emptyList()
+                    if (currentEvents.isEmpty() && !state.isLoading) {
                         Box(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
@@ -240,32 +265,43 @@ fun CalendarScreen(
                                 )
                             }
                         }
+                    } else if (state.isLoading) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator()
+                        }
                     } else {
                         LazyColumn {
-                            items(currentPosts.size) { index ->
-                                val post = currentPosts[index]
-                                
-                                PostCard(
-                                    post = post,
+                            items(currentEvents.size, key = { index -> currentEvents[index].eventId }) { index ->
+                                val event = currentEvents[index]
+
+                                EventCard(
+                                    event = event,
                                     onEdit = {
-                                        editingPost = post
-                                        editTitle = post.title
-                                        editContent = post.content
+                                        editingEvent = event
+                                        editTitle = event.title
+                                        editContent = event.memo ?: ""
+                                        // ISO 8601에서 시간 추출
+                                        editStartTime = try {
+                                            event.startAt.substring(11, 16)
+                                        } catch (e: Exception) { "09:00" }
+                                        editEndTime = try {
+                                            event.endAt?.substring(11, 16) ?: "10:00"
+                                        } catch (e: Exception) { "10:00" }
+                                        editIsRemind = event.isRemind
+                                        editOrderNo = event.orderNo ?: 1
                                         selectedDateKey = displayDateKey
                                         showAddDialog = true
                                     },
                                     onDelete = {
-                                        val updatedPosts = currentPosts.filter { it.id != post.id }
-                                        posts = if (updatedPosts.isEmpty()) {
-                                            posts - displayDateKey
-                                        } else {
-                                            posts + (displayDateKey to updatedPosts)
-                                        }
+                                        viewModel.deleteEvent(event.eventId)
                                     }
                                 )
-                                
+
                                 // 마지막 아이템이 아니면 divider 추가
-                                if (index < currentPosts.size - 1) {
+                                if (index < currentEvents.size - 1) {
                                     HorizontalDivider(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -284,9 +320,13 @@ fun CalendarScreen(
         // 플로팅 버튼 (항상 위에 표시)
         FloatingActionButton(
             onClick = {
-                editingPost = null
+                editingEvent = null
                 editTitle = ""
                 editContent = ""
+                editStartTime = "09:00"
+                editEndTime = "10:00"
+                editIsRemind = false
+                editOrderNo = 1
                 selectedDateKey = displayDateKey
                 showAddDialog = true
             },
@@ -314,39 +354,54 @@ fun CalendarScreen(
             }
         }
 
-        AddPostDialog(
+        AddCalendarEventDialog(
             selectedDate = dateKeyToUse,
             initialTitle = editTitle,
             initialContent = editContent,
+            initialStartTime = editStartTime,
+            initialEndTime = editEndTime,
+            initialIsRemind = editIsRemind,
+            initialOrderNo = editOrderNo,
             onDismiss = { 
                 showAddDialog = false
-                editingPost = null
+                editingEvent = null
             },
-            onSave = { title, content ->
-                if (editingPost != null) {
-                    // 수정 모드
-                    val currentPosts = posts[dateKeyToUse] ?: emptyList()
-                    val updatedPosts = currentPosts.map { post ->
-                        if (post.id == editingPost!!.id) {
-                            post.copy(title = title, content = content)
-                        } else {
-                            post
-                        }
-                    }
-                    posts = posts + (dateKeyToUse to updatedPosts)
-                } else {
-                    // 새로 추가 모드
-                    val newPost = CalendarPost(
-                        id = UUID.randomUUID().toString(),
-                        date = dateKeyToUse,
+            onSave = { title, content, startTime, endTime, isRemind, orderNo ->
+                if (editingEvent != null) {
+                    // 수정 모드 - ISO 8601 형식으로 변환
+                    val startAt = "${dateKeyToUse}T${startTime}:00Z"
+                    val endAt = "${dateKeyToUse}T${endTime}:00Z"
+
+                    viewModel.updateEvent(
+                        eventId = editingEvent!!.eventId,
                         title = title,
-                        content = content
+                        content = content,
+                        startAt = startAt,
+                        endAt = endAt,
+                        isRemind = isRemind,
+                        orderNo = orderNo
                     )
-                    val currentPosts = posts[dateKeyToUse] ?: emptyList()
-                    posts = posts + (dateKeyToUse to (currentPosts + newPost))
+                } else {
+                    // 새로 추가 모드 - ISO 8601 형식으로 변환
+                    val startAt = "${dateKeyToUse}T${startTime}:00Z"
+                    val endAt = "${dateKeyToUse}T${endTime}:00Z"
+
+                    // 해당 날짜의 기존 일정 중 최대 orderNo 찾아서 +1
+                    val existingEvents = state.events[dateKeyToUse] ?: emptyList()
+                    val maxOrderNo = existingEvents.maxOfOrNull { it.orderNo ?: 0 } ?: 0
+                    val newOrderNo = maxOrderNo + 1
+
+                    viewModel.createEvent(
+                        title = title,
+                        content = content,
+                        startAt = startAt,
+                        endAt = endAt,
+                        isRemind = isRemind,
+                        orderNo = newOrderNo
+                    )
                 }
                 showAddDialog = false
-                editingPost = null
+                editingEvent = null
                 selectedDateKey = dateKeyToUse
             }
         )
@@ -357,7 +412,7 @@ fun CalendarScreen(
 fun CalendarGrid(
     displayCalendar: Calendar,
     selectedDate: String,
-    postsMap: Map<String, List<CalendarPost>>,
+    eventsMap: Map<String, List<CalendarEventResponse>>,
     onDateClick: (String, String) -> Unit
 ) {
     // 달력 데이터를 remember로 캐시하여 불필요한 재계산 방지
@@ -437,7 +492,7 @@ fun CalendarGrid(
                             val isToday = dateData.year == today.first &&
                                          dateData.month == today.second &&
                                          dateData.day == today.third
-                            val hasPost = postsMap[dateData.dateKey]?.isNotEmpty() == true
+                            val hasEvent = eventsMap[dateData.dateKey]?.isNotEmpty() == true
 
                             Box(
                                 modifier = Modifier
@@ -465,7 +520,7 @@ fun CalendarGrid(
                                         color = if (isSelected) Color.White else Color.Black,
                                         fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal
                                     )
-                                    if (hasPost) {
+                                    if (hasEvent) {
                                         Box(
                                             modifier = Modifier
                                                 .size(4.dp)
@@ -486,8 +541,8 @@ fun CalendarGrid(
 }
 
 @Composable
-fun PostCard(
-    post: CalendarPost,
+fun EventCard(
+    event: CalendarEventResponse,
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -503,23 +558,31 @@ fun PostCard(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = post.title,
+                    text = event.title,
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp,
                     color = Color.Black
                 )
-                if (post.content.isNotEmpty()) {
+                if (!event.memo.isNullOrEmpty()) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = post.content,
+                        text = event.memo,
                         fontSize = 14.sp,
                         color = Color.Gray,
                         lineHeight = 20.sp
                     )
                 }
                 Spacer(modifier = Modifier.height(4.dp))
+                // ISO 8601 날짜를 시간으로 변환하여 표시
+                val timeFormat = try {
+                    val startTime = event.startAt.substring(11, 16) // "HH:mm"
+                    val endTime = event.endAt?.substring(11, 16)
+                    if (endTime != null) "$startTime - $endTime" else startTime
+                } catch (e: Exception) {
+                    "시간 정보 없음"
+                }
                 Text(
-                    text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(System.currentTimeMillis())),
+                    text = timeFormat,
                     fontSize = 12.sp,
                     color = Color.Gray
                 )

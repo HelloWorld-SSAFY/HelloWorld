@@ -37,4 +37,5 @@ sealed class Screen(val route: String) {
             return "diary_board/$diaryType/$day"
         }
     }
+    object NotificationScreen : Screen("notification")
 }
