@@ -3,6 +3,7 @@ package com.example.helloworld.userserver.member.controller;
 import com.example.helloworld.userserver.auth.jwt.JwtProvider;
 import com.example.helloworld.userserver.member.dto.request.CoupleJoinRequest;
 import com.example.helloworld.userserver.member.dto.response.CoupleJoinResponse;
+import com.example.helloworld.userserver.member.dto.response.CoupleUnlinkResponse;
 import com.example.helloworld.userserver.member.dto.response.InviteCodeIssueResponse;
 import com.example.helloworld.userserver.member.service.CoupleInviteService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -52,6 +53,18 @@ public class CoupleInviteController {
     ) {
         Long memberId = jwtProvider.parseAccessSubject(extractBearer(authz));
         return ResponseEntity.ok(inviteService.join(memberId, req));
+    }
+
+    @DeleteMapping("/divorce")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(summary = "커플 연동 해제", description = "여성(userA) 또는 남성(userB) 당사자만 가능. 해제 후 userB=null")
+    @ApiResponse(responseCode = "200", description = "해제 성공",
+            content = @Content(schema = @Schema(implementation = CoupleUnlinkResponse.class)))
+    public ResponseEntity<CoupleUnlinkResponse> unlink(
+            @RequestHeader("Authorization") String authz
+    ) {
+        Long memberId = jwtProvider.parseAccessSubject(extractBearer(authz));
+        return ResponseEntity.ok(inviteService.unlink(memberId));
     }
 
     private static String extractBearer(String authz) {
