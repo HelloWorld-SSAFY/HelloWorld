@@ -4,14 +4,6 @@ server:
 spring:
   application:
     name: gatewayserver
-  # 설정 파일을 외부의 Config Server에서 불러오겠다.
-#  config:
-#    import: "configserver:" #Spring Cloud Config 서버를 사용하겠다.
-#  cloud:
-#    config:
-#      discovery:
-#        enabled: true
-#        service-id: configserver
   cloud:
     gateway:
       routes:
@@ -34,7 +26,27 @@ spring:
             - AddRequestHeader=X-Forwarded-Prefix, /user
             - AddRequestHeader=X-Forwarded-Proto, http   # https면 https
 
+        - id: health
+          uri: http://healthserver-svc.apps.svc.cluster.local:8080
+          predicates:
+            - Path=/health/**
+          filters:
+            - StripPrefix=1
+            - AddRequestHeader=X-Forwarded-Prefix, /health
+            - AddRequestHeader=X-Forwarded-Proto, http   # https면 https
 
+    config:
+      enabled: true
+      uri: ${SPRING_CONFIG_IMPORT}
+
+  config:
+    import: "configserver:"
+
+eureka:
+  client:
+    enabled: true  # Eureka 클라이언트 활성화
+    service-url:
+      defaultZone: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE}
 
 
 springdoc:
@@ -47,6 +59,9 @@ springdoc:
 
       - name: user
         url: /user/v3/api-docs
+
+      - name: health
+        url: /health/v3/api-docs
 
 
 

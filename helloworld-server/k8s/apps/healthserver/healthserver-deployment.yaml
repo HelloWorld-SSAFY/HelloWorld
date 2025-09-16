@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: userserver
+  name: healthserver
   namespace: apps
 spec:
   replicas: 3
@@ -9,10 +9,10 @@ spec:
     type: RollingUpdate
     rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
   selector:
-    matchLabels: { app: userserver }
+    matchLabels: { app: healthserver }
   template:
     metadata:
-      labels: { app: userserver }
+      labels: { app: healthserver }
     spec:
       imagePullSecrets:
       - name: dockerhub-cred
@@ -23,19 +23,18 @@ spec:
           - weight: 100
             podAffinityTerm:
               topologyKey: kubernetes.io/hostname
-              labelSelector: { matchLabels: { app: userserver } }
+              labelSelector: { matchLabels: { app: healthserver } }
       containers:
-      - name: userserver
-        image: docker.io/opensongce/msa:userserver-latest
+      - name: healthserver
+        image: docker.io/opensongce/msa:healthserver-latest
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080
 
         env:
-
-        # === Postgres (user-postgres) ===
+        # Datasource (Service DNS, Secret에서 비번 주입)
         - name: SPRING_DATASOURCE_URL
-          value: "jdbc:postgresql://user-postgres-svc.apps.svc.cluster.local:5432/user_db"
+          value: "jdbc:postgresql://health-postgres-svc.apps.svc.cluster.local:5432/calendar_db"
         - name: SPRING_DATASOURCE_USERNAME
           value: "postgres"
         - name: SPRING_DATASOURCE_PASSWORD
@@ -44,43 +43,7 @@ spec:
               name: postgres-secret
               key: POSTGRES_PASSWORD
 
-        # === Redis (Bitnami 기본 값 기준) ===
-        - name: SPRING_DATA_REDIS_HOST
-          value: "redis-svc.data.svc.cluster.local"
-        - name: SPRING_DATA_REDIS_PORT
-          value: "6379"
-        - name: SPRING_DATA_REDIS_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: redis               # bitnami/redis 릴리스 기본 시크릿 이름
-              key: redis-password
-
-       # === JWT (앱 설정에 맞춤) ===
-        - name: ACCESS_SECRET
-          valueFrom:
-            secretKeyRef: { name: userserver-jwt-secret, key: ACCESS_SECRET }
-        - name: ACCESS_EXPIRE
-          valueFrom:
-            secretKeyRef: { name: userserver-jwt-secret, key: ACCESS_EXPIRE }
-        - name: REFRESH_SECRET
-          valueFrom:
-            secretKeyRef: { name: userserver-jwt-secret, key: REFRESH_SECRET }
-        - name: REFRESH_EXPIRE
-          valueFrom:
-            secretKeyRef: { name: userserver-jwt-secret, key: REFRESH_EXPIRE }
-
-
-        # === OAuth2 Google ===
-        - name: GOOGLE_CLIENT_ID
-          valueFrom:
-            secretKeyRef: { name: google-oauth-secret, key: CLIENT_ID }
-        - name: GOOGLE_CLIENT_SECRET
-          valueFrom:
-            secretKeyRef: { name: google-oauth-secret, key: CLIENT_SECRET }
-
-
-
-        # === Probes ===
+        # Actuator가 있다면 /actuator/health 사용, 없으면 / 로 교체
         readinessProbe:
           httpGet: { path: /actuator/health, port: 8080 }
           initialDelaySeconds: 15
@@ -95,30 +58,28 @@ spec:
         lifecycle:
           preStop:
             exec: { command: ["sh","-lc","sleep 5"] }
-
 ---
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: userserver-pdb
+  name: healthserver-pdb
   namespace: apps
 spec:
   minAvailable: 2
   selector:
     matchLabels:
-      app: userserver
-
+      app: healthserver
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: userserver
+  name: healthserver
   namespace: apps
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: userserver
+    name: healthserver
   minReplicas: 3
   maxReplicas: 10
   metrics:
