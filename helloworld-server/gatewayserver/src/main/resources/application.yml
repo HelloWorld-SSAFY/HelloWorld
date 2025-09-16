@@ -22,13 +22,16 @@ spring:
           filters:
             - StripPrefix=1
 
-  springdoc:
-    swagger-ui:
-      path: /swagger-ui                # 공용 UI 경로 (원하면 /docs 로 바꿔도 됨)
-      display-request-duration: true
-      urls:
-        - name: calendar
-          url: /calendar/v3/api-docs
+
+
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui                # 공용 UI 경로 (원하면 /docs 로 바꿔도 됨)
+    display-request-duration: true
+    urls:
+      - name: calendar
+        url: /calendar/v3/api-docs
 
 
 #  cloud:
