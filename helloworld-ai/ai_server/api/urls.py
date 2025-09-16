@@ -1,9 +1,12 @@
-# api/urls.py
 from django.urls import path
-from .views import healthz, telemetry, feedback
+from .views import TelemetryView, FeedbackView
+from django.http import JsonResponse
+
+def healthz(request):
+    return JsonResponse({"status": "ok", "version": "v1"})
 
 urlpatterns = [
-    path("healthz", healthz, name="healthz"),
-    path("telemetry", telemetry, name="telemetry"),
-    path("feedback", feedback, name="feedback"),
+    path("telemetry", TelemetryView.as_view()),
+    path("feedback",  FeedbackView.as_view()),
+    path("healthz",   healthz),
 ]

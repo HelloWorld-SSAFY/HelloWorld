@@ -1,15 +1,16 @@
 # api/views.py
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 
 from django.http import JsonResponse, HttpRequest
+from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
+from django.views import View
 
 from services.anomaly import AnomalyDetector, AnomalyConfig, KST
-from services.orm_stats_provider import OrmStatsProvider  # DB 기준선 Provider
+from services.orm_stats_provider import OrmStatsProvider
 
-# 저장용 모델
 from api.models import (
     Content,
     RecommendationSession,
@@ -19,162 +20,198 @@ from api.models import (
     Outcome as OutcomeModel,
 )
 
-# ── 전역 싱글턴: DB 기준선 + 연속/지속 상태 유지 ─────────────────────────────
+
+# ── 싱글턴 ────────────────────────────────────────────────────────────────────
 _config = AnomalyConfig()
 _provider = OrmStatsProvider()
 _detector = AnomalyDetector(_provider, _config)
 
 
+# ── 유틸 ─────────────────────────────────────────────────────────────────────
 def _json(request: HttpRequest):
     try:
         return json.loads(request.body.decode("utf-8"))
     except Exception:
         return {}
 
+def _iso_to_utc(ts_str: str):
+    # "2025-09-16T10:00:00+09:00" / "...Z" 모두 지원
+    return datetime.fromisoformat(ts_str.replace("Z", "+00:00")).astimezone(timezone.utc)
 
+def _infer_trigger_type(reasons):
+    t = " ".join(reasons or [])
+    if "HR" in t:
+        return "hr"
+    if "Z>=" in t or "z>=" in t:
+        return "z"
+    return "unknown"
+
+def _session_model_fields():
+    # RecommendationSession 실제 필드 집합
+    return {f.name for f in RecommendationSession._meta.get_fields()
+            if getattr(f, "concrete", False) and not getattr(f, "auto_created", False)}
+
+def _create_session_dynamic(*, mode: str, user_ref: str, trigger: str,
+                            reasons, as_of_date: date, bucket4h: int):
+    """
+    모델 스키마에 맞춰 안전하게 세션 생성:
+      - user_ref 없고 user_id만 있으면 user_id 사용
+      - reasons/as_of/bucket_4h 없으면 context 칼럼(있을 때)로 저장
+      - reasons가 TextField면 문자열로 대체
+    """
+    fields = _session_model_fields()
+    kwargs = {"mode": mode, "trigger": trigger}
+
+    # user 필드 매핑
+    if "user_ref" in fields:
+        kwargs["user_ref"] = user_ref
+    elif "user_id" in fields:
+        kwargs["user_id"] = user_ref
+
+    # 가능한 개별 필드는 그대로
+    have_reasons = "reasons" in fields
+    have_as_of = "as_of" in fields
+    have_bucket = "bucket_4h" in fields
+    have_context = "context" in fields
+
+    # 개별 필드가 있으면 넣고, 없으면 context로 모아서
+    context_payload = {
+        "reasons": reasons,
+        "as_of": as_of_date.isoformat(),
+        "bucket_4h": bucket4h,
+    }
+
+    if have_as_of:
+        kwargs["as_of"] = as_of_date
+    if have_bucket:
+        kwargs["bucket_4h"] = bucket4h
+
+    if have_reasons:
+        # JSONField일 수도, TextField일 수도 있으니 시도 후 실패 시 문자열로
+        try:
+            kwargs["reasons"] = reasons
+            return RecommendationSession.objects.create(**kwargs)
+        except Exception:
+            kwargs["reasons"] = " | ".join(map(str, reasons))
+            return RecommendationSession.objects.create(**kwargs)
+    else:
+        if have_context:
+            # context가 JSONField/TextField일 수 있음
+            try:
+                kwargs["context"] = context_payload
+            except Exception:
+                kwargs["context"] = json.dumps(context_payload, ensure_ascii=False)
+        # context가 없으면 그냥 필드 없는 값은 버리고 저장
+        return RecommendationSession.objects.create(**kwargs)
+
+
+# ── /v1/healthz ──────────────────────────────────────────────────────────────
 def healthz(request: HttpRequest):
     return JsonResponse({"status": "ok", "model": "rec_v0.1"})
 
 
+# ── /v1/telemetry ────────────────────────────────────────────────────────────
 @csrf_exempt
 def telemetry(request: HttpRequest):
     """
-    POST /v1/telemetry
-    - 이상/응급 판단
-    - restrict/emergency 시 DB 로깅:
-        * emergency: recommendation_session 1행만 (session_id 응답에 미포함)
-        * restrict: recommendation_session + exposure_candidate + item_rec 생성
-                    (session_id 응답에 포함)
+    명세서 준수:
+      REQUEST  { "user_ref": "...", "ts": "ISO8601", "metrics": {"hr":..., "stress":...} }
+      RESPONSE normal/restrict/emergency (ok/anomaly/risk_level/mode/…)
     """
     if request.method != "POST":
         return JsonResponse({"error": "method_not_allowed"}, status=405)
 
-    body = _json(request)
-    user_ref = body.get("user_ref") or "u1"
-    ts_str = body.get("ts")
-    metrics = body.get("metrics") or {}
-
-    # ts 파싱 (UTC ISO8601 기대)
     try:
-        ts_utc = datetime.fromisoformat(ts_str.replace("Z", "+00:00")) if ts_str else datetime.now(timezone.utc)
-    except Exception:
-        return JsonResponse({"ok": False, "error": "invalid_ts"}, status=400)
+        body = _json(request)
 
-    # 판단
-    res = _detector.evaluate(user_ref=user_ref, ts_utc=ts_utc, metrics=metrics)
+        # 입력 스키마 호환
+        user_ref = body.get("user_ref") or body.get("user_id") or "u1"
+        if body.get("ts"):
+            ts_utc = _iso_to_utc(body["ts"])
+        elif body.get("timestamp"):
+            ts_utc = _iso_to_utc(body["timestamp"])
+        else:
+            ts_utc = datetime.now(timezone.utc)
 
-    # 공통 컨텍스트(로그용)
-    kst = ts_utc.astimezone(KST)
-    context = {
-        "ts_kst": kst.isoformat(),
-        "as_of": str(kst.date()),
-        "bucket_4h": kst.hour // 4,   # 0..5
-        "reasons": list(res.reasons),
-        "cfg": {
-            "z_anomaly_threshold": _config.z_anomaly_threshold,
-            "consecutive_z_required": _config.consecutive_z_required,
-            "restrict_cooldown_sec": _config.restrict_cooldown_sec,
-        },
-        "metrics_keys": list(metrics.keys()),
-    }
+        metrics = body.get("metrics") or {}
+        if "hr" in body and body["hr"] is not None:
+            metrics["hr"] = float(body["hr"])
+        if "stress" in body and body["stress"] is not None:
+            metrics["stress"] = float(body["stress"])
 
-    # ── EMERGENCY: 세션만 로깅, session_id는 응답에 미포함 ─────────────
-    if res.mode == "emergency":
-        RecommendationSession.objects.create(
-            user_ref=user_ref,
-            mode="emergency",
-            trigger="anomaly",
-            context=context,
-        )
-        return JsonResponse({
-            "ok": True,
-            "anomaly": True,
-            "risk_level": "critical",
-            "mode": "emergency",
-            "reasons": list(res.reasons),
-            "action": {"type": "EMERGENCY_CONTACT", "cooldown_min": 60},
-            "safe_templates": [
-                {"category": "BREATHING", "title": "안전 호흡 3분"},
-                {"category": "BREATHING", "title": "안전 호흡 5분"},
-            ],
-        })
+        # 판단
+        result = _detector.evaluate(user_ref=user_ref, ts_utc=ts_utc, metrics=metrics)
 
-    # ── RESTRICT: 세션 + 후보/아이템 로깅, session_id 응답 포함 ──────────
-    if res.anomaly:
-        # 세션 생성
-        session = RecommendationSession.objects.create(
-            user_ref=user_ref,
-            mode="restrict",
-            trigger="anomaly",
-            context=context,
-        )
+        # 컨텍스트
+        kst = ts_utc.astimezone(KST)
+        as_of_date = kst.date()
+        bucket4h = kst.hour // 4
+        reasons = list(result.reasons)
+        trigger_type = _infer_trigger_type(reasons)
 
-        # 간단한 더미 추천(카테고리/아이템) — 콘텐츠 테이블과 매핑 가능하도록 'sp:trk:*' 사용
-        #  * Content가 없다면 생성(get_or_create)
-        #  * ExposureCandidate 로깅(선택), ItemRec 저장
-        # BREATHING (rank=1)
-        cont1, _ = Content.objects.get_or_create(
-            provider="sp",
-            external_id="trk:123",
-            defaults={"category": "BREATHING", "title": "4-7-8 호흡", "url": "https://example.com/breath1", "is_active": True},
-        )
-        # MEDITATION (rank=2)
-        cont2, _ = Content.objects.get_or_create(
-            provider="sp",
-            external_id="trk:med1",
-            defaults={"category": "MEDITATION", "title": "5분 명상", "url": "https://example.com/med1", "is_active": True},
-        )
-
-        # 후보(노출 풀) 로깅 — 간단히 선택된 2개만 chosen_flag=True로 기록
-        ExposureCandidate.objects.create(session=session, content=cont1, pre_score=1.0, chosen_flag=True, x_item_vec={"demo": 1})
-        ExposureCandidate.objects.create(session=session, content=cont2, pre_score=0.8, chosen_flag=True, x_item_vec={"demo": 1})
-
-        # 최종 추천 N개
-        ItemRec.objects.create(session=session, content=cont1, rank=1, score=1.0, reason="hr high" if "hr" in metrics else "stress high")
-        ItemRec.objects.create(session=session, content=cont2, rank=2, score=0.8, reason="secondary")
-
-        return JsonResponse({
-            "ok": True,
-            "anomaly": True,
-            "risk_level": "high",
-            "mode": "restrict",
-            "reasons": list(res.reasons),
-            "recommendation": {
-                "session_id": str(session.id),   # ← 실제 세션 UUID를 반환
-                "categories": [
-                    {"category": "BREATHING", "rank": 1, "reason": "stress high" if "stress" in metrics else "hr high"},
-                    {"category": "MEDITATION", "rank": 2}
+        # emergency
+        if result.mode == "emergency":
+            _create_session_dynamic(
+                mode="emergency", user_ref=user_ref, trigger=trigger_type,
+                reasons=reasons, as_of_date=as_of_date, bucket4h=bucket4h
+            )
+            return JsonResponse({
+                "ok": True,
+                "anomaly": True,
+                "risk_level": "critical",
+                "mode": "emergency",
+                "reasons": reasons,
+                "action": {"type": "EMERGENCY_CONTACT", "cooldown_min": 60},
+                "safe_templates": [
+                    {"category": "BREATHING", "title": "안전 호흡 3분"},
+                    {"category": "BREATHING", "title": "안전 호흡 5분"},
                 ],
-                "items": [
-                    {"category": "BREATHING", "title": "4-7-8 호흡", "url": "https://example.com/breath1"},
-                    {"category": "MEDITATION", "title": "5분 명상", "url": "https://example.com/med1"}
-                ]
-            }
-        })
+            }, status=200)
 
-    # ── 이상 아님: 필요 시 세션 로깅은 생략(운영 정책에 따라 on/off) ──────────
-    return JsonResponse({
-        "ok": True,
-        "anomaly": False,
-        "risk_level": "low",
-        "mode": "normal",
-    })
+        # restrict
+        if result.mode == "restrict":
+            session = _create_session_dynamic(
+                mode="restrict", user_ref=user_ref, trigger=trigger_type,
+                reasons=reasons, as_of_date=as_of_date, bucket4h=bucket4h
+            )
+            return JsonResponse({
+                "ok": True,
+                "anomaly": True,
+                "risk_level": "high",
+                "mode": "restrict",
+                "reasons": reasons,
+                "recommendation": {
+                    "session_id": str(session.id),
+                    "categories": [],
+                    "items": []
+                },
+            }, status=200)
+
+        # normal
+        return JsonResponse({
+            "ok": True,
+            "anomaly": False,
+            "risk_level": "low",
+            "mode": "normal",
+        }, status=200)
+
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("telemetry error")
+        return JsonResponse({"detail": "internal error", "error": type(e).__name__, "message": str(e)}, status=500)
 
 
+# ── /v1/feedback ─────────────────────────────────────────────────────────────
 @csrf_exempt
 def feedback(request: HttpRequest):
     """
-    POST /v1/feedback
-    - Feedback 1행 저장
-    - EFFECT면 Outcome 1~2행(hr_drop / stress_drop) 저장
-    - session/content/item_rec 매핑은 있으면 연결, 없으면 None 허용
+    명세서 준수: { "ok": true } 만 반환
     """
     if request.method != "POST":
         return JsonResponse({"error": "method_not_allowed"}, status=405)
 
     body = _json(request)
-    required = {"user_ref", "session_id", "type"}
-    if not required.issubset(body.keys()):
+    if not {"user_ref", "type"}.issubset(body):
         return JsonResponse({"ok": False, "error": "missing_fields"}, status=400)
 
     user_ref = body["user_ref"]
@@ -183,26 +220,31 @@ def feedback(request: HttpRequest):
     content_obj = None
     item_rec_obj = None
 
-    # 세션 매핑(UUID면 연결)
-    try:
-        sid = uuid.UUID(str(body.get("session_id")))
-        session_obj = RecommendationSession.objects.filter(id=sid).first()
-    except Exception:
-        session_obj = None
+    # 세션 매핑
+    sid = body.get("session_id")
+    if sid:
+        try:
+            session_obj = RecommendationSession.objects.filter(id=uuid.UUID(str(sid))).first()
+        except Exception:
+            session_obj = None
 
-    # content 매핑(external_id 파싱)
-    external_id_raw = body.get("external_id")
-    if external_id_raw and isinstance(external_id_raw, str):
-        provider, ext = (external_id_raw.split(":", 1) + [None])[:2] if ":" in external_id_raw else (None, external_id_raw)
-        if provider and ext:
-            content_obj = Content.objects.filter(provider=provider, external_id=ext).first()
+    # 콘텐츠 매핑(옵션)
+    cid = body.get("content_id")
+    if cid:
+        try:
+            content_obj = Content.objects.filter(id=int(cid)).first()
+        except Exception:
+            content_obj = None
 
-    # item_rec 매핑(세션+컨텐츠가 있어야 1개 추정 가능)
+    # 추천 아이템 매핑(옵션)
     if session_obj and content_obj:
-        item_rec_obj = ItemRec.objects.filter(session=session_obj, content=content_obj).order_by("rank").first()
+        item_rec_obj = ItemRec.objects.filter(session=session_obj, content=content_obj).order_by("score").last()
+        if not item_rec_obj:
+            item_rec_obj = ItemRec.objects.filter(session=session_obj).order_by("score").last()
 
-    fb = FeedbackModel.objects.create(
-        user_ref=user_ref,
+    # feedback 저장
+    FeedbackModel.objects.create(
+        user_ref=user_ref if hasattr(FeedbackModel, "user_ref") else None,
         session=session_obj,
         item_rec=item_rec_obj,
         content=content_obj,
@@ -212,11 +254,11 @@ def feedback(request: HttpRequest):
         watched_pct=body.get("watched_pct"),
     )
 
+    # EFFECT → outcome 저장
     if ftype == "EFFECT":
         hr_b, hr_a = body.get("hr_before"), body.get("hr_after_30m")
         st_b, st_a = body.get("stress_before"), body.get("stress_after_30m")
         eff = body.get("effect")
-
         if hr_b is not None and hr_a is not None:
             OutcomeModel.objects.create(
                 session=session_obj, item_rec=item_rec_obj, content=content_obj,
@@ -228,4 +270,20 @@ def feedback(request: HttpRequest):
                 outcome_type="stress_drop", before=st_b, after=st_a, delta=(st_a - st_b), effect=eff
             )
 
-    return JsonResponse({"ok": True})
+    return JsonResponse({"ok": True}, status=200)
+
+
+# ── CBV 래퍼 ─────────────────────────────────────────────────────────────────
+@method_decorator(csrf_exempt, name="dispatch")
+class TelemetryView(View):
+    def post(self, request, *args, **kwargs):
+        return telemetry(request)
+    def get(self, request, *args, **kwargs):
+        return JsonResponse({"error": "method_not_allowed"}, status=405)
+
+@method_decorator(csrf_exempt, name="dispatch")
+class FeedbackView(View):
+    def post(self, request, *args, **kwargs):
+        return feedback(request)
+    def get(self, request, *args, **kwargs):
+        return JsonResponse({"error": "method_not_allowed"}, status=405)
