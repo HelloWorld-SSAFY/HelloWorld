@@ -1,5 +1,6 @@
 package com.example.helloworld.userserver.member.service;
 
+import com.example.helloworld.userserver.member.dto.response.CoupleUnlinkResponse;
 import com.example.helloworld.userserver.member.util.RandomCode;
 import com.example.helloworld.userserver.member.dto.request.CoupleJoinRequest;
 import com.example.helloworld.userserver.member.dto.response.CoupleJoinResponse;
@@ -114,6 +115,42 @@ public class CoupleInviteService {
         ic.markUsed(male);
 
         return new CoupleJoinResponse(couple.getId());
+    }
+
+
+    @Transactional
+    public CoupleUnlinkResponse unlink(Long requesterId) {
+        // 1) 요청자 로드(영속)
+        Member me = memberRepository.findById(requesterId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Member not found"));
+
+        // 2) 내가 속한 커플 찾기 (A 우선, 없으면 B)
+        Couple couple = coupleRepository.findByUserAId(me.getId())
+                .orElseGet(() -> coupleRepository.findByUserBId(me.getId())
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "커플을 찾을 수 없음")));
+
+        boolean isA = couple.getUserA() != null && couple.getUserA().getId().equals(me.getId());
+        boolean isB = couple.getUserB() != null && couple.getUserB().getId().equals(me.getId());
+
+        // 3) 권한: 커플 당사자만 가능
+        if (!isA && !isB) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "커플 당사자만 해제 가능");
+        }
+
+        // 4) 이미 해제되어 있으면 idempotent 처리
+        if (couple.getUserB() == null) {
+            // 여성(userA) 입장에선 이미 해제된 상태. 남성(userB)이면 여기 못 옴.
+            return new CoupleUnlinkResponse(couple.getId(), true);
+        }
+
+        // 5) 해제: userB 비우기
+        couple.setUserB(null);
+
+        // 6) 안전을 위해 미사용 초대코드 전부 무효화(선택적이지만 권장)
+        inviteRepo.revokeAllIssuedByCouple(couple.getId());
+
+        // JPA가 커밋 시점에 flush
+        return new CoupleUnlinkResponse(couple.getId(), true);
     }
 
     private String uniqueCode(int len) {
