@@ -3,6 +3,7 @@ package com.ms.helloworld.di
 import com.ms.helloworld.network.AuthInterceptor
 import com.ms.helloworld.network.TokenAuthenticator
 import com.ms.helloworld.network.api.AuthApi
+import com.ms.helloworld.network.api.CalendarApi
 import com.ms.helloworld.network.api.OnboardingApiService
 import dagger.Module
 import dagger.Provides
@@ -19,7 +20,7 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
 
-    private const val BASE_URL = "https://api.yourserver.com/" // TODO: 실제 서버 URL로 변경
+    private const val BASE_URL = "http://j13d204.p.ssafy.io:80" // TODO: 실제 서버 URL로 변경
 
     // HTTP 로깅 인터셉터
     @Provides
@@ -72,5 +73,11 @@ object NetworkModule {
     @Singleton
     fun provideAuthApi(retrofit: Retrofit): AuthApi {
         return retrofit.create(AuthApi::class.java)
+    }
+    
+    @Provides
+    @Singleton
+    fun provideCalendarApi(retrofit: Retrofit): CalendarApi {
+        return retrofit.create(CalendarApi::class.java)
     }
 }
