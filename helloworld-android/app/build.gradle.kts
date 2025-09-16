@@ -12,7 +12,7 @@ android {
 
     defaultConfig {
         applicationId = "com.ms.helloworld"
-        minSdk = 24
+        minSdk = 26
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
@@ -104,6 +104,12 @@ dependencies {
 
     // Android Animation
     implementation("androidx.compose.animation:animation:1.9.0")
+
+    // Health Connect
+    implementation("androidx.health.connect:connect-client:1.1.0-alpha11")
+
+    // Activity Result API
+    implementation("androidx.activity:activity-ktx:1.8.2")
 
     // 개발/디버그
     debugImplementation(libs.androidx.ui.tooling)
