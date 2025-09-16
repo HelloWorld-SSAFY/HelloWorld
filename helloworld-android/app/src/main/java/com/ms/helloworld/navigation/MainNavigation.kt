@@ -32,6 +32,7 @@ import com.ms.helloworld.ui.screen.RecordDetailScreen
 import com.ms.helloworld.ui.screen.HealthStatusScreen
 import com.ms.helloworld.ui.screen.HealthRegisterScreen
 import com.ms.helloworld.ui.screen.DiaryBoardScreen
+import com.ms.helloworld.ui.screen.NotificationScreen
 
 @Composable
 fun MainNavigation(
@@ -173,12 +174,16 @@ fun MainNavigation(
             ) { backStackEntry ->
                 val diaryType = backStackEntry.arguments?.getString("diaryType") ?: "birth"
                 val day = backStackEntry.arguments?.getInt("day") ?: 1
-                
+
                 DiaryBoardScreen(
                     navController = navController,
                     diaryType = diaryType,
                     day = day
                 )
+            }
+
+            composable(Screen.NotificationScreen.route) {
+                NotificationScreen(navController)
             }
         }
     }
