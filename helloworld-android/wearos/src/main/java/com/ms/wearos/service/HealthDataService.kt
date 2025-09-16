@@ -1,4 +1,3 @@
-// HealthDataService.kt - 심박수와 활동량만 다루는 간소화된 서비스
 package com.ms.wearos.service
 
 import android.app.*
@@ -29,7 +28,6 @@ class HealthDataService : Service() {
 
     private var isCollecting = false
     private var heartRateCallback: MeasureCallback? = null
-    private var activityCallback: MeasureCallback? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -39,8 +37,8 @@ class HealthDataService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_START_MEASUREMENT -> startHealthDataCollection()
-            ACTION_STOP_MEASUREMENT -> stopHealthDataCollection()
+            ACTION_START_MEASUREMENT -> startHeartRateCollection()
+            ACTION_STOP_MEASUREMENT -> stopHeartRateCollection()
         }
         return START_STICKY
     }
@@ -50,10 +48,10 @@ class HealthDataService : Service() {
     private fun createNotificationChannel() {
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "건강 데이터 수집",
+            "심박수 측정",
             NotificationManager.IMPORTANCE_LOW
         ).apply {
-            description = "실시간 건강 데이터를 수집합니다"
+            description = "실시간 심박수를 측정합니다"
             setShowBadge(false)
         }
 
@@ -61,10 +59,10 @@ class HealthDataService : Service() {
         notificationManager.createNotificationChannel(channel)
     }
 
-    private fun startHealthDataCollection() {
+    private fun startHeartRateCollection() {
         if (isCollecting) return
 
-        val notification = createNotification("건강 데이터 수집 중...")
+        val notification = createNotification("심박수 측정 중...")
         startForeground(NOTIFICATION_ID, notification)
 
         isCollecting = true
@@ -84,66 +82,30 @@ class HealthDataService : Service() {
                 heartRateData.forEach { dataPoint ->
                     val bpm = dataPoint.value
                     Log.d("HealthService", "Heart rate: $bpm BPM")
-                    saveHealthData("heart_rate", bpm.toString())
+                    saveHeartRateData(bpm)
                     updateNotification("심박수: ${bpm.toInt()} BPM")
                 }
             }
         }
 
-        // 활동량 콜백 설정
-        activityCallback = object : MeasureCallback {
-            override fun onAvailabilityChanged(
-                dataType: DeltaDataType<*, *>,
-                availability: Availability
-            ) {
-                Log.d("HealthService", "Activity sensor availability: $availability")
-            }
-
-            override fun onDataReceived(data: DataPointContainer) {
-                // 걸음수
-                data.getData(DataType.STEPS).forEach { dataPoint ->
-                    Log.d("HealthService", "Steps: ${dataPoint.value}")
-                    saveHealthData("steps", dataPoint.value.toString())
-                }
-
-                // 칼로리
-                data.getData(DataType.CALORIES).forEach { dataPoint ->
-                    Log.d("HealthService", "Calories: ${dataPoint.value}")
-                    saveHealthData("calories", dataPoint.value.toString())
-                }
-
-                // 거리
-                data.getData(DataType.DISTANCE).forEach { dataPoint ->
-                    Log.d("HealthService", "Distance: ${dataPoint.value}")
-                    saveHealthData("distance", dataPoint.value.toString())
-                }
-            }
-        }
-
-        // 센서 등록
+        // 심박수 센서 등록
         serviceScope.launch {
             try {
                 heartRateCallback?.let { callback ->
                     measureClient.registerMeasureCallback(DataType.HEART_RATE_BPM, callback)
                 }
 
-                activityCallback?.let { callback ->
-                    measureClient.registerMeasureCallback(DataType.STEPS, callback)
-                    measureClient.registerMeasureCallback(DataType.CALORIES, callback)
-                    measureClient.registerMeasureCallback(DataType.DISTANCE, callback)
-                }
-
-                Log.d("HealthService", "All sensors registered successfully")
+                Log.d("HealthService", "Heart rate sensor registered successfully")
                 startPeriodicLogging()
 
             } catch (e: Exception) {
-                Log.e("HealthService", "Error registering sensors", e)
+                Log.e("HealthService", "Error registering heart rate sensor", e)
                 stopSelf()
             }
         }
     }
 
-    private fun stopHealthDataCollection() {
+    private fun stopHeartRateCollection() {
         if (!isCollecting) return
 
         serviceScope.launch {
@@ -152,16 +114,10 @@ class HealthDataService : Service() {
                     measureClient.unregisterMeasureCallback(DataType.HEART_RATE_BPM, callback)
                 }
 
-                activityCallback?.let { callback ->
-                    measureClient.unregisterMeasureCallback(DataType.STEPS, callback)
-                    measureClient.unregisterMeasureCallback(DataType.CALORIES, callback)
-                    measureClient.unregisterMeasureCallback(DataType.DISTANCE, callback)
-                }
-
-                Log.d("HealthService", "All sensors unregistered")
+                Log.d("HealthService", "Heart rate sensor unregistered")
 
             } catch (e: Exception) {
-                Log.e("HealthService", "Error unregistering sensors", e)
+                Log.e("HealthService", "Error unregistering heart rate sensor", e)
             } finally {
                 isCollecting = false
                 stopForeground(STOP_FOREGROUND_REMOVE)
@@ -179,7 +135,7 @@ class HealthDataService : Service() {
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("건강 데이터 모니터링")
+            .setContentTitle("심박수 모니터링")
             .setContentText(contentText)
             .setSmallIcon(R.drawable.splash_icon)
             .setOngoing(true)
@@ -193,15 +149,15 @@ class HealthDataService : Service() {
         notificationManager.notify(NOTIFICATION_ID, notification)
     }
 
-    private fun saveHealthData(type: String, value: String) {
+    private fun saveHeartRateData(bpm: Double) {
         val timestamp = System.currentTimeMillis()
-        Log.d("HealthDataStorage", "[$timestamp] $type: $value")
+        Log.d("HeartRateStorage", "[$timestamp] Heart rate: $bpm BPM")
 
-        // SharedPreferences에 최신 데이터 저장
+        // SharedPreferences에 최신 심박수 데이터 저장
         val sharedPref = getSharedPreferences("health_data", Context.MODE_PRIVATE)
         with(sharedPref.edit()) {
-            putString("latest_$type", value)
-            putLong("latest_${type}_timestamp", timestamp)
+            putString("latest_heart_rate", bpm.toString())
+            putLong("latest_heart_rate_timestamp", timestamp)
             apply()
         }
     }
@@ -213,39 +169,30 @@ class HealthDataService : Service() {
 
                 val sharedPref = getSharedPreferences("health_data", Context.MODE_PRIVATE)
                 val heartRate = sharedPref.getString("latest_heart_rate", "0") ?: "0"
-                val steps = sharedPref.getString("latest_steps", "0") ?: "0"
-                val calories = sharedPref.getString("latest_calories", "0") ?: "0"
-                val distance = sharedPref.getString("latest_distance", "0") ?: "0"
 
-                Log.d("HealthSummary", """
-                    건강 데이터 요약 [${java.util.Date()}]
-                    심박수: ${heartRate} BPM
-                    걸음수: ${steps}
-                    칼로리: ${calories} kcal
-                    거리: ${distance} m
+                Log.d("HeartRateSummary", """
+                    심박수 데이터 [${java.util.Date()}]
+                    현재 심박수: ${heartRate} BPM
                 """.trimIndent())
 
-                // 이상 징후 감지
-                detectAnomalies(heartRate.toDoubleOrNull() ?: 0.0, steps.toIntOrNull() ?: 0)
+                // 심박수 이상 징후 감지
+                detectHeartRateAnomalies(heartRate.toDoubleOrNull() ?: 0.0)
             }
         }
     }
 
-    private fun detectAnomalies(heartRate: Double, steps: Int) {
-        val warnings = mutableListOf<String>()
-
+    private fun detectHeartRateAnomalies(heartRate: Double) {
         when {
-            heartRate > 120 -> warnings.add("심박수가 매우 높습니다 (${heartRate.toInt()} BPM)")
-            heartRate < 50 && heartRate > 0 -> warnings.add("심박수가 매우 낮습니다 (${heartRate.toInt()} BPM)")
-        }
-
-        if (steps < 100 && System.currentTimeMillis() % (1000 * 60 * 60) == 0L) {
-            warnings.add("활동량이 부족합니다. 움직이는 것을 권장합니다.")
-        }
-
-        warnings.forEach { warning ->
-            Log.w("HealthWarning", warning)
-            updateNotification("경고: $warning")
+            heartRate > 120 -> {
+                val warning = "심박수가 매우 높습니다 (${heartRate.toInt()} BPM)"
+                Log.w("HeartRateWarning", warning)
+                updateNotification("경고: $warning")
+            }
+            heartRate < 50 && heartRate > 0 -> {
+                val warning = "심박수가 매우 낮습니다 (${heartRate.toInt()} BPM)"
+                Log.w("HeartRateWarning", warning)
+                updateNotification("경고: $warning")
+            }
         }
     }
 
