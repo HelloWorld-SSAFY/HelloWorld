@@ -23,6 +23,14 @@ spring:
             - StripPrefix=1
 
 
+        - id: user
+          uri: http://userserver-svc.apps.svc.cluster.local:8080
+          predicates:
+            - Path=/user/**
+          filters:
+            - StripPrefix=1
+
+
 
 
 springdoc:
@@ -32,6 +40,9 @@ springdoc:
     urls:
       - name: calendar
         url: /calendar/v3/api-docs
+
+      - name: user
+        url: /user/v3/api-docs
 
 
 #  cloud:

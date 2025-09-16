@@ -1,3 +1,5 @@
+server:
+  port: 8080
 spring:
   application:
     name: "user-server"
@@ -10,9 +12,9 @@ spring:
       #uri: http://i13d106.p.ssafy.io:8888
 
   datasource:
-    url: ${POSTGRESGL_URL}
-    username: ${POSTGRESGL_USERNAME}
-    password: ${POSTGRESGL_PASSWORD}
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -29,11 +31,9 @@ spring:
           google:
             client-id: ${GOOGLE_CLIENT_ID}
             client-secret: ${GOOGLE_CLIENT_SECRET}
-            redirect-uri: http://localhost:8080/login/oauth2/code/google
-            scope:
-              - email
-              - profile
-              - openid
+            # 배포 도메인으로 교체 (게이트웨이 경유)
+            redirect-uri: http://j13d204.p.ssafy.io/user/login/oauth2/code/google
+            scope: [ email, profile, openid ]
 
 app:
   invite-code:
@@ -50,3 +50,25 @@ jwt:
     expire: ${REFRESH_EXPIRE}
 
 
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  health:
+    probes:
+      enabled: true
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui
