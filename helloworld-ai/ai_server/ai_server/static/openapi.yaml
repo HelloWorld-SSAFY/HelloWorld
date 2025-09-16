@@ -1,0 +1,186 @@
+openapi: 3.0.3
+info:
+  title: AI Server API
+  version: "1.0.0"
+servers:
+  - url: http://localhost:8000
+components:
+  securitySchemes:
+    AppToken:
+      type: apiKey
+      in: header
+      name: X-App-Token
+  schemas:
+    TelemetryRequest:
+      type: object
+      required: [user_ref, ts]
+      properties:
+        user_ref: { type: string, example: "u1" }
+        ts: { type: string, format: date-time, example: "2025-09-16T10:00:00+09:00" }
+        metrics:
+          type: object
+          properties:
+            hr: { type: number, example: 142 }
+            stress: { type: number, example: 0.62 }
+    NormalResponse:
+      type: object
+      properties:
+        ok: { type: boolean, example: true }
+        anomaly: { type: boolean, example: false }
+        risk_level: { type: string, example: "low" }
+        mode: { type: string, example: "normal" }
+    RestrictResponse:
+      type: object
+      properties:
+        ok: { type: boolean, example: true }
+        anomaly: { type: boolean, example: true }
+        risk_level: { type: string, example: "high" }
+        mode: { type: string, example: "restrict" }
+        reasons:
+          type: array
+          items: { type: string }
+          example: ["Z>=2.5 x3", "HR>=140 or <=50 x3"]
+        recommendation:
+          type: object
+          properties:
+            session_id: { type: string, format: uuid }
+            categories:
+              type: array
+              items:
+                type: object
+                properties:
+                  category: { type: string, example: "BREATHING" }
+                  rank: { type: integer, example: 1 }
+                  reason: { type: string, nullable: true }
+            items:
+              type: array
+              items:
+                type: object
+                properties:
+                  category: { type: string }
+                  title: { type: string }
+                  url: { type: string, format: uri }
+    EmergencyResponse:
+      type: object
+      properties:
+        ok: { type: boolean, example: true }
+        anomaly: { type: boolean, example: true }
+        risk_level: { type: string, example: "critical" }
+        mode: { type: string, example: "emergency" }
+        reasons:
+          type: array
+          items: { type: string }
+          example: ["Z>=5 x3", "HR>=150 or <=45 x3"]
+        action:
+          type: object
+          properties:
+            type: { type: string, example: "EMERGENCY_CONTACT" }
+            cooldown_min: { type: integer, example: 60 }
+        safe_templates:
+          type: array
+          items:
+            type: object
+            properties:
+              category: { type: string, example: "BREATHING" }
+              title: { type: string, example: "안전 호흡 3분" }
+    ErrorResponse:
+      type: object
+      properties:
+        detail: { type: string, example: "invalid app token" }
+        error: { type: string, example: "Unauthorized" }
+        message: { type: string, nullable: true }
+
+paths:
+  /v1/healthz:
+    get:
+      summary: Health check
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+                  model: { type: string, example: rec_v0.1 }
+
+  /v1/telemetry:
+    post:
+      summary: Upload telemetry & get immediate anomaly decision
+      security: [{ AppToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TelemetryRequest"
+            examples:
+              sample:
+                value:
+                  user_ref: u1
+                  ts: "2025-09-16T10:00:00+09:00"
+                  metrics: { hr: 142, stress: 0.62 }
+      responses:
+        "200":
+          description: Anomaly decision
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/NormalResponse"
+                  - $ref: "#/components/schemas/RestrictResponse"
+                  - $ref: "#/components/schemas/EmergencyResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } }
+        "401":
+          description: Missing/invalid token
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } }
+        "500":
+          description: Server error
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } }
+
+  /v1/feedback:
+    post:
+      summary: Upload user feedback (ACCEPT/COMPLETE/EFFECT)
+      security: [{ AppToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_ref, type]
+              properties:
+                user_ref: { type: string, example: "u1" }
+                session_id: { type: string, format: uuid, nullable: true }
+                type: { type: string, enum: [ACCEPT, COMPLETE, EFFECT] }
+                external_id: { type: string, nullable: true }
+                dwell_ms: { type: integer, nullable: true }
+                watched_pct: { type: number, nullable: true }
+                hr_before: { type: number, nullable: true }
+                hr_after_30m: { type: number, nullable: true }
+                stress_before: { type: number, nullable: true }
+                stress_after_30m: { type: number, nullable: true }
+                effect: { type: number, nullable: true }
+      responses:
+        "200":
+          description: Stored
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+        "400":
+          description: Bad request
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } }
+        "401":
+          description: Missing/invalid token
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } }
