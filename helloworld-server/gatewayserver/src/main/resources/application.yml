@@ -11,3 +11,4 @@ spring:
     config:
       uri: http://configserver-svc:8888
       enabled: true
+
