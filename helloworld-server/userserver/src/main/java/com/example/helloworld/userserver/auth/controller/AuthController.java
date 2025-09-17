@@ -43,10 +43,10 @@ public class AuthController {
                             examples = @ExampleObject(
                                     name = "예시",
                                     value = """
-                                            {
-                                              "idToken": "eyJhbGciOiJSUzI1NiIsImtpZCI6...",
-                                            }
-                                            """
+                                      {
+                                        "idToken": "eyJhbGciOiJSUzI1NiIsImtpZCI6..."
+                                      }
+                                      """
                             )
                     )
             )
