@@ -32,6 +32,15 @@ spec:
         ports:
         - containerPort: 8080
         env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+
         - name: SPRING_CONFIG_IMPORT
           value: "optional:configserver:http://configserver-svc.apps.svc.cluster.local:8888"
         - name: SPRING_CLOUD_CONFIG_FAIL_FAST

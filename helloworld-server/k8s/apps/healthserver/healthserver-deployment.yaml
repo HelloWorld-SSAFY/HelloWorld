@@ -32,6 +32,15 @@ spec:
         - containerPort: 8080
 
         env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+
         # Datasource (Service DNS, Secret에서 비번 주입)
         - name: SPRING_DATASOURCE_URL
           value: "jdbc:postgresql://health-postgres-svc.apps.svc.cluster.local:5432/health_db"
