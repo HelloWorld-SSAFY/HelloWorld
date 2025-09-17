@@ -1,4 +1,5 @@
 # api/views.py
+import os
 import json
 import uuid
 from datetime import datetime, timezone, date
@@ -10,6 +11,7 @@ from django.views import View
 
 from services.anomaly import AnomalyDetector, AnomalyConfig, KST
 from services.orm_stats_provider import OrmStatsProvider
+from services.policy_service import categories_for_trigger  # DB 우선 + 폴백
 
 from api.models import (
     Content,
@@ -20,12 +22,18 @@ from api.models import (
     Outcome as OutcomeModel,
 )
 
-
 # ── 싱글턴 ────────────────────────────────────────────────────────────────────
 _config = AnomalyConfig()
 _provider = OrmStatsProvider()
 _detector = AnomalyDetector(_provider, _config)
 
+# ── 설정/인증 ────────────────────────────────────────────────────────────────
+APP_TOKEN = os.getenv("APP_TOKEN", "")
+
+def _auth_ok(request: HttpRequest) -> bool:
+    if not APP_TOKEN:
+        return True
+    return request.headers.get("X-App-Token", "").strip() == APP_TOKEN
 
 # ── 유틸 ─────────────────────────────────────────────────────────────────────
 def _json(request: HttpRequest):
@@ -38,56 +46,33 @@ def _iso_to_utc(ts_str: str):
     # "2025-09-16T10:00:00+09:00" / "...Z" 모두 지원
     return datetime.fromisoformat(ts_str.replace("Z", "+00:00")).astimezone(timezone.utc)
 
-def _infer_trigger_type(reasons):
-    t = " ".join(reasons or [])
-    if "HR" in t:
-        return "hr"
-    if "Z>=" in t or "z>=" in t:
-        return "z"
-    return "unknown"
-
 def _session_model_fields():
-    # RecommendationSession 실제 필드 집합
     return {f.name for f in RecommendationSession._meta.get_fields()
             if getattr(f, "concrete", False) and not getattr(f, "auto_created", False)}
 
 def _create_session_dynamic(*, mode: str, user_ref: str, trigger: str,
                             reasons, as_of_date: date, bucket4h: int):
-    """
-    모델 스키마에 맞춰 안전하게 세션 생성:
-      - user_ref 없고 user_id만 있으면 user_id 사용
-      - reasons/as_of/bucket_4h 없으면 context 칼럼(있을 때)로 저장
-      - reasons가 TextField면 문자열로 대체
-    """
+    """모델 스키마에 맞춰 안전하게 세션 생성."""
     fields = _session_model_fields()
     kwargs = {"mode": mode, "trigger": trigger}
 
-    # user 필드 매핑
-    if "user_ref" in fields:
-        kwargs["user_ref"] = user_ref
-    elif "user_id" in fields:
-        kwargs["user_id"] = user_ref
+    if "user_ref" in fields:   kwargs["user_ref"] = user_ref
+    elif "user_id" in fields:  kwargs["user_id"] = user_ref
 
-    # 가능한 개별 필드는 그대로
     have_reasons = "reasons" in fields
-    have_as_of = "as_of" in fields
-    have_bucket = "bucket_4h" in fields
+    have_as_of   = "as_of" in fields
+    have_bucket  = "bucket_4h" in fields
     have_context = "context" in fields
 
-    # 개별 필드가 있으면 넣고, 없으면 context로 모아서
     context_payload = {
         "reasons": reasons,
         "as_of": as_of_date.isoformat(),
         "bucket_4h": bucket4h,
     }
-
-    if have_as_of:
-        kwargs["as_of"] = as_of_date
-    if have_bucket:
-        kwargs["bucket_4h"] = bucket4h
+    if have_as_of:  kwargs["as_of"] = as_of_date
+    if have_bucket: kwargs["bucket_4h"] = bucket4h
 
     if have_reasons:
-        # JSONField일 수도, TextField일 수도 있으니 시도 후 실패 시 문자열로
         try:
             kwargs["reasons"] = reasons
             return RecommendationSession.objects.create(**kwargs)
@@ -96,42 +81,77 @@ def _create_session_dynamic(*, mode: str, user_ref: str, trigger: str,
             return RecommendationSession.objects.create(**kwargs)
     else:
         if have_context:
-            # context가 JSONField/TextField일 수 있음
             try:
                 kwargs["context"] = context_payload
             except Exception:
                 kwargs["context"] = json.dumps(context_payload, ensure_ascii=False)
-        # context가 없으면 그냥 필드 없는 값은 버리고 저장
         return RecommendationSession.objects.create(**kwargs)
 
+def _build_category_reason(trigger_code: str) -> str:
+    # 카테고리 사유 간단 라벨
+    if trigger_code == "hr_high": return "hr high"
+    if trigger_code == "hr_low":  return "hr low"
+    if trigger_code == "steps_low": return "steps low"
+    if trigger_code == "stress_up": return "stress high"
+    return "anomaly"
+
+def _infer_trigger_code(reasons, metrics):
+    """
+    현재 요청 페이로드를 최우선으로 결정.
+    못 정하면 reasons → 그래도 없으면 'unknown'.
+    """
+    t = " ".join(str(x).lower() for x in (reasons or []))
+    has_hr = isinstance(metrics, dict) and "hr" in metrics
+    has_stress = isinstance(metrics, dict) and "stress" in metrics
+
+    if has_hr:
+        try:
+            hr = float(metrics["hr"])
+            if hr >= 150: return "hr_high"
+            if hr <= 45:  return "hr_low"
+        except Exception:
+            pass
+        if "hr_high" in t or "hr high" in t or "hr>" in t or "hr≥" in t: return "hr_high"
+        if "hr_low"  in t or "hr low"  in t or "hr<" in t or "hr≤" in t: return "hr_low"
+        return "hr_high"  # hr만 왔는데 임계 미만이면 hr_high 쪽 추천
+
+    if has_stress:
+        return "stress_up"
+
+    if "hr_high" in t or "hr high" in t: return "hr_high"
+    if "hr_low"  in t or "hr low"  in t: return "hr_low"
+    if "steps_low" in t or "activity low" in t or "steps" in t: return "steps_low"
+    if "stress_up" in t or "stress" in t or "z(stress)" in t: return "stress_up"
+
+    return "unknown"
 
 # ── /v1/healthz ──────────────────────────────────────────────────────────────
 def healthz(request: HttpRequest):
     return JsonResponse({"status": "ok", "model": "rec_v0.1"})
 
-
 # ── /v1/telemetry ────────────────────────────────────────────────────────────
 @csrf_exempt
 def telemetry(request: HttpRequest):
     """
-    명세서 준수:
-      REQUEST  { "user_ref": "...", "ts": "ISO8601", "metrics": {"hr":..., "stress":...} }
-      RESPONSE normal/restrict/emergency (ok/anomaly/risk_level/mode/…)
+    v1 계약(명세서): ok/anomaly/risk_level/mode + reasons
+    - restrict: recommendation.session_id, recommendation.categories[]
+    - emergency: action, safe_templates (세션/카테고리 없음)
     """
     if request.method != "POST":
         return JsonResponse({"error": "method_not_allowed"}, status=405)
+    if not _auth_ok(request):
+        return JsonResponse({"detail": "invalid app token"}, status=401)
 
     try:
         body = _json(request)
 
-        # 입력 스키마 호환
         user_ref = body.get("user_ref") or body.get("user_id") or "u1"
-        if body.get("ts"):
-            ts_utc = _iso_to_utc(body["ts"])
-        elif body.get("timestamp"):
-            ts_utc = _iso_to_utc(body["timestamp"])
+        ts_str = body.get("ts") or body.get("timestamp")
+        if ts_str:
+            ts_utc = _iso_to_utc(ts_str)
         else:
             ts_utc = datetime.now(timezone.utc)
+            ts_str = ts_utc.isoformat()
 
         metrics = body.get("metrics") or {}
         if "hr" in body and body["hr"] is not None:
@@ -139,22 +159,23 @@ def telemetry(request: HttpRequest):
         if "stress" in body and body["stress"] is not None:
             metrics["stress"] = float(body["stress"])
 
-        # 판단
+        gestational_week = body.get("gestational_week")
+
+        # 엔진 판단
         result = _detector.evaluate(user_ref=user_ref, ts_utc=ts_utc, metrics=metrics)
 
         # 컨텍스트
         kst = ts_utc.astimezone(KST)
         as_of_date = kst.date()
         bucket4h = kst.hour // 4
-        reasons = list(result.reasons)
-        trigger_type = _infer_trigger_type(reasons)
+        reasons = list(getattr(result, "reasons", []) or [])
+
+        # 트리거: 엔진 제공값 우선 → 추론(엔진이 trigger 지원)
+        trigger_code = getattr(result, "trigger", None) or _infer_trigger_code(reasons, metrics)
 
         # emergency
-        if result.mode == "emergency":
-            _create_session_dynamic(
-                mode="emergency", user_ref=user_ref, trigger=trigger_type,
-                reasons=reasons, as_of_date=as_of_date, bucket4h=bucket4h
-            )
+        if getattr(result, "mode", None) == "emergency":
+            # v1 명세: emergency는 세션/카테고리 없이 액션/템플릿만
             return JsonResponse({
                 "ok": True,
                 "anomaly": True,
@@ -169,11 +190,20 @@ def telemetry(request: HttpRequest):
             }, status=200)
 
         # restrict
-        if result.mode == "restrict":
+        if getattr(result, "mode", None) == "restrict":
             session = _create_session_dynamic(
-                mode="restrict", user_ref=user_ref, trigger=trigger_type,
+                mode="restrict", user_ref=user_ref, trigger=trigger_code,
                 reasons=reasons, as_of_date=as_of_date, bucket4h=bucket4h
             )
+            raw_cats = categories_for_trigger(trigger_code, gestational_week)
+            cats = []
+            reason_label = _build_category_reason(trigger_code)
+            for i, c in enumerate(raw_cats):
+                cats.append({
+                    "category": c.get("code") or c.get("category"),
+                    "rank": c.get("rank", c.get("priority", i + 1)),
+                    "reason": reason_label
+                })
             return JsonResponse({
                 "ok": True,
                 "anomaly": True,
@@ -182,9 +212,8 @@ def telemetry(request: HttpRequest):
                 "reasons": reasons,
                 "recommendation": {
                     "session_id": str(session.id),
-                    "categories": [],
-                    "items": []
-                },
+                    "categories": cats
+                }
             }, status=200)
 
         # normal
@@ -192,7 +221,7 @@ def telemetry(request: HttpRequest):
             "ok": True,
             "anomaly": False,
             "risk_level": "low",
-            "mode": "normal",
+            "mode": "normal"
         }, status=200)
 
     except Exception as e:
@@ -200,15 +229,14 @@ def telemetry(request: HttpRequest):
         logging.getLogger(__name__).exception("telemetry error")
         return JsonResponse({"detail": "internal error", "error": type(e).__name__, "message": str(e)}, status=500)
 
-
 # ── /v1/feedback ─────────────────────────────────────────────────────────────
 @csrf_exempt
 def feedback(request: HttpRequest):
-    """
-    명세서 준수: { "ok": true } 만 반환
-    """
+    """명세서 준수: { "ok": true } 만 반환"""
     if request.method != "POST":
         return JsonResponse({"error": "method_not_allowed"}, status=405)
+    if not _auth_ok(request):
+        return JsonResponse({"detail": "invalid app token"}, status=401)
 
     body = _json(request)
     if not {"user_ref", "type"}.issubset(body):
@@ -220,7 +248,6 @@ def feedback(request: HttpRequest):
     content_obj = None
     item_rec_obj = None
 
-    # 세션 매핑
     sid = body.get("session_id")
     if sid:
         try:
@@ -228,7 +255,6 @@ def feedback(request: HttpRequest):
         except Exception:
             session_obj = None
 
-    # 콘텐츠 매핑(옵션)
     cid = body.get("content_id")
     if cid:
         try:
@@ -236,13 +262,11 @@ def feedback(request: HttpRequest):
         except Exception:
             content_obj = None
 
-    # 추천 아이템 매핑(옵션)
     if session_obj and content_obj:
         item_rec_obj = ItemRec.objects.filter(session=session_obj, content=content_obj).order_by("score").last()
         if not item_rec_obj:
             item_rec_obj = ItemRec.objects.filter(session=session_obj).order_by("score").last()
 
-    # feedback 저장
     FeedbackModel.objects.create(
         user_ref=user_ref if hasattr(FeedbackModel, "user_ref") else None,
         session=session_obj,
@@ -254,7 +278,6 @@ def feedback(request: HttpRequest):
         watched_pct=body.get("watched_pct"),
     )
 
-    # EFFECT → outcome 저장
     if ftype == "EFFECT":
         hr_b, hr_a = body.get("hr_before"), body.get("hr_after_30m")
         st_b, st_a = body.get("stress_before"), body.get("stress_after_30m")
@@ -271,7 +294,6 @@ def feedback(request: HttpRequest):
             )
 
     return JsonResponse({"ok": True}, status=200)
-
 
 # ── CBV 래퍼 ─────────────────────────────────────────────────────────────────
 @method_decorator(csrf_exempt, name="dispatch")

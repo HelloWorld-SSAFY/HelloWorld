@@ -148,16 +148,27 @@ class Outcome(models.Model):
 # 트리거→카테고리 우선순위 정책
 # ─────────────────────────────────────────────────────────────────────
 class TriggerCategoryPolicy(models.Model):
-    trigger = models.CharField(max_length=50)                  # 예: "stress_high"
-    category = models.CharField(max_length=50)                 # 예: "BREATHING"
-    priority = models.IntegerField(default=1)                  # 1이 가장 높음
+    trigger = models.CharField(max_length=50)         # "stress_up" / "hr_low" / "hr_high" / "steps_low"
+    category = models.CharField(max_length=50)        # "BREATHING" / "MEDITATION" / ...
+    priority = models.IntegerField(default=1)         # 1이 최상위 노출
     is_active = models.BooleanField(default=True)
+
+    # 운영 편의 옵션
+    min_gw = models.IntegerField(null=True, blank=True)     # 임신 주차 하한
+    max_gw = models.IntegerField(null=True, blank=True)     # 임신 주차 상한
+    tod_bucket = models.CharField(                          # 시간대 버킷(선택)
+        max_length=20, null=True, blank=True
+    )  # "morning"/"day"/"evening"/"night"
+    requires_location = models.BooleanField(default=False)  # 나들이 등 위치 필요 여부
+    title = models.CharField(max_length=100, blank=True, default="")  # 노출명(관리자용/클라표시용)
 
     class Meta:
         db_table = "trigger_category_policy"
         unique_together = (("trigger", "category"),)
         indexes = [
             models.Index(fields=["trigger", "is_active", "priority"]),
+            models.Index(fields=["min_gw", "max_gw"]),
+            models.Index(fields=["tod_bucket"]),
         ]
 
 
