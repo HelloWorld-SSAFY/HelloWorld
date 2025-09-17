@@ -4,6 +4,8 @@ import android.annotation.SuppressLint
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -16,7 +18,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -61,7 +68,12 @@ fun CalendarScreen(
     var editEndTime by remember { mutableStateOf("10:00") }
     var editIsRemind by remember { mutableStateOf(false) }
     var editOrderNo by remember { mutableStateOf(1) }
-    
+
+    // 드래그 앤 드롭 관련 상태
+    var draggingEvent by remember { mutableStateOf<CalendarEventResponse?>(null) }
+    var dragOffset by remember { mutableStateOf(0f) }
+    var isDragging by remember { mutableStateOf(false) }
+
     // 기본적으로 오늘 날짜의 일정을 표시
     val today = LocalDate.now().toString()
     var displayDateKey by remember { mutableStateOf(initialSelectedDate ?: today) }
@@ -241,8 +253,8 @@ fun CalendarScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // 일정 목록
-                    val currentEvents = state.events[displayDateKey] ?: emptyList()
+                    // 일정 목록 (orderNo 기준 정렬)
+                    val currentEvents = (state.events[displayDateKey] ?: emptyList()).sortedBy { it.orderNo ?: Int.MAX_VALUE }
                     if (currentEvents.isEmpty() && !state.isLoading) {
                         Box(
                             modifier = Modifier.fillMaxSize(),
@@ -273,42 +285,66 @@ fun CalendarScreen(
                             CircularProgressIndicator()
                         }
                     } else {
-                        LazyColumn {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
                             items(currentEvents.size, key = { index -> currentEvents[index].eventId }) { index ->
                                 val event = currentEvents[index]
 
-                                EventCard(
-                                    event = event,
-                                    onEdit = {
-                                        editingEvent = event
-                                        editTitle = event.title
-                                        editContent = event.memo ?: ""
-                                        // ISO 8601에서 시간 추출
-                                        editStartTime = try {
-                                            event.startAt.substring(11, 16)
-                                        } catch (e: Exception) { "09:00" }
-                                        editEndTime = try {
-                                            event.endAt?.substring(11, 16) ?: "10:00"
-                                        } catch (e: Exception) { "10:00" }
-                                        editIsRemind = event.isRemind
-                                        editOrderNo = event.orderNo ?: 1
-                                        selectedDateKey = displayDateKey
-                                        showAddDialog = true
-                                    },
-                                    onDelete = {
-                                        viewModel.deleteEvent(event.eventId)
-                                    }
-                                )
+                                Column {
+                                    EventCard(
+                                        event = event,
+                                        onEdit = {
+                                            editingEvent = event
+                                            editTitle = event.title
+                                            editContent = event.memo ?: ""
+                                            // ISO 8601에서 시간 추출
+                                            editStartTime = try {
+                                                event.startAt.substring(11, 16)
+                                            } catch (e: Exception) { "09:00" }
+                                            editEndTime = try {
+                                                event.endAt?.substring(11, 16) ?: "10:00"
+                                            } catch (e: Exception) { "10:00" }
+                                            editIsRemind = event.remind
+                                            editOrderNo = event.orderNo ?: 1
+                                            selectedDateKey = displayDateKey
+                                            showAddDialog = true
+                                        },
+                                        onDelete = {
+                                            viewModel.deleteEvent(event.eventId)
+                                        },
+                                        onDragStart = {
+                                            draggingEvent = event
+                                            isDragging = true
+                                        },
+                                        onDragEnd = { offset ->
+                                            if (isDragging && draggingEvent != null) {
+                                                // 드래그 거리에 따라 순서 변경 결정
+                                                val threshold = 100f // 100픽셀 이상 드래그해야 순서 변경
+                                                val currentIndex = currentEvents.indexOfFirst { it.eventId == draggingEvent!!.eventId }
 
-                                // 마지막 아이템이 아니면 divider 추가
-                                if (index < currentEvents.size - 1) {
-                                    HorizontalDivider(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 8.dp),
-                                        thickness = 1.dp,
-                                        color = Color.LightGray
+                                                when {
+                                                    offset < -threshold && currentIndex > 0 -> {
+                                                        // 위로 이동
+                                                        val targetEvent = currentEvents[currentIndex - 1]
+                                                        swapEventOrders(draggingEvent!!, targetEvent, viewModel)
+                                                    }
+                                                    offset > threshold && currentIndex < currentEvents.size - 1 -> {
+                                                        // 아래로 이동
+                                                        val targetEvent = currentEvents[currentIndex + 1]
+                                                        swapEventOrders(draggingEvent!!, targetEvent, viewModel)
+                                                    }
+                                                }
+                                            }
+                                            // 드래그 상태 초기화
+                                            draggingEvent = null
+                                            isDragging = false
+                                            dragOffset = 0f
+                                        },
+                                        isDragging = isDragging && draggingEvent?.eventId == event.eventId,
+                                        dragOffset = if (draggingEvent?.eventId == event.eventId) dragOffset else 0f
                                     )
+
                                 }
                             }
                         }
@@ -406,6 +442,7 @@ fun CalendarScreen(
             }
         )
     }
+
 }
 
 @Composable
@@ -544,12 +581,41 @@ fun CalendarGrid(
 fun EventCard(
     event: CalendarEventResponse,
     onEdit: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onDragStart: () -> Unit = {},
+    onDragEnd: (Float) -> Unit = {},
+    isDragging: Boolean = false,
+    dragOffset: Float = 0f
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp)
+            .graphicsLayer {
+                translationY = dragOffset
+                alpha = if (isDragging) 0.8f else 1f
+            }
+            .shadow(
+                elevation = if (isDragging) 8.dp else 0.dp,
+                shape = RoundedCornerShape(8.dp)
+            )
+            .background(
+                color = if (isDragging) Color.LightGray.copy(alpha = 0.1f) else Color.Transparent,
+                shape = RoundedCornerShape(8.dp)
+            )
+            .pointerInput(event.eventId) {
+                detectDragGesturesAfterLongPress(
+                    onDragStart = {
+                        onDragStart()
+                    },
+                    onDragEnd = {
+                        onDragEnd(dragOffset)
+                    },
+                    onDrag = { change, _ ->
+                        onDragEnd(change.position.y)
+                    }
+                )
+            }
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -616,4 +682,37 @@ private fun formatDateForDisplay(dateKey: String): String {
     } catch (e: Exception) {
         dateKey
     }
+}
+
+// 두 이벤트의 orderNo를 교체하는 헬퍼 함수
+private fun swapEventOrders(
+    event1: CalendarEventResponse,
+    event2: CalendarEventResponse,
+    viewModel: CalendarViewModel
+) {
+    // 두 이벤트의 orderNo를 교체
+    val order1 = event1.orderNo ?: 1
+    val order2 = event2.orderNo ?: 2
+
+    // event1을 event2의 orderNo로 업데이트
+    viewModel.updateEvent(
+        eventId = event1.eventId,
+        title = event1.title,
+        content = event1.memo ?: "",
+        startAt = event1.startAt,
+        endAt = event1.endAt ?: event1.startAt,
+        isRemind = event1.remind,
+        orderNo = order2
+    )
+
+    // event2를 event1의 orderNo로 업데이트
+    viewModel.updateEvent(
+        eventId = event2.eventId,
+        title = event2.title,
+        content = event2.memo ?: "",
+        startAt = event2.startAt,
+        endAt = event2.endAt ?: event2.startAt,
+        isRemind = event2.remind,
+        orderNo = order1
+    )
 }

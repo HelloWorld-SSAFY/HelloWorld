@@ -23,22 +23,29 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import com.ms.helloworld.ui.components.CustomTopAppBar
+import com.ms.helloworld.viewmodel.CoupleProfileViewModel
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CoupleProfileScreen(
     navController: NavHostController,
-    onBackClick: () -> Unit = {}
+    onBackClick: () -> Unit = {},
+    viewModel: CoupleProfileViewModel = hiltViewModel()
 ) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
     var showInviteCodeBottomSheet by remember { mutableStateOf(false) }
-    var inviteCode by remember { mutableStateOf("") }
     val bottomSheetState = rememberModalBottomSheetState()
     val backgroundColor = Color(0xFFFFFFFF)
-    
-    // 테스트용 파트너 연결 상태 (실제로는 ViewModel에서 관리)
-    var isPartnerConnected by remember { mutableStateOf(false) }
+
+    val isPartnerConnected = false // TODO: 파트너 연결 상태 백엔드에서 관리 필요
+    val shouldShowInviteCode = true // TODO: 성별 정보 범위에서 처리 필요
 
         Column(
             modifier = Modifier
@@ -90,13 +97,13 @@ fun CoupleProfileScreen(
                             horizontalArrangement = Arrangement.Center
                         ) {
                             Text(
-                                text = "아내 닉네임",
+                                text = state.momProfile?.nickname ?: "아내 닉네임",
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = Color.Black,
                                 textAlign = TextAlign.Center
                             )
-                            
+
                             IconButton(
                                 onClick = { /* TODO: 아내 프로필 수정 */ },
                                 modifier = Modifier.size(20.dp)
@@ -141,24 +148,14 @@ fun CoupleProfileScreen(
                             horizontalArrangement = Arrangement.Center
                         ) {
                             Text(
-                                text = "남편 닉네임",
+                                text = "남편 닉네임", // TODO: 파트너 정보 API에서 가져오기
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = Color.Black,
                                 textAlign = TextAlign.Center
                             )
-                            
-                            IconButton(
-                                onClick = { /* TODO: 남편 프로필 수정 */ },
-                                modifier = Modifier.size(20.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Edit,
-                                    contentDescription = "남편 프로필 수정",
-                                    tint = Color.Gray,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                            }
+
+                            // TODO: 성별에 따른 수정 버튼 처리
                         }
                     }
                 }
@@ -186,7 +183,9 @@ fun CoupleProfileScreen(
                         color = Color.Gray
                     )
                     Text(
-                        text = "150일 (21주)",
+                        text = state.momProfile?.let { profile ->
+                            "${profile.currentDay}일 (${profile.pregnancyWeek}주)"
+                        } ?: "정보 없음",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.Black,
@@ -210,7 +209,9 @@ fun CoupleProfileScreen(
                         color = Color.Gray
                     )
                     Text(
-                        text = "2024.07.15",
+                        text = state.momProfile?.dueDate?.format(
+                            DateTimeFormatter.ofPattern("yyyy.MM.dd")
+                        ) ?: "정보 없음",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.Black,
@@ -239,20 +240,17 @@ fun CoupleProfileScreen(
                 )
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // 파트너 연결 상태에 따른 버튼
-                PartnerConnectionButton(
-                    isPartnerConnected = isPartnerConnected,
-                    onInviteCodeClick = {
-                        inviteCode = generateInviteCode()
-                        showInviteCodeBottomSheet = true
-                        // 테스트용: 초대코드 생성 시 연결된 것으로 가정
-                        isPartnerConnected = true
-                    },
-                    onDisconnectClick = {
-                        // 테스트용: 연동 해제 시 연결 해제
-                        isPartnerConnected = false
-                    }
-                )
+                if (shouldShowInviteCode) {
+                    PartnerConnectionButton(
+                        isPartnerConnected = isPartnerConnected,
+                        onInviteCodeClick = {
+                            showInviteCodeBottomSheet = true
+                        },
+                        onDisconnectClick = {
+                            // TODO: 연동 해제 처리
+                        }
+                    )
+                }
                 
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -274,7 +272,7 @@ fun CoupleProfileScreen(
             containerColor = Color(0xFFFFFFFF)
         ) {
             InviteCodeBottomSheetContent(
-                inviteCode = inviteCode,
+                inviteCode = state.inviteCode ?: generateInviteCode(),
                 onDismiss = { showInviteCodeBottomSheet = false }
             )
         }

@@ -3,20 +3,13 @@ package com.ms.helloworld.dto.response
 import com.google.gson.annotations.SerializedName
 
 data class CalendarEventResponse(
-    @SerializedName("eventId")
-    val eventId: Long,
-    @SerializedName("coupleId")
+    val eventId: Long,      // 서버는 카멜케이스로 응답
     val coupleId: Long,
-    @SerializedName("writerId")
     val writerId: Long?,
     val title: String,
-    @SerializedName("startAt")
-    val startAt: String, // ISO 8601 format
-    @SerializedName("endAt")
+    val startAt: String,    // ISO 8601 format
     val endAt: String?,
     val memo: String?,
-    @SerializedName("orderNo")
     val orderNo: Int?,
-    @SerializedName("isRemind")
-    val isRemind: Boolean
+    val remind: Boolean     // 서버는 "remind"로 응답 ("isRemind" 아님)
 )
