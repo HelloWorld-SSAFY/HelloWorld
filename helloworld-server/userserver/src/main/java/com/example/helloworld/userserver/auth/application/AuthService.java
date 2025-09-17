@@ -71,7 +71,9 @@ public class AuthService {
                 .build();
         refreshTokenRepository.save(rt);
 
-        return new LoginResult(member.getId(), accessToken, refreshToken);
+        String gender = (member.getGender() == null) ? null : member.getGender().toString();
+
+        return new LoginResult(member.getId(), accessToken, refreshToken,gender);
     }
 
     private String generateNickname() {
@@ -139,6 +141,7 @@ public class AuthService {
         if (!memberRepository.existsById(memberId)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND);
         }
+
         memberRepository.deleteById(memberId); // 실제 DELETE
     }
 

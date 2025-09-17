@@ -4,4 +4,65 @@ spring:
 #  config:
 #    import: "configserver:"
   cloud:
+    discovery:
+      enabled: false
     config:
+      enabled: false
+
+    security:
+      enabled: false
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        format_sql: true
+app:
+  debug:
+    couple-id: 1
+  jwt:
+    secret: local-dev-secret   # dev/test 전용 공통 시크릿(HS256)
+    access-exp-seconds: 3600
+  zone: Asia/Seoul
+
+
+
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  health:
+    probes:
+      enabled: true
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui
+
+userserver:
+  base-url: http://localhost:8080
+
+eureka:
+  client:
+    enabled: false
+    register-with-eureka: false
+    fetch-registry: false
+
