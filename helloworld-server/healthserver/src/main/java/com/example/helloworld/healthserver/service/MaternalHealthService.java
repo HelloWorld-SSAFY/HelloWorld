@@ -46,16 +46,33 @@ public class MaternalHealthService {
         return new int[]{Integer.parseInt(m.group(1)), Integer.parseInt(m.group(2))};
     }
 
-    @Transactional(readOnly = true)
-    public MhGetResponse getLatest(Long coupleId) {
-        MaternalHealth mh = repo.findTopByCoupleIdOrderByRecordDateDescCreatedAtDesc(coupleId)
-                .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "No records"));
-        return new MhGetResponse(
+//    @Transactional(readOnly = true)
+//    public MhGetResponse getLatest(Long coupleId) {
+//        MaternalHealth mh = repo.findTopByCoupleIdOrderByRecordDateDescCreatedAtDesc(coupleId)
+//                .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "No records"));
+//        return new MhGetResponse(
+//                mh.getRecordDate().toString(),
+//                safe(mh.getWeight()),
+//                formatBp(mh.getMaxBloodPressure(), mh.getMinBloodPressure()),
+//                mh.getBloodSugar()
+//        );
+//    }
+
+    private com.example.helloworld.healthserver.dto.MHDtos.MhGetResponse toDto(MaternalHealth mh) {
+        return new com.example.helloworld.healthserver.dto.MHDtos.MhGetResponse(
                 mh.getRecordDate().toString(),
                 safe(mh.getWeight()),
                 formatBp(mh.getMaxBloodPressure(), mh.getMinBloodPressure()),
                 mh.getBloodSugar()
         );
+    }
+
+    @Transactional(readOnly = true)
+    public com.example.helloworld.healthserver.dto.MHDtos.MhGetResponse getById(Long coupleId, Long maternalId) {
+        MaternalHealth mh = repo.findByIdAndCoupleId(maternalId, coupleId)
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.NOT_FOUND, "Record not found"));
+        return toDto(mh);
     }
 
     @Transactional
@@ -101,37 +118,30 @@ public class MaternalHealthService {
 
     @Transactional(readOnly = true)
     public com.example.helloworld.healthserver.dto.MHDtos.MhListResponse list(
-            Long coupleId, LocalDate from, LocalDate to, Integer page, Integer size) {
+            Long coupleId, LocalDate from, LocalDate to) {
 
-        int p = (page == null || page < 0) ? 0 : page;
-        int s = (size == null || size < 1 || size > 200) ? 50 : size;
-
-        Page<MaternalHealth> pg;
+        List<MaternalHealth> rows;
         if (from == null && to == null) {
-            pg = repo.findByCoupleIdOrderByRecordDateDescCreatedAtDesc(coupleId, PageRequest.of(p, s));
+            rows = repo.findByCoupleIdOrderByRecordDateDescCreatedAtDesc(coupleId);
         } else {
             LocalDate start = (from != null) ? from : LocalDate.of(1970, 1, 1);
             LocalDate end   = (to   != null) ? to   : LocalDate.of(9999, 12, 31);
-            pg = repo.findByCoupleIdAndRecordDateBetweenOrderByRecordDateDescCreatedAtDesc(
-                    coupleId, start, end, PageRequest.of(p, s));
+            rows = repo.findByCoupleIdAndRecordDateBetweenOrderByRecordDateDescCreatedAtDesc(
+                    coupleId, start, end);
         }
 
-        ZoneOffset utc = ZoneOffset.UTC;
-        List<com.example.helloworld.healthserver.dto.MHDtos.MhListResponse.Item> items = pg.getContent().stream().map(mh ->
+        var utc = java.time.ZoneOffset.UTC;
+        var items = rows.stream().map(mh ->
                 new com.example.helloworld.healthserver.dto.MHDtos.MhListResponse.Item(
                         mh.getId(),
                         mh.getRecordDate().toString(),
                         safe(mh.getWeight()),
                         formatBp(mh.getMaxBloodPressure(), mh.getMinBloodPressure()),
                         mh.getBloodSugar(),
-                        (mh.getCreatedAt() != null ? mh.getCreatedAt() : Instant.now()).atOffset(utc)
+                        (mh.getCreatedAt() != null ? mh.getCreatedAt() : java.time.Instant.now()).atOffset(utc)
                 )
         ).toList();
 
-        var meta = new com.example.helloworld.healthserver.dto.MHDtos.MhListResponse.PageMeta(
-                pg.getNumber(), pg.getSize(), pg.getTotalElements(), pg.getTotalPages(), pg.hasNext()
-        );
-
-        return new com.example.helloworld.healthserver.dto.MHDtos.MhListResponse(items, meta);
+        return new com.example.helloworld.healthserver.dto.MHDtos.MhListResponse(items);
     }
 }
