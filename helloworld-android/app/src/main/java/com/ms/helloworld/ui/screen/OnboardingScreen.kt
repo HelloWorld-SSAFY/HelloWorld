@@ -3,7 +3,17 @@ package com.ms.helloworld.ui.screen
 import android.util.Log
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -40,6 +50,8 @@ import com.ms.helloworld.ui.theme.MainColor
 import com.ms.helloworld.viewmodel.OnboardingState
 import com.ms.helloworld.viewmodel.OnboardingViewModel
 import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.YearMonth
 
 data class OnboardingScreen(
     val title: String,
@@ -107,8 +119,7 @@ fun OnboardingScreens(
         label = "content_alpha"
     )
 
-    // API 호출 성공 시 홈 화면으로 이동 (주석처리)
-    /*
+    // API 호출 성공 시 홈 화면으로 이동
     LaunchedEffect(state.submitSuccess) {
         if (state.submitSuccess) {
             navController.navigate(Screen.HomeScreen.route) {
@@ -116,7 +127,6 @@ fun OnboardingScreens(
             }
         }
     }
-    */
 
     // 에러 메시지 표시
     state.errorMessage?.let { error ->
@@ -161,7 +171,28 @@ fun OnboardingScreens(
 
             // 다음/시작하기 버튼
             val isLastPage = pagerState.currentPage == screens.size - 1
-            val isButtonEnabled = true // 항상 활성화
+            val isButtonEnabled = if (isLastPage) {
+                // 로딩 중이면 비활성화
+                !state.isLoading && when (state.selectedGender) {
+                    "엄마" -> {
+                        state.nickname.isNotBlank() &&
+                        state.age.isNotBlank() &&
+                        state.selectedGender.isNotBlank() &&
+                        state.isChildbirth != null &&
+                        state.menstrualDate.isNotBlank() &&
+                        state.menstrualCycle.isNotBlank()
+                    }
+                    "아빠" -> {
+                        state.nickname.isNotBlank() &&
+                        state.age.isNotBlank() &&
+                        state.selectedGender.isNotBlank() &&
+                        state.invitationCode.isNotBlank()
+                    }
+                    else -> false
+                }
+            } else {
+                true // 마지막 페이지가 아니면 항상 활성화
+            }
 
 
             // 다음 버튼 - 하단에 고정
@@ -169,10 +200,8 @@ fun OnboardingScreens(
                 onClick = {
                     scope.launch {
                         if (isLastPage) {
-                            // API 호출 없이 바로 홈화면으로 이동
-                            navController.navigate(Screen.HomeScreen.route) {
-                                popUpTo(Screen.OnboardingScreens.route) { inclusive = true }
-                            }
+                            // 회원 정보 업데이트 API 호출
+                            viewModel.submitUserInfo()
                         } else {
                             pagerState.animateScrollToPage(
                                 pagerState.currentPage + 1,
@@ -193,9 +222,13 @@ fun OnboardingScreens(
                 enabled = isButtonEnabled
             ) {
                 Text(
-                    text = if (isLastPage) "시작하기" else "다음",
+                    text = when {
+                        isLastPage && state.isLoading -> "처리 중..."
+                        isLastPage -> "시작하기"
+                        else -> "다음"
+                    },
                     fontSize = 16.sp,
-                    color = if (isButtonEnabled) Color.White else Color.White
+                    color = Color.White
                 )
             }
         }
@@ -283,16 +316,7 @@ fun UserInfoFormContent(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         item {
-            // 태명
-            FormFieldUpdated(
-                label = "태명",
-                value = state.nickname,
-                onValueChange = { viewModel.updateNickname(it) }
-            )
-        }
-
-        item {
-            // 성별
+            // 성별 - 첫 번째로 변경
             Column {
                 Text(
                     text = "성별",
@@ -317,58 +341,143 @@ fun UserInfoFormContent(
             }
         }
 
+        // 성별 선택 후에만 나머지 필드들 표시 (애니메이션 적용)
         item {
-            // 나이
-            FormFieldUpdated(
-                label = "나이",
-                value = state.age,
-                onValueChange = { viewModel.updateAge(it) }
-            )
-        }
-
-        item {
-            // 출산 경험 여부
-            Column {
-                Text(
-                    text = "출산 경험 여부",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.padding(bottom = 12.dp)
-                )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    SelectionButton(
-                        text = "있어요",
-                        isSelected = state.isFirstPregnancy == true,
-                        onClick = { viewModel.updatePregnancyExperience(true) }
+            AnimatedVisibility(
+                visible = state.selectedGender.isNotBlank(),
+                enter = fadeIn(animationSpec = tween(300)) + expandVertically(animationSpec = tween(300)),
+                exit = fadeOut(animationSpec = tween(300)) + shrinkVertically(animationSpec = tween(300))
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // 태명
+                    FormFieldUpdated(
+                        label = "태명",
+                        value = state.nickname,
+                        onValueChange = { viewModel.updateNickname(it) }
                     )
-                    SelectionButton(
-                        text = "없어요",
-                        isSelected = state.isFirstPregnancy == false,
-                        onClick = { viewModel.updatePregnancyExperience(false) }
+
+                    // 닉네임 미리보기
+                    if (state.nickname.isNotBlank() && state.selectedGender.isNotBlank()) {
+                        NicknamePreview(
+                            nickname = state.nickname,
+                            gender = state.selectedGender
+                        )
+                    }
+
+                    // 나이
+                    FormFieldUpdated(
+                        label = "나이",
+                        value = state.age,
+                        onValueChange = { viewModel.updateAge(it) }
                     )
                 }
             }
         }
 
+        // 엄마만 보이는 필드들 (애니메이션 적용)
         item {
-            // 마지막 생리일
-            FormFieldUpdated(
-                label = "마지막 생리일",
-                value = state.lastMenstrualDate,
-                onValueChange = { viewModel.updateLastMenstrualDate(it) },
-                isDateField = true
-            )
+            AnimatedVisibility(
+                visible = state.selectedGender == "엄마",
+                enter = fadeIn(animationSpec = tween(300)) + expandVertically(animationSpec = tween(300)),
+                exit = fadeOut(animationSpec = tween(300)) + shrinkVertically(animationSpec = tween(300))
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // 출산 경험 여부
+                    Column {
+                        Text(
+                            text = "출산 경험 여부",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(bottom = 12.dp)
+                        )
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            SelectionButton(
+                                text = "있어요",
+                                isSelected = state.isChildbirth == true,
+                                onClick = { viewModel.updateChildbirthStatus(true) }
+                            )
+                            SelectionButton(
+                                text = "없어요",
+                                isSelected = state.isChildbirth == false,
+                                onClick = { viewModel.updateChildbirthStatus(false) }
+                            )
+                        }
+                    }
+
+                    // 마지막 생리일
+                    FormFieldUpdated(
+                        label = "마지막 생리일",
+                        value = state.menstrualDate,
+                        onValueChange = { viewModel.updateMenstrualDate(it) },
+                        isDateField = true
+                    )
+
+                    // 생리 주기
+                    FormFieldUpdated(
+                        label = "생리 주기(일)",
+                        value = state.menstrualCycle,
+                        onValueChange = { viewModel.updateMenstrualCycle(it) }
+                    )
+
+                    // 계산된 임신 주차 표시
+                    AnimatedVisibility(
+                        visible = state.calculatedPregnancyWeek > 0,
+                        enter = fadeIn(animationSpec = tween(300)),
+                        exit = fadeOut(animationSpec = tween(300))
+                    ) {
+                        Column {
+                            Text(
+                                text = "계산된 임신 주차",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            )
+
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp)
+                                    .background(
+                                        Color(0xFFF5F5F5),
+                                        RoundedCornerShape(8.dp)
+                                    )
+                                    .border(
+                                        1.dp,
+                                        Color(0xFFE0E0E0),
+                                        RoundedCornerShape(8.dp)
+                                    )
+                                    .padding(horizontal = 16.dp),
+                                contentAlignment = Alignment.CenterStart
+                            ) {
+                                Text(
+                                    text = "${state.calculatedPregnancyWeek}주",
+                                    fontSize = 14.sp,
+                                    color = MainColor,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
 
+        // 아빠만 보이는 필드들 (애니메이션 적용)
         item {
-            // 생리주기(일)
-            FormFieldUpdated(
-                label = "생리주기(일)",
-                value = state.menstrualCycle,
-                onValueChange = { viewModel.updateMenstrualCycle(it) }
-            )
+            AnimatedVisibility(
+                visible = state.selectedGender == "아빠",
+                enter = fadeIn(animationSpec = tween(300)) + expandVertically(animationSpec = tween(300)),
+                exit = fadeOut(animationSpec = tween(300)) + shrinkVertically(animationSpec = tween(300))
+            ) {
+                // 초대 코드
+                FormFieldUpdated(
+                    label = "초대 코드",
+                    value = state.invitationCode,
+                    onValueChange = { viewModel.updateInvitationCode(it) }
+                )
+            }
         }
     }
 
@@ -382,13 +491,16 @@ fun FormFieldUpdated(
     isDateField: Boolean = false
 ) {
     var isFocused by remember { mutableStateOf(false) }
+    var showDatePicker by remember { mutableStateOf(false) }
 
     // 플레이스홀더 텍스트 정의
     val placeholder = when (label) {
         "태명" -> "태명을 입력해주세요"
         "나이" -> "나이를 입력해주세요"
         "마지막 생리일" -> "연도-월-일"
+        "임신 주차" -> "주차를 입력해주세요"
         "생리주기(일)" -> "일수를 입력해주세요"
+        "초대 코드" -> "초대 코드를 입력해주세요"
         else -> ""
     }
 
@@ -456,11 +568,24 @@ fun FormFieldUpdated(
                         imageVector = Icons.Default.DateRange,
                         contentDescription = "날짜 선택",
                         tint = Color(0xFF9E9E9E),
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier
+                            .size(20.dp)
+                            .clickable { showDatePicker = true }
                     )
                 }
             }
         }
+    }
+
+    // 날짜 선택 다이얼로그
+    if (showDatePicker) {
+        StepwiseDatePickerDialog(
+            onDateSelected = { dateString ->
+                onValueChange(dateString)
+                showDatePicker = false
+            },
+            onDismiss = { showDatePicker = false }
+        )
     }
 }
 
@@ -617,6 +742,233 @@ fun IconCard(
             modifier = Modifier.size(48.dp),
             tint = Color.Unspecified
         )
+    }
+}
+
+@Composable
+fun NicknamePreview(
+    nickname: String,
+    gender: String
+) {
+    val combinedNickname = "${nickname} ${gender}"
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                Color(0xFFF0F9FF), // 연한 파란색 배경
+                RoundedCornerShape(8.dp)
+            )
+            .border(
+                1.dp,
+                MainColor.copy(alpha = 0.3f),
+                RoundedCornerShape(8.dp)
+            )
+            .padding(12.dp)
+    ) {
+        Column {
+            Text(
+                text = "등록될 닉네임",
+                fontSize = 12.sp,
+                color = Color(0xFF666666),
+                fontWeight = FontWeight.Medium
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = combinedNickname,
+                fontSize = 14.sp,
+                color = MainColor,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+@Composable
+fun StepwiseDatePickerDialog(
+    onDateSelected: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var step by remember { mutableStateOf(1) } // 1: 연도, 2: 월, 3: 일
+    var selectedYear by remember { mutableStateOf(LocalDate.now().year) }
+    var selectedMonth by remember { mutableStateOf(LocalDate.now().monthValue) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = when (step) {
+                    1 -> "연도 선택"
+                    2 -> "월 선택"
+                    else -> "일 선택"
+                },
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            when (step) {
+                1 -> YearSelection(
+                    selectedYear = selectedYear,
+                    onYearSelected = { year ->
+                        selectedYear = year
+                        step = 2
+                    }
+                )
+                2 -> MonthSelection(
+                    selectedMonth = selectedMonth,
+                    onMonthSelected = { month ->
+                        selectedMonth = month
+                        step = 3
+                    }
+                )
+                3 -> DaySelection(
+                    year = selectedYear,
+                    month = selectedMonth,
+                    onDaySelected = { day ->
+                        val dateString = String.format("%04d-%02d-%02d", selectedYear, selectedMonth, day)
+                        onDateSelected(dateString)
+                    }
+                )
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            if (step > 1) {
+                TextButton(
+                    onClick = { step-- }
+                ) {
+                    Text("이전")
+                }
+            }
+        }
+    )
+}
+
+@Composable
+fun YearSelection(
+    selectedYear: Int,
+    onYearSelected: (Int) -> Unit
+) {
+    val currentYear = LocalDate.now().year
+    val years = (currentYear - 10..currentYear).toList()
+
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(3),
+        modifier = Modifier.height(300.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        items(years) { year ->
+            Box(
+                modifier = Modifier
+                    .height(50.dp)
+                    .clickable { onYearSelected(year) }
+                    .background(
+                        if (year == selectedYear) MainColor else Color.Transparent,
+                        RoundedCornerShape(8.dp)
+                    )
+                    .border(
+                        1.dp,
+                        if (year == selectedYear) MainColor else Color(0xFFE0E0E0),
+                        RoundedCornerShape(8.dp)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = year.toString(),
+                    fontSize = 14.sp,
+                    color = if (year == selectedYear) Color.White else Color.Black,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun MonthSelection(
+    selectedMonth: Int,
+    onMonthSelected: (Int) -> Unit
+) {
+    val months = listOf(
+        "1월", "2월", "3월", "4월", "5월", "6월",
+        "7월", "8월", "9월", "10월", "11월", "12월"
+    )
+
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(3),
+        modifier = Modifier.height(300.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        items(months.size) { index ->
+            val month = index + 1
+            Box(
+                modifier = Modifier
+                    .height(50.dp)
+                    .clickable { onMonthSelected(month) }
+                    .background(
+                        if (month == selectedMonth) MainColor else Color.Transparent,
+                        RoundedCornerShape(8.dp)
+                    )
+                    .border(
+                        1.dp,
+                        if (month == selectedMonth) MainColor else Color(0xFFE0E0E0),
+                        RoundedCornerShape(8.dp)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = months[index],
+                    fontSize = 14.sp,
+                    color = if (month == selectedMonth) Color.White else Color.Black,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun DaySelection(
+    year: Int,
+    month: Int,
+    onDaySelected: (Int) -> Unit
+) {
+    val yearMonth = YearMonth.of(year, month)
+    val daysInMonth = yearMonth.lengthOfMonth()
+    val days = (1..daysInMonth).toList()
+
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(7),
+        modifier = Modifier.height(300.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        items(days) { day ->
+            Box(
+                modifier = Modifier
+                    .height(40.dp)
+                    .clickable { onDaySelected(day) }
+                    .background(
+                        Color.Transparent,
+                        RoundedCornerShape(8.dp)
+                    )
+                    .border(
+                        1.dp,
+                        Color(0xFFE0E0E0),
+                        RoundedCornerShape(8.dp)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = day.toString(),
+                    fontSize = 12.sp,
+                    color = Color.Black,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
     }
 }
 

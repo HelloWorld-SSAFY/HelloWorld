@@ -189,7 +189,7 @@ class CalendarViewModel @Inject constructor(
 
                 if (result.isSuccess) {
                     val eventsResponse = result.getOrNull()
-                    val eventsByDate = eventsResponse?.events?.groupBy { event ->
+                    val eventsByDate = eventsResponse?.content?.groupBy { event ->
                         try {
                             // ISO 8601 날짜에서 YYYY-MM-DD 추출 (더 안전한 처리)
                             if (event.startAt.length >= 10) {

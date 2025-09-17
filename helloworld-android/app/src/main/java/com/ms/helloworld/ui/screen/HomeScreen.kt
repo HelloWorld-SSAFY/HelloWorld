@@ -16,7 +16,7 @@ import com.ms.helloworld.ui.components.*
 import com.ms.helloworld.dto.response.CalendarPost
 import com.ms.helloworld.dto.response.MomProfile
 import com.ms.helloworld.viewmodel.HomeViewModel
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.runtime.collectAsState
 import androidx.navigation.NavHostController
 import com.ms.helloworld.navigation.Screen
@@ -26,7 +26,7 @@ import java.time.LocalDate
 @Composable
 fun HomeScreen(
     navController: NavHostController,
-    viewModel: HomeViewModel = viewModel()
+    viewModel: HomeViewModel = hiltViewModel()
 ) {
     val backgroundColor = Color(0xFFFFFFFF)
     var posts by remember { mutableStateOf(mapOf<String, List<CalendarPost>>()) }

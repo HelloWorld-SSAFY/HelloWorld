@@ -98,6 +98,9 @@ dependencies {
     implementation ("androidx.credentials:credentials-play-services-auth:1.5.0")
     implementation ("com.google.android.libraries.identity.googleid:googleid:1.1.1")
 
+    // Kakao Login - 임시 주석 처리
+    // implementation("com.kakao.sdk:v2-user:2.20.1")
+
     // DataStore
     implementation("androidx.datastore:datastore-preferences:1.0.0")
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
