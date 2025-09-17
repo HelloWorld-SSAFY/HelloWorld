@@ -1,5 +1,13 @@
+
 spring:
   application:
     name: "weekly-server"
-#  config:
-#    import: "configserver:"
+  config:
+    # Config Server에서 원격 설정을 끌어오도록 지시 (필수)
+    import: "configserver:"
+
+  cloud:
+    # K8s 서비스 DNS로 Config Server 위치 명시
+    config:
+      uri: http://configserver-svc:8888
+      enabled: true

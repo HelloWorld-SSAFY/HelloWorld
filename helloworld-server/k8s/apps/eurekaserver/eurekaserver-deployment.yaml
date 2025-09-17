@@ -32,6 +32,15 @@ spec:
 
         # ==== Eureka 3노드 피어 복제 핵심 ====
         env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+
         # Pod 이름을 가져와 hostname 구성
         - name: HOSTNAME
           valueFrom: { fieldRef: { fieldPath: metadata.name } }
