@@ -38,6 +38,7 @@ public class AuthController {
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     required = true,
                     content = @Content(
+                            mediaType="application/json",
                             schema = @Schema(implementation = LoginRequest.class),
                             examples = @ExampleObject(
                                     name = "예시",
