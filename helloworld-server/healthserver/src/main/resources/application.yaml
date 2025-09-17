@@ -1,53 +1,13 @@
-server:
-  port: 8080
+
 spring:
   application:
     name: "health-server"
+  config:
+    # Config Server에서 원격 설정을 끌어오도록 지시 (필수)
+    import: "configserver:"
+
   cloud:
+    # K8s 서비스 DNS로 Config Server 위치 명시
     config:
-      enabled: true
       uri: http://configserver-svc:8888
-
-  datasource:
-    url: ${SPRING_DATASOURCE_URL}
-    username: ${SPRING_DATASOURCE_USERNAME}
-    password: ${SPRING_DATASOURCE_PASSWORD}
-    driver-class-name: org.postgresql.Driver
-  jpa:
-    hibernate:
-      ddl-auto: update   # create, update, validate, none 중 선택
-    properties:
-      hibernate:
-        format_sql: true
-        show_sql: true
-    database-platform: org.hibernate.dialect.PostgreSQLDialect
-
-springdoc:
-  api-docs:
-    path: /v3/api-docs
-  swagger-ui:
-    path: /swagger-ui
-
-eureka:
-  client:
-    enabled: true  # Eureka 클라이언트 활성화
-    service-url:
-      defaultZone: http://eurekaserver-svc:8761/eureka/
-
-
-management:
-  endpoint:
-    health:
-      probes:
-        enabled: true
-  endpoints:
-    web:
-      exposure:
-        include: health,info
-  health:
-    probes:
-      enabled: true
-    livenessstate:
-      enabled: true
-    readinessstate:
       enabled: true
