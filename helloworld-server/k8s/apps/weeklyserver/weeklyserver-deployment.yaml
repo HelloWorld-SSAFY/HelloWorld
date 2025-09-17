@@ -1,0 +1,92 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: weeklyserver
+  namespace: apps
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
+  selector:
+    matchLabels: { app: weeklyserver }
+  template:
+    metadata:
+      labels: { app: weeklyserver }
+    spec:
+      imagePullSecrets:
+      - name: dockerhub-cred
+      terminationGracePeriodSeconds: 30
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector: { matchLabels: { app: weeklyserver } }
+      containers:
+      - name: weeklyserver
+        image: docker.io/opensongce/msa:weeklyserver-latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+
+        env:
+
+        # Datasource (Service DNS, Secret에서 비번 주입)
+        - name: SPRING_DATASOURCE_URL
+          value: "jdbc:postgresql://weekly-postgres-svc.apps.svc.cluster.local:5432/weekly_db"
+        - name: SPRING_DATASOURCE_USERNAME
+          value: "postgres"
+        - name: SPRING_DATASOURCE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_PASSWORD
+
+        # Actuator가 있다면 /actuator/health 사용, 없으면 / 로 교체
+        readinessProbe:
+          httpGet: { path: /actuator/health, port: 8080 }
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          failureThreshold: 6
+        livenessProbe:
+          httpGet: { path: /actuator/health, port: 8080 }
+          initialDelaySeconds: 40
+          periodSeconds: 10
+          failureThreshold: 6
+
+        lifecycle:
+          preStop:
+            exec: { command: ["sh","-lc","sleep 5"] }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: weeklyserver-pdb
+  namespace: apps
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: weeklyserver
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: weeklyserver
+  namespace: apps
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: weeklyserver
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 60
