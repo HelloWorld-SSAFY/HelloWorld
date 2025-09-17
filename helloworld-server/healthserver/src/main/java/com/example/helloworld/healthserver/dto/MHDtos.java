@@ -35,8 +35,7 @@ public final class MHDtos {
     ) {}
 
     public record MhListResponse(
-            List<Item> records,
-            PageMeta page
+            List<Item> records
     ) {
         public record Item(
                 Long maternal_id,

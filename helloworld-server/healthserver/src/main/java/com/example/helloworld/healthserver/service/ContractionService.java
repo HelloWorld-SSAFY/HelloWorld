@@ -10,7 +10,7 @@ import org.springframework.data.domain.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
-
+import java.util.List;
 import java.time.Instant;
 
 import static org.springframework.http.HttpStatus.NOT_FOUND;
@@ -46,15 +46,12 @@ public class ContractionService {
     }
 
     @Transactional(readOnly = true)
-    public CsListResponse list(Long coupleId, Instant from, Instant to, int page, int size) {
-        Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 200));
-        Page<ContractionSession> pg;
-        if (from != null && to != null) {
-            pg = repo.findByCoupleIdAndStartTimeBetweenOrderByStartTimeDesc(coupleId, from, to, pageable);
-        } else {
-            pg = repo.findByCoupleIdOrderByStartTimeDesc(coupleId, pageable);
-        }
-        var items = pg.getContent().stream().map(s ->
+    public CsListResponse list(Long coupleId, Instant from, Instant to) {
+        List<ContractionSession> list = (from != null && to != null)
+                ? repo.findByCoupleIdAndStartTimeBetweenOrderByStartTimeDesc(coupleId, from, to)
+                : repo.findByCoupleIdOrderByStartTimeDesc(coupleId);
+
+        var items = list.stream().map(s ->
                 new CsListResponse.Item(
                         s.getId(),
                         s.getStartTime(),
@@ -72,7 +69,6 @@ public class ContractionService {
         var cs = repo.findById(sessionId)
                 .filter(s -> s.getCoupleId().equals(coupleId))
                 .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Session not found"));
-        cs.markAlertSent(); // ← 도메인 메서드로 변경
-        // JPA dirty checking으로 자동 업데이트됨
+        cs.markAlertSent();
     }
 }
