@@ -64,23 +64,30 @@ public class RecordsController {
         return ResponseEntity.status(HttpStatus.CREATED).body(res);
     }
 
-    @Operation(summary = "진통 세션 목록", description = "기간 없으면 최근 페이지네이션")
+    @Operation(summary = "진통 세션 목록", description = "기간 없으면 전체 내림차순")
     @GetMapping("/contractions")
     public ResponseEntity<CsListResponse> listContractions(
             @RequestParam Long coupleId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "50") int size
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to
     ) {
-        return ResponseEntity.ok(contractionService.list(coupleId, from, to, page, size));
+        return ResponseEntity.ok(contractionService.list(coupleId, from, to));
     }
 
     // ---------- MATERNAL HEALTH ----------
-    @Operation(summary = "임산부 건강 최신 조회")
-    @GetMapping("/maternal-health/latest")
-    public ResponseEntity<MhGetResponse> getLatest(@RequestParam Long coupleId) {
-        return ResponseEntity.ok(mhService.getLatest(coupleId));
+//    @Operation(summary = "임산부 건강 최신 조회")
+//    @GetMapping("/maternal-health/latest")
+//    public ResponseEntity<MhGetResponse> getLatest(@RequestParam Long coupleId) {
+//        return ResponseEntity.ok(mhService.getLatest(coupleId));
+//    }
+
+    @Operation(summary = "임산부 건강 단건 조회", description = "maternalId(숫자)로 해당 기록을 조회")
+    @GetMapping("/maternal-health/{maternalId}")
+    public ResponseEntity<MhGetResponse> getMaternalById(
+            @RequestParam Long coupleId,
+            @PathVariable Long maternalId
+    ) {
+        return ResponseEntity.ok(mhService.getById(coupleId, maternalId));
     }
 
     @Operation(summary = "임산부 건강 생성", description = "서버의 app.zone(기본 Asia/Seoul) 오늘 날짜로 저장")
@@ -113,15 +120,13 @@ public class RecordsController {
         return ResponseEntity.noContent().build();
     }
 
-    @Operation(summary = "임산부 건강 목록", description = "기본 내림차순. page=0,size=50 기본값")
+    @Operation(summary = "임산부 건강 목록", description = "기본 내림차순. 페이지네이션 없음")
     @GetMapping("/maternal-health")
     public ResponseEntity<MhListResponse> listMH(
             @RequestParam Long coupleId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
-            @RequestParam(required = false, defaultValue = "0") Integer page,
-            @RequestParam(required = false, defaultValue = "50") Integer size
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
-        return ResponseEntity.ok(mhService.list(coupleId, from, to, page, size));
+        return ResponseEntity.ok(mhService.list(coupleId, from, to));
     }
 }
