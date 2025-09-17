@@ -1,4 +1,3 @@
-// BootReceiver.kt - 간소화된 부트 리시버
 package com.ms.wearos.receiver
 
 import android.content.BroadcastReceiver
@@ -7,11 +6,9 @@ import android.content.Intent
 import android.util.Log
 import com.ms.wearos.service.HealthServiceHelper
 
-class BootReceiver : BroadcastReceiver() {
+private const val TAG = "HealthBootReceiver"
 
-    companion object {
-        private const val TAG = "BootReceiver"
-    }
+class BootReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         Log.d(TAG, "Received broadcast: ${intent.action}")
@@ -28,49 +25,52 @@ class BootReceiver : BroadcastReceiver() {
             }
 
             Intent.ACTION_PACKAGE_REPLACED -> {
-                Log.d(TAG, "Package replaced")
-                handlePackageReplaced(context)
+                val packageName = intent.data?.schemeSpecificPart
+                if (packageName == context.packageName) {
+                    Log.d(TAG, "This app package replaced")
+                    handlePackageReplaced(context)
+                }
             }
         }
     }
 
     private fun handleBootCompleted(context: Context) {
-        // 부팅 완료 시 자동으로 건강 데이터 수집 서비스 시작 여부 확인
-        val sharedPref = context.getSharedPreferences("health_settings", Context.MODE_PRIVATE)
-        val autoStartEnabled = sharedPref.getBoolean("auto_start_on_boot", false)
+        // 부팅 완료 시 저장된 토글 상태 확인하여 서비스 시작
+        val sharedPref = context.getSharedPreferences("heart_rate_prefs", Context.MODE_PRIVATE)
+        val toggleEnabled = sharedPref.getBoolean("heart_rate_toggle", false)
 
-        Log.d(TAG, "Auto-start setting: $autoStartEnabled")
+        Log.d(TAG, "Boot completed - Toggle state: $toggleEnabled")
 
-        if (autoStartEnabled) {
-            Log.d(TAG, "Auto-starting health data service")
+        if (toggleEnabled) {
+            Log.d(TAG, "Auto-starting heart rate service on boot")
             try {
                 HealthServiceHelper.startService(context)
-                Log.d(TAG, "Health service started successfully on boot")
+                Log.d(TAG, "Heart rate service started successfully on boot")
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to start health service on boot", e)
+                Log.e(TAG, "Failed to start heart rate service on boot", e)
             }
         } else {
-            Log.d(TAG, "Auto-start is disabled")
+            Log.d(TAG, "Heart rate toggle is disabled, not starting service")
         }
     }
 
     private fun handlePackageReplaced(context: Context) {
-        // 앱 업데이트 후 필요한 초기화 작업
-        Log.d(TAG, "App updated, performing initialization")
+        // 앱 업데이트 후 저장된 토글 상태 확인하여 서비스 재시작
+        Log.d(TAG, "App updated, checking saved toggle state")
 
-        // 기존 설정 유지하면서 필요한 경우 서비스 재시작
-        val sharedPref = context.getSharedPreferences("health_settings", Context.MODE_PRIVATE)
-        val wasRunning = sharedPref.getBoolean("service_was_running", false)
+        val sharedPref = context.getSharedPreferences("heart_rate_prefs", Context.MODE_PRIVATE)
+        val toggleEnabled = sharedPref.getBoolean("heart_rate_toggle", false)
+        val serviceWasRunning = sharedPref.getBoolean("service_was_running", false)
 
-        Log.d(TAG, "Service was running before update: $wasRunning")
+        Log.d(TAG, "After update - Toggle: $toggleEnabled, Service was running: $serviceWasRunning")
 
-        if (wasRunning) {
-            Log.d(TAG, "Restarting health service after update")
+        if (toggleEnabled || serviceWasRunning) {
+            Log.d(TAG, "Restarting heart rate service after app update")
             try {
                 HealthServiceHelper.startService(context)
-                Log.d(TAG, "Health service restarted successfully after update")
+                Log.d(TAG, "Heart rate service restarted successfully after update")
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to restart health service after update", e)
+                Log.e(TAG, "Failed to restart heart rate service after update", e)
             }
         } else {
             Log.d(TAG, "Service was not running before update, not restarting")

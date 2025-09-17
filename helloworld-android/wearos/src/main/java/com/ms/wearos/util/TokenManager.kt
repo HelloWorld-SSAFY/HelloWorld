@@ -1,6 +1,7 @@
-package com.ms.helloworld.util
+package com.ms.wearos.util
 
 import android.util.Base64
+import android.util.Log
 import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Singleton
