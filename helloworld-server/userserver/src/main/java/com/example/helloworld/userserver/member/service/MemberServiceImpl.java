@@ -17,6 +17,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.time.LocalDate;
 import java.util.Locale;
 
 import java.util.Optional;
@@ -141,16 +142,18 @@ public class MemberServiceImpl implements MemberService {
         // couple block (없을 수 있음)
         MemberProfileResponse.CoupleBlock coupleBlock = null;
         if (couple != null) {
-            boolean iAmA = couple.getUserA() != null && couple.getUserA().getId().equals(me.getId());
-            String role = iAmA ? "A" : "B";
-            boolean isActive = couple.getUserB() != null; // 남성이 연결되었는지
-            // 파트너 계산
-            Member partner = iAmA ? couple.getUserB() : couple.getUserA();
+            Long userAId = (couple.getUserA() != null) ? couple.getUserA().getId() : null;
+            Long userBId = (couple.getUserB() != null) ? couple.getUserB().getId() : null;
+
+            // couple.getDueDate() 타입에 맞춰 변환 (Timestamp라면 toLocalDate 사용, 이미 LocalDate면 그대로)
+            LocalDate dueDate = MemberProfileResponse.toLocalDate(couple.getDueDate());
 
             coupleBlock = new MemberProfileResponse.CoupleBlock(
                     couple.getId(),
+                    userAId,
+                    userBId,
                     couple.getPregnancyWeek(),
-                    MemberProfileResponse.toLocalDate(couple.getDueDate())
+                    dueDate
             );
         }
 

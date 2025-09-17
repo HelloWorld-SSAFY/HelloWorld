@@ -43,7 +43,7 @@ public class AuthController {
                                     name = "예시",
                                     value = """
                                             {
-                                              "idToken": "eyJhbGciOiJSUzI1NiIsImtpZCI6..."
+                                              "idToken": "eyJhbGciOiJSUzI1NiIsImtpZCI6...",
                                             }
                                             """
                             )
@@ -58,8 +58,7 @@ public class AuthController {
                                             {
                                               "accessToken": "at.jwt.token",
                                               "refreshToken": "rt.jwt.token",
-                                              "email": "user@gmail.com",
-                                              "nickname": "복순자"
+                                              "gender" : null
                                             }
                                             """
                             ))),

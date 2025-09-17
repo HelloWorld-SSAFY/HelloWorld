@@ -10,13 +10,16 @@ public record LoginResponse(
         @Schema(description = "액세스 토큰", example = "at.jwt.token")
         String accessToken,
         @Schema(description = "리프레시 토큰", example = "rt.jwt.token")
-        String refreshToken
+        String refreshToken,
+        @Schema(description = "성별", example = "null")
+                String gender
 ) {
     public static LoginResponse from(LoginResult result){
         return new LoginResponse(
                 result.memberId(),
                 result.accessToken(),
-                result.refreshToken()
+                result.refreshToken(),
+                result.gender()
         );
     }
 }

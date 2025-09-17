@@ -1,7 +1,7 @@
 package com.example.helloworld.healthserver.entity;
 
 
-import jakarta.persistence.Entity;
+import jakarta.persistence.*;
 import lombok.*;
 import jakarta.persistence.Column;
 import jakarta.persistence.GeneratedValue;

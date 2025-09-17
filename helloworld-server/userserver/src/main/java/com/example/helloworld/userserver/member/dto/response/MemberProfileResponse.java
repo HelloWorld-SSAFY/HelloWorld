@@ -29,6 +29,8 @@ public record MemberProfileResponse(
     @Schema(name = "CoupleBlock")
     public record CoupleBlock(
             @JsonProperty("couple_id") Long coupleId,
+            @JsonProperty("user_a_id") Long userAId,
+            @JsonProperty("user_b_id") Long userBId,
             @JsonProperty("pregnancy_week") Integer pregnancyWeek,
             @JsonProperty("due_date") LocalDate dueDate     // YYYY-MM-DD로 변환해 내려줌
     ) {}
