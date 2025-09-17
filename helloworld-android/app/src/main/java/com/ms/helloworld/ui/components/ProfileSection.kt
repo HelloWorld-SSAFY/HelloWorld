@@ -39,7 +39,7 @@ fun ProfileSection(
 
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = "${momProfile.nickname}",
+                text = "${momProfile.nickname}의 임신 정보",
                 fontSize = 14.sp,
                 color = Color.Gray
             )

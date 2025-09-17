@@ -4,14 +4,17 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ms.helloworld.dto.response.MomProfile
 import com.ms.helloworld.repository.MomProfileRepository
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import javax.inject.Inject
 
-class HomeViewModel(
-    private val momProfileRepository: MomProfileRepository = MomProfileRepository()
+@HiltViewModel
+class HomeViewModel @Inject constructor(
+    private val momProfileRepository: MomProfileRepository
 ) : ViewModel() {
     
     private val _momProfile = MutableStateFlow(
@@ -35,7 +38,9 @@ class HomeViewModel(
             try {
                 _isLoading.value = true
                 val profile = momProfileRepository.getMomProfile()
-                _momProfile.value = profile
+                if (profile != null) {
+                    _momProfile.value = profile
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {
