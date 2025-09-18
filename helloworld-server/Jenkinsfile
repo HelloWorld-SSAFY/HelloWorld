@@ -96,7 +96,7 @@ spec:
     stage('Detect changed (code/k8s/ingress)') {
       steps {
         script {
-          contatiner('kubectl') {
+          container('kubectl') {
             sh '''
               set -e
               # 기준: 최근 성공 커밋(없으면 최초 커밋)
