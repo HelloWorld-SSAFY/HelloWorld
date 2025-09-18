@@ -74,7 +74,12 @@ spec:
       steps {
         checkout scm
         container('kubectl') {
-          sh 'git --version; git rev-parse --short HEAD'
+          sh '''
+            set -e
+            git --version
+            git config --global --add safe.directory "$WORKSPACE" || true
+            git rev-parse --short HEAD
+          '''
         }
       }
     }
@@ -218,7 +223,7 @@ done
             container('kubectl') {
                 sh '''
 bash -euo pipefail -c '
-SHA=$(git -C helloworld-server rev-parse --short HEAD)
+SHA="${GIT_COMMIT:0:7}"
 ns="${K8S_NS}"
 
 for svc in ${DEPLOY_SERVICES}; do
