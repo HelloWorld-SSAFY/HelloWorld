@@ -38,7 +38,7 @@ spec:
       imagePullPolicy: IfNotPresent
       securityContext: { runAsUser: 0 }
       command: ["sh","-lc","set -eux; \
-        apk add --no-cache curl ca-certificates bash; \
+        apk add --no-cache curl ca-certificates bash git; \
         arch=$(uname -m); case $arch in x86_64) arch=amd64 ;; aarch64) arch=arm64 ;; *) echo unsupported: $arch; exit 1 ;; esac; \
         curl -fsSL -o /usr/local/bin/kubectl https://dl.k8s.io/release/v1.33.4/bin/linux/${arch}/kubectl; \
         chmod +x /usr/local/bin/kubectl; \
@@ -207,6 +207,18 @@ done
         }
       }
     }
+
+    stage('Compute SHA') {
+      steps {
+        container('git') {
+          script {
+            env.GIT_SHA = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+            echo "GIT_SHA=${env.GIT_SHA}"
+          }
+        }
+      }
+    }
+
 
     stage('Deploy to k3s (services)') {
         when { expression { return (env.DEPLOY_SERVICES ?: "").trim() } }
