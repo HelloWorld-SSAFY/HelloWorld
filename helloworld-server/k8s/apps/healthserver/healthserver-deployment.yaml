@@ -4,7 +4,7 @@ metadata:
   name: healthserver
   namespace: apps
 spec:
-  replicas: 3
+  replicas: 2
   strategy:
     type: RollingUpdate
     rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
@@ -74,7 +74,7 @@ metadata:
   name: healthserver-pdb
   namespace: apps
 spec:
-  minAvailable: 2
+  minAvailable: 1
   selector:
     matchLabels:
       app: healthserver
@@ -89,7 +89,7 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: healthserver
-  minReplicas: 3
+  minReplicas: 2
   maxReplicas: 10
   metrics:
   - type: Resource
