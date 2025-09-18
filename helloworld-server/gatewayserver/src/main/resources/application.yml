@@ -5,13 +5,50 @@ spring:
   application:
     name: gatewayserver
   # 설정 파일을 외부의 Config Server에서 불러오겠다.
-  config:
-    import: "configserver:" #Spring Cloud Config 서버를 사용하겠다.
+#  config:
+#    import: "configserver:" #Spring Cloud Config 서버를 사용하겠다.
+#  cloud:
+#    config:
+#      discovery:
+#        enabled: true
+#        service-id: configserver
   cloud:
-    config:
-      discovery:
-        enabled: true
-        service-id: configserver
+    gateway:
+      routes:
+        - id: calendar
+          uri: http://calendar-diary-server-svc.apps.svc.cluster.local:8080
+          predicates:
+            - Path=/calendar/**
+          filters:
+            - StripPrefix=1
+            - AddRequestHeader=X-Forwarded-Prefix, /calendar
+            - AddRequestHeader=X-Forwarded-Proto, http   # https면 https
+
+
+        - id: user
+          uri: http://userserver-svc.apps.svc.cluster.local:8080
+          predicates:
+            - Path=/user/**
+          filters:
+            - StripPrefix=1
+            - AddRequestHeader=X-Forwarded-Prefix, /user
+            - AddRequestHeader=X-Forwarded-Proto, http   # https면 https
+
+
+
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui                # 공용 UI 경로 (원하면 /docs 로 바꿔도 됨)
+    display-request-duration: true
+    urls:
+      - name: calendar
+        url: /calendar/v3/api-docs
+
+      - name: user
+        url: /user/v3/api-docs
+
+
 
 #  cloud:
 #    config:
@@ -19,10 +56,10 @@ spring:
 #         uri: ${CONFIG_SERVER_URL}:8888 # 환경변수로 설정
 
 
-eureka:
-  client:
-    service-url:
-      defaultZone: http://localhost:8761/eureka
+#eureka:
+#  client:
+#    service-url:
+#      defaultZone: http://eurekaserver-svc:8761/eureka
 
 
 #springdoc:
@@ -35,3 +72,20 @@ eureka:
 #        #        url: ${CONFIG_SERVER_URL}:8082/v3/api-docs
 #        url: /tangram-server/v3/api-docs
 #      - name: user-server
+
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  health:
+    probes:
+      enabled: true
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
