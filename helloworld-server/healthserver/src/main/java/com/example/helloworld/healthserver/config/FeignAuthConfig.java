@@ -1,6 +1,5 @@
 package com.example.helloworld.healthserver.config;
 
-
 import feign.RequestInterceptor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -15,10 +14,8 @@ public class FeignAuthConfig {
         return template -> {
             var attrs = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
             if (attrs == null) return;
-            String auth = attrs.getRequest().getHeader("Authorization");
-            if (StringUtils.hasText(auth)) {
-                template.header("Authorization", auth);
-            }
+            String auth = attrs.getRequest().getHeader("Authorization"); // Bearer 토큰
+            if (StringUtils.hasText(auth)) template.header("Authorization", auth);
         };
     }
 }
