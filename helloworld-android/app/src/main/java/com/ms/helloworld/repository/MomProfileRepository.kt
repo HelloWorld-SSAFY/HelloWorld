@@ -24,6 +24,10 @@ class MomProfileRepository @Inject constructor(
         private const val TAG = "MomProfileRepository"
     }
 
+    suspend fun getUserInfo(): MemberProfileResponse {
+        return userApi.getUserInfo()
+    }
+
     suspend fun getMomProfile(): MomProfile? {
         return try {
             Log.d(TAG, "Making API call to getUserInfo")
@@ -85,8 +89,28 @@ class MomProfileRepository @Inject constructor(
 
     suspend fun updateCoupleInfo(request: CoupleUpdateRequest): MemberRegisterResponse? {
         return try {
-            userApi.updateCoupleInfo(request)
+            Log.d(TAG, "💑 커플 정보 업데이트 API 호출 시작")
+            Log.d(TAG, "Request: $request")
+            Log.d(TAG, "Request due_date: ${request.due_date}")
+            Log.d(TAG, "Request pregnancyWeek: ${request.pregnancyWeek}")
+
+            val response = userApi.updateCoupleInfo(request)
+            Log.d(TAG, "✅ 커플 정보 업데이트 API 응답 성공: $response")
+            response
         } catch (e: Exception) {
+            Log.e(TAG, "❌ 커플 정보 업데이트 API 실패", e)
+            Log.e(TAG, "Exception message: ${e.message}")
+            Log.e(TAG, "Exception type: ${e.javaClass.simpleName}")
+
+            if (e is retrofit2.HttpException) {
+                try {
+                    val errorBody = e.response()?.errorBody()?.string()
+                    Log.e(TAG, "HTTP Error Code: ${e.code()}")
+                    Log.e(TAG, "HTTP Error Body: $errorBody")
+                } catch (ioException: Exception) {
+                    Log.e(TAG, "Failed to read error body: ${ioException.message}")
+                }
+            }
             null
         }
     }

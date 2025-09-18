@@ -17,11 +17,13 @@ import androidx.navigation.compose.rememberNavController
 import com.ms.helloworld.navigation.MainNavigation
 import com.ms.helloworld.ui.theme.HelloWorldTheme
 import com.ms.helloworld.util.HealthConnectManager
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.Duration
 
 private const val TAG = "싸피_MainActivity"
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
     private lateinit var healthConnectManager: HealthConnectManager

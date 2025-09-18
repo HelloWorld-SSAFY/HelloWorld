@@ -4,6 +4,7 @@ import com.ms.helloworld.network.AuthInterceptor
 import com.ms.helloworld.network.TokenAuthenticator
 import com.ms.helloworld.network.api.AuthApi
 import com.ms.helloworld.network.api.CalendarApi
+import com.ms.helloworld.network.api.DiaryApi
 import com.ms.helloworld.network.api.UserApi
 import dagger.Module
 import dagger.Provides
@@ -79,5 +80,11 @@ object NetworkModule {
     @Singleton
     fun provideUserApi(retrofit: Retrofit): UserApi {
         return retrofit.create(UserApi::class.java)
+    }
+
+    @Provides
+    @Singleton
+    fun provideDiaryApi(retrofit: Retrofit): DiaryApi {
+        return retrofit.create(DiaryApi::class.java)
     }
 }

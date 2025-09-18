@@ -27,6 +27,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import com.ms.helloworld.ui.components.CustomTopAppBar
+import com.ms.helloworld.ui.components.ProfileEditDialog
 import com.ms.helloworld.viewmodel.CoupleProfileViewModel
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -41,6 +42,7 @@ fun CoupleProfileScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var showInviteCodeBottomSheet by remember { mutableStateOf(false) }
+    var showProfileEditDialog by remember { mutableStateOf(false) }
     val bottomSheetState = rememberModalBottomSheetState()
     val backgroundColor = Color(0xFFFFFFFF)
 
@@ -105,7 +107,7 @@ fun CoupleProfileScreen(
                             )
 
                             IconButton(
-                                onClick = { /* TODO: 아내 프로필 수정 */ },
+                                onClick = { showProfileEditDialog = true },
                                 modifier = Modifier.size(20.dp)
                             ) {
                                 Icon(
@@ -276,6 +278,23 @@ fun CoupleProfileScreen(
                 onDismiss = { showInviteCodeBottomSheet = false }
             )
         }
+    }
+
+    // 프로필 수정 다이얼로그
+    if (showProfileEditDialog) {
+        val memberProfile = state.memberProfile
+        ProfileEditDialog(
+            currentNickname = state.momProfile?.nickname ?: "",
+            currentDueDate = state.momProfile?.dueDate,
+            currentAge = memberProfile?.age,
+            currentMenstrualDate = memberProfile?.menstrualDate?.let { LocalDate.parse(it) },
+            currentGender = memberProfile?.gender,
+            onDismiss = { showProfileEditDialog = false },
+            onSave = { nickname, age, menstrualDate, dueDate ->
+                viewModel.updateProfile(nickname, age, menstrualDate, dueDate)
+                showProfileEditDialog = false
+            }
+        )
     }
 }
 

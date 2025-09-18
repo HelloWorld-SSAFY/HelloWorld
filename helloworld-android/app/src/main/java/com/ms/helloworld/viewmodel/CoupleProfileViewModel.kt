@@ -2,19 +2,24 @@ package com.ms.helloworld.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ms.helloworld.dto.request.CoupleUpdateRequest
+import com.ms.helloworld.dto.request.MemberUpdateRequest
 import com.ms.helloworld.dto.response.MomProfile
+import com.ms.helloworld.dto.response.MemberProfile
 import com.ms.helloworld.repository.MomProfileRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 import javax.inject.Inject
 
 data class CoupleProfileState(
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
     val momProfile: MomProfile? = null,
+    val memberProfile: MemberProfile? = null,
     val inviteCode: String? = null
 )
 
@@ -35,15 +40,21 @@ class CoupleProfileViewModel @Inject constructor(
             try {
                 _state.value = _state.value.copy(isLoading = true, errorMessage = null)
 
+                // 전체 사용자 정보 가져오기 (멤버 + 커플 정보)
+                val userInfoResponse = momProfileRepository.getUserInfo()
                 val momProfile = momProfileRepository.getMomProfile()
 
                 if (momProfile != null) {
                     // TODO: 초대코드 기능은 백엔드에서 구현 필요 (여성유저에게만 노출)
                     val inviteCode = "ABC123" // 임시 코드
 
+                    println("🚺 성별 디버깅 - memberProfile gender: ${userInfoResponse.member.gender}")
+                    println("🚺 성별 디버깅 - memberProfile 전체: ${userInfoResponse.member}")
+
                     _state.value = _state.value.copy(
                         isLoading = false,
                         momProfile = momProfile,
+                        memberProfile = userInfoResponse.member,
                         inviteCode = inviteCode
                     )
                 } else {
@@ -67,5 +78,66 @@ class CoupleProfileViewModel @Inject constructor(
 
     fun refreshProfile() {
         loadCoupleProfile()
+    }
+
+    fun updateProfile(nickname: String, age: Int?, menstrualDate: LocalDate?, dueDate: LocalDate?) {
+        viewModelScope.launch {
+            try {
+                println("🔄 프로필 업데이트 시작: nickname=$nickname, age=$age, menstrualDate=$menstrualDate, dueDate=$dueDate")
+                _state.value = _state.value.copy(isLoading = true, errorMessage = null)
+
+                // 1. 멤버 정보 업데이트 (닉네임, 나이, 생리일자)
+                val memberUpdateRequest = MemberUpdateRequest(
+                    nickname = nickname,
+                    age = age,
+                    menstrual_date = menstrualDate?.toString()
+                )
+                println("📤 멤버 업데이트 요청: $memberUpdateRequest")
+                val memberUpdateResult = momProfileRepository.updateProfile(memberUpdateRequest)
+                println("📥 멤버 업데이트 응답: $memberUpdateResult")
+
+                // 2. 커플 정보 업데이트 (출산예정일이 있는 경우에만)
+                var coupleUpdateResult: Any? = true // 기본값은 성공으로 설정
+
+                if (dueDate != null) {
+                    // 출산예정일로부터 현재 임신주차 계산
+                    val today = LocalDate.now()
+                    val daysDifference = java.time.temporal.ChronoUnit.DAYS.between(today, dueDate)
+                    val totalPregnancyDays = 280 // 40주 * 7일
+                    val currentPregnancyDays = totalPregnancyDays - daysDifference
+                    val calculatedWeek = ((currentPregnancyDays / 7).toInt() + 1).coerceIn(1, 42)
+
+                    val coupleUpdateRequest = CoupleUpdateRequest(
+                        pregnancyWeek = calculatedWeek,
+                        due_date = dueDate.toString()
+                    )
+                    println("📊 계산된 임신주차: ${calculatedWeek}주 (오늘: $today, 예정일: $dueDate, 차이: ${daysDifference}일)")
+                    println("📤 커플 업데이트 요청: $coupleUpdateRequest")
+                    coupleUpdateResult = momProfileRepository.updateCoupleInfo(coupleUpdateRequest)
+                    println("📥 커플 업데이트 응답: $coupleUpdateResult")
+                } else {
+                    println("📝 출산예정일이 없어서 커플 정보 업데이트 건너뜀")
+                }
+
+                if (memberUpdateResult != null && coupleUpdateResult != null) {
+                    println("✅ 프로필 업데이트 성공")
+                    // 성공 시 프로필 정보 다시 로드
+                    loadCoupleProfile()
+                } else {
+                    println("❌ 프로필 업데이트 실패 - memberResult: $memberUpdateResult, coupleResult: $coupleUpdateResult")
+                    _state.value = _state.value.copy(
+                        isLoading = false,
+                        errorMessage = "프로필 업데이트에 실패했습니다."
+                    )
+                }
+            } catch (e: Exception) {
+                println("💥 프로필 업데이트 예외: ${e.message}")
+                e.printStackTrace()
+                _state.value = _state.value.copy(
+                    isLoading = false,
+                    errorMessage = e.message ?: "네트워크 오류가 발생했습니다."
+                )
+            }
+        }
     }
 }

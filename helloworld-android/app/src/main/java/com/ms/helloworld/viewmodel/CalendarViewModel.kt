@@ -84,7 +84,8 @@ class CalendarViewModel @Inject constructor(
                 )
 
                 if (result.isSuccess) {
-                    // 성공 시 해당 월의 일정을 다시 로드
+                    // 성공 시 해당 월의 일정을 다시 로드하여 상태 업데이트
+                    _state.value = _state.value.copy(isLoading = false)
                     loadEventsForCurrentMonth()
                 } else {
                     _state.value = _state.value.copy(
@@ -112,7 +113,21 @@ class CalendarViewModel @Inject constructor(
     ) {
         viewModelScope.launch {
             try {
-                _state.value = _state.value.copy(isLoading = true, errorMessage = null)
+                // orderNo만 변경하는 경우는 로딩 상태를 표시하지 않음 (UX 개선)
+                val isOrderOnlyUpdate = title == null && content == null && startAt == null && endAt == null && isRemind == null && orderNo != null
+
+                println("📝 일정 수정 시작: eventId=$eventId")
+                println("   title='$title' (${title?.length} chars)")
+                println("   content='$content' (${content?.length} chars)")
+                println("   startAt='$startAt'")
+                println("   endAt='$endAt'")
+                println("   isRemind=$isRemind")
+                println("   orderNo=$orderNo")
+                println("📋 isOrderOnlyUpdate: $isOrderOnlyUpdate")
+
+                if (!isOrderOnlyUpdate) {
+                    _state.value = _state.value.copy(isLoading = true, errorMessage = null)
+                }
 
                 val request = CalendarUpdateRequest(
                     title = title,
@@ -123,17 +138,50 @@ class CalendarViewModel @Inject constructor(
                     orderNo = orderNo
                 )
 
+                println("🌐 API 요청 전송: $request")
+
                 val result = calendarRepository.updateEvent(eventId, request)
 
+                println("📡 API 응답: success=${result.isSuccess}, result=${result.getOrNull()}")
+
                 if (result.isSuccess) {
+                    println("✅ 일정 수정 성공")
+                    // 성공 시 서버에서 최신 데이터 로드하여 상태 업데이트
+                    if (!isOrderOnlyUpdate) {
+                        _state.value = _state.value.copy(isLoading = false)
+                    }
                     loadEventsForCurrentMonth()
                 } else {
+                    val errorMsg = result.exceptionOrNull()?.message ?: "일정 수정에 실패했습니다."
+                    println("❌ 일정 수정 실패: $errorMsg")
+
+                    // 실패 시 원래 상태로 되돌리기
+                    loadEventsForCurrentMonth()
+
+                    // 사용자에게 더 명확한 에러 메시지 제공
+                    val userFriendlyMessage = when {
+                        errorMsg.contains("500") -> "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
+                        errorMsg.contains("400") -> "입력한 정보에 오류가 있습니다. 다시 확인해주세요."
+                        errorMsg.contains("401") -> "로그인이 필요합니다."
+                        errorMsg.contains("403") -> "수정 권한이 없습니다."
+                        errorMsg.contains("404") -> "해당 일정을 찾을 수 없습니다."
+                        else -> "일정 수정에 실패했습니다: $errorMsg"
+                    }
+
                     _state.value = _state.value.copy(
                         isLoading = false,
-                        errorMessage = result.exceptionOrNull()?.message ?: "일정 수정에 실패했습니다."
+                        errorMessage = userFriendlyMessage
                     )
                 }
+
+                if (!isOrderOnlyUpdate) {
+                    _state.value = _state.value.copy(isLoading = false)
+                }
             } catch (e: Exception) {
+                println("💥 일정 수정 예외 발생: ${e.message}")
+                e.printStackTrace()
+                // 실패 시 원래 상태로 되돌리기
+                loadEventsForCurrentMonth()
                 _state.value = _state.value.copy(
                     isLoading = false,
                     errorMessage = e.message ?: "네트워크 오류가 발생했습니다."
@@ -145,19 +193,32 @@ class CalendarViewModel @Inject constructor(
     fun deleteEvent(eventId: Long) {
         viewModelScope.launch {
             try {
+                println("🗑️ 일정 삭제 시작: eventId=$eventId")
+                println("📊 삭제 전 상태: events 개수=${_state.value.events.values.sumOf { it.size }}")
                 _state.value = _state.value.copy(isLoading = true, errorMessage = null)
 
                 val result = calendarRepository.deleteEvent(eventId)
 
+                println("📡 삭제 API 응답: success=${result.isSuccess}")
+
                 if (result.isSuccess) {
+                    println("✅ 일정 삭제 성공")
+                    println("📊 삭제 전 State: events 개수=${_state.value.events.values.sumOf { it.size }}")
+                    // 삭제 성공 후 서버에서 최신 데이터 다시 로드
+                    _state.value = _state.value.copy(isLoading = false)
+                    println("🔄 isLoading = false 설정 완료")
                     loadEventsForCurrentMonth()
+                    println("🔄 loadEventsForCurrentMonth() 호출 완료")
                 } else {
+                    println("❌ 일정 삭제 실패: ${result.exceptionOrNull()?.message}")
                     _state.value = _state.value.copy(
                         isLoading = false,
                         errorMessage = result.exceptionOrNull()?.message ?: "일정 삭제에 실패했습니다."
                     )
                 }
             } catch (e: Exception) {
+                println("💥 일정 삭제 예외 발생: ${e.message}")
+                e.printStackTrace()
                 _state.value = _state.value.copy(
                     isLoading = false,
                     errorMessage = e.message ?: "네트워크 오류가 발생했습니다."
@@ -166,7 +227,7 @@ class CalendarViewModel @Inject constructor(
         }
     }
 
-    private fun loadEventsForCurrentMonth() {
+    fun loadEventsForCurrentMonth() {
         loadEventsForMonth(_state.value.currentDisplayMonth)
     }
 
@@ -211,6 +272,7 @@ class CalendarViewModel @Inject constructor(
                         events = eventsByDate,
                         isLoading = false
                     )
+                    println("📊 State 업데이트 완료: events 개수=${eventsByDate.values.sumOf { it.size }}")
                 } else {
                     val errorMsg = when {
                         result.exceptionOrNull()?.message?.contains("timeout", ignoreCase = true) == true ->
@@ -237,6 +299,59 @@ class CalendarViewModel @Inject constructor(
 
     fun clearError() {
         _state.value = _state.value.copy(errorMessage = null)
+    }
+
+    private fun updateLocalEvent(
+        eventId: Long,
+        title: String?,
+        content: String?,
+        startAt: String?,
+        endAt: String?,
+        isRemind: Boolean?,
+        orderNo: Int?
+    ) {
+        val currentEvents = _state.value.events.toMutableMap()
+        currentEvents.forEach { (dateKey, events) ->
+            val eventIndex = events.indexOfFirst { it.eventId == eventId }
+            if (eventIndex != -1) {
+                val event = events[eventIndex]
+                val updatedEvent = event.copy(
+                    title = title ?: event.title,
+                    memo = content ?: event.memo,
+                    startAt = startAt ?: event.startAt,
+                    endAt = endAt ?: event.endAt,
+                    remind = isRemind ?: event.remind,
+                    orderNo = orderNo ?: event.orderNo
+                )
+                val updatedEvents = events.toMutableList()
+                updatedEvents[eventIndex] = updatedEvent
+                currentEvents[dateKey] = updatedEvents.sortedBy { it.orderNo ?: Int.MAX_VALUE }
+                _state.value = _state.value.copy(events = currentEvents.toMap())
+                return
+            }
+        }
+    }
+
+    private fun removeLocalEvent(eventId: Long) {
+        println("🔄 로컬 상태에서 일정 삭제 시작: eventId=$eventId")
+        val currentEvents = _state.value.events.toMutableMap()
+        var found = false
+
+        currentEvents.forEach { (dateKey, events) ->
+            val filteredEvents = events.filter { it.eventId != eventId }
+            if (filteredEvents.size != events.size) {
+                println("📍 일정 발견 및 삭제: dateKey=$dateKey, 기존 개수=${events.size}, 삭제 후 개수=${filteredEvents.size}")
+                currentEvents[dateKey] = filteredEvents
+                found = true
+            }
+        }
+
+        if (found) {
+            _state.value = _state.value.copy(events = currentEvents.toMap())
+            println("✅ 로컬 상태 업데이트 완료")
+        } else {
+            println("⚠️ 삭제할 일정을 찾지 못함: eventId=$eventId")
+        }
     }
 
     fun updateEventOrder(dateKey: String, reorderedEvents: List<CalendarEventResponse>) {

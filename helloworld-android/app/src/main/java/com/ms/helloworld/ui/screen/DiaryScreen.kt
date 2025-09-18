@@ -22,7 +22,11 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ms.helloworld.ui.components.CustomTopAppBar
+import com.ms.helloworld.viewmodel.DiaryViewModel
+import com.ms.helloworld.viewmodel.HomeViewModel
 
 // 데이터 클래스들
 data class PregnancyWeek(
@@ -54,25 +58,41 @@ enum class DiaryState {
 @SuppressLint("NewApi")
 @Composable
 fun DiaryScreen(
-    navController: NavHostController
+    navController: NavHostController,
+    viewModel: DiaryViewModel = hiltViewModel(),
+    homeViewModel: HomeViewModel = hiltViewModel()
 ) {
     val backgroundColor = Color(0xFFF5F5F5)
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val homeState by homeViewModel.momProfile.collectAsStateWithLifecycle()
 
-    // 현재 임신 정보
-    val currentWeek = PregnancyWeek(week = 32, dayCount = 5)
+    // 실제 임신 정보 사용
+    val currentWeek = homeState?.let { profile ->
+        PregnancyWeek(
+            week = profile.pregnancyWeek,
+            dayCount = profile.currentDay
+        )
+    } ?: PregnancyWeek(week = 1, dayCount = 1) // 기본값
 
-    // 일주일 일기 상태 (1일부터 7일까지)
-    val weeklyDiaryStatus = listOf(
-        DiaryStatus(1, true, true),   // 둘 다 씀
-        DiaryStatus(2, true, false),  // 산모만 씀
-        DiaryStatus(3, false, true),  // 남편만 씀
-        DiaryStatus(4, false, false), // 아무도 안 씀
-        DiaryStatus(5, false, false), // 아무도 안 씀
-        DiaryStatus(6, false, false), // 아무도 안 씀
-        DiaryStatus(7, false, false)  // 아무도 안 씀
+    // API에서 받은 주간 일기 상태를 기존 형식으로 변환
+    val weeklyDiaryStatus = state.weeklyDiaryStatus.map { weeklyStatus ->
+        DiaryStatus(
+            day = weeklyStatus.day,
+            momWritten = weeklyStatus.momWritten,
+            dadWritten = weeklyStatus.dadWritten
+        )
+    }.takeIf { it.isNotEmpty() } ?: listOf(
+        // 기본값 (로딩 중이거나 데이터 없을 때)
+        DiaryStatus(1, false, false),
+        DiaryStatus(2, false, false),
+        DiaryStatus(3, false, false),
+        DiaryStatus(4, false, false),
+        DiaryStatus(5, false, false),
+        DiaryStatus(6, false, false),
+        DiaryStatus(7, false, false)
     )
 
-    // 산모 데이터
+    // 산모 데이터 (임시 - 추후 HealthData API와 연동)
     val momData = MomData(
         weight = 62f,
         weightChange = 8f,
@@ -80,6 +100,13 @@ fun DiaryScreen(
         targetSleepHours = 7.2f,
         condition = "좋음"
     )
+
+    // 에러 메시지 표시
+    LaunchedEffect(state.errorMessage) {
+        state.errorMessage?.let { message ->
+            println("❌ DiaryScreen - 에러: $message")
+        }
+    }
 
     Column(
         modifier = Modifier.fillMaxWidth()
