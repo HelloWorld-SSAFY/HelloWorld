@@ -5,7 +5,7 @@ metadata:
   namespace: apps
 spec:
   serviceName: eurekaserver-hs
-  replicas: 3
+  replicas: 2
   selector:
     matchLabels: { app: eurekaserver }
   template:
@@ -53,7 +53,7 @@ spec:
         - name: EUREKA_CLIENT_FETCH_REGISTRY
           value: "true"
         - name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
-          value: "http://eurekaserver-0.eurekaserver-hs.apps.svc.cluster.local:8761/eureka/,http://eurekaserver-1.eurekaserver-hs.apps.svc.cluster.local:8761/eureka/,http://eurekaserver-2.eurekaserver-hs.apps.svc.cluster.local:8761/eureka/"
+          value: "http://eurekaserver-0.eurekaserver-hs.apps.svc.cluster.local:8761/eureka/,http://eurekaserver-1.eurekaserver-hs.apps.svc.cluster.local:8761/eureka/"
 
         # Config Server 연결(Deployment 우선 설정)
         - name: SPRING_CONFIG_IMPORT
@@ -97,7 +97,7 @@ metadata:
   name: eurekaserver-pdb
   namespace: apps
 spec:
-  minAvailable: 2
+  minAvailable: 1
   selector:
     matchLabels:
       app: eurekaserver
