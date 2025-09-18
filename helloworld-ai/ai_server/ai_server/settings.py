@@ -74,23 +74,24 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'ai_server.wsgi.application'
 
-# ---- DB ---------------------------------------------------------------------
+# ---- DB (환경에 따라 SQLite ↔ Postgres 자동 전환) ---------------------------
+# pip install dj-database-url psycopg[binary]
+import dj_database_url
+
+# 기본: 로컬 개발용 SQLite
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.getenv("DB_NAME"),
-        "USER": os.getenv("DB_USER"),
-        "PASSWORD": os.getenv("DB_PASSWORD"),
-        "HOST": os.getenv("DB_HOST"),
-        "PORT": os.getenv("DB_PORT", "5432"),
-        "CONN_MAX_AGE": 60,
-        "OPTIONS": {
-            "sslmode": os.getenv("DB_SSLMODE", "prefer"),
-            # 전용 스키마를 쓸 때만 ↓
-            "options": f"-c search_path={os.getenv('DB_SEARCH_PATH','public')}",
-        },
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": BASE_DIR / "db.sqlite3",
     }
 }
+
+DB_URL = os.getenv("DB_URL")  # 예: postgres://user:pass@host:5432/db?sslmode=require
+if DB_URL:
+    DATABASES["default"] = dj_database_url.parse(DB_URL, conn_max_age=600)
+    # 안정성 옵션 보강
+    DATABASES["default"].setdefault("OPTIONS", {})
+    DATABASES["default"]["OPTIONS"].setdefault("connect_timeout", 5)
 
 # ---- 국제화 ------------------------------------------------------------------
 LANGUAGE_CODE = "ko-kr"

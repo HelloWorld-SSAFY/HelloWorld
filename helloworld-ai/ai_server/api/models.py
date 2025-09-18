@@ -200,3 +200,34 @@ class UserTodStatsDaily(models.Model):
 
     def __str__(self) -> str:
         return f"{self.user_ref} {self.as_of} {self.metric}/{self.stat}"
+
+class PlaceBase(models.Model):
+    name = models.CharField(max_length=200, db_index=True)
+    category = models.CharField(max_length=100, blank=True, default="")
+    address_road = models.CharField(max_length=300, blank=True, default="")
+    address = models.CharField(max_length=300, blank=True, default="")
+    lon = models.FloatField(null=True, blank=True)
+    lat = models.FloatField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    source = models.CharField(max_length=50, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    raw = models.JSONField(default=dict, blank=True)
+    class Meta:
+        abstract = True
+
+class PlaceInside(PlaceBase):
+    postal_code = models.CharField(max_length=20, blank=True, default="")
+    epsg5174_x = models.FloatField(null=True, blank=True)
+    epsg5174_y = models.FloatField(null=True, blank=True)
+    class Meta:
+        db_table = "place_inside"
+        indexes = [models.Index(fields=["category"])]
+
+class PlaceOutside(PlaceBase):
+    sido = models.CharField(max_length=40, blank=True, default="")
+    sigungu = models.CharField(max_length=60, blank=True, default="")
+    eupmyeondong = models.CharField(max_length=80, blank=True, default="")
+    class Meta:
+        db_table = "place_outside"
+        indexes = [models.Index(fields=["sido","sigungu"])]
+
