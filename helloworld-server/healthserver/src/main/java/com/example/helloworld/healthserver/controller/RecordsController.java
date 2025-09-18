@@ -1,11 +1,13 @@
 package com.example.helloworld.healthserver.controller;
 
+import com.example.helloworld.healthserver.dto.HealthDtos;
 import com.example.helloworld.healthserver.dto.MHDtos.*;
 import com.example.helloworld.healthserver.dto.request.CsCreateRequest;
 import com.example.helloworld.healthserver.dto.request.FmCreateRequest;
 import com.example.helloworld.healthserver.dto.response.*;
 import com.example.helloworld.healthserver.service.ContractionService;
 import com.example.helloworld.healthserver.service.FetalMovementService;
+import com.example.helloworld.healthserver.service.HealthDataService;
 import com.example.helloworld.healthserver.service.MaternalHealthService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.*;
@@ -30,6 +32,9 @@ public class RecordsController {
     private final FetalMovementService fetalService;
     private final ContractionService contractionService;
     private final MaternalHealthService mhService;
+    private final HealthDataService service;
+
+
 
     // ---------- FETAL MOVEMENT ----------
     @Operation(summary = "태동 일별 조회", description = "from/to(YYYY-MM-DD) 범위에서 일별 개수 집계")
@@ -129,4 +134,75 @@ public class RecordsController {
     ) {
         return ResponseEntity.ok(mhService.list(coupleId, from, to));
     }
+
+
+    @Operation(summary = "헬스데이터 생성")
+    @PostMapping
+    public ResponseEntity<HealthDtos.GetResponse> create(
+            @RequestParam Long coupleId,
+            @Valid @RequestBody HealthDtos.CreateRequest req) {
+//        Long coupleId = couple.requireCoupleId();
+
+        var res = service.create(coupleId, req);
+        return ResponseEntity.created(URI.create("/api/health-data/" + res.healthId()))
+                .body(res);
+    }
+
+    @Operation(summary = "헬스데이터 단건 조회")
+    @GetMapping("/{healthId}")
+    public ResponseEntity<HealthDtos.GetResponse> getOne(
+            @RequestParam Long coupleId,
+            @PathVariable Long healthId) {
+//        Long coupleId = couple.requireCoupleId();
+        return ResponseEntity.ok(service.getById(coupleId, healthId));
+    }
+
+//    @Operation(summary = "헬스데이터 목록", description = "from/to(YYYY-MM-DD, Asia/Seoul 기준) 없으면 전체")
+//    @GetMapping
+//    public ResponseEntity<ListResponse> list(
+//            @RequestParam(required = false)
+//            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+//            @RequestParam(required = false)
+//            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+//    ) {
+//        Long coupleId = couple.requireCoupleId();
+//        return ResponseEntity.ok(service.list(coupleId, from, to));
+//    }
+
+//    @Operation(summary = "심박수 일별 평균/표준편차", description = "Asia/Seoul 기준 하루로 집계")
+//    @GetMapping("/heart-rate/daily-stats")
+//    public ResponseEntity<HealthDtos.HrDailyStatsResponse> hrDailyStats(
+//            @RequestParam Long coupleId,
+//            @RequestParam(required = false)
+//            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+//            @RequestParam(required = false)
+//            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+//    ) {
+////        Long coupleId = couple.requireCoupleId();
+//        return ResponseEntity.ok(service.hrDailyStats(coupleId, from, to));
+//    }
+
+    @Operation(summary = "하루 4시간 버킷 통계",
+            description = "쿼리 파라미터 date=YYYY-MM-DD (KST). 심박수 45≤x<150만 포함.")
+    @GetMapping("/daily-buckets")
+    public ResponseEntity<HealthDtos.BucketResponse> dailyBuckets(
+            @RequestParam Long coupleId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date
+    ) {
+//        Long coupleId = couple.requireCoupleId();
+        return ResponseEntity.ok(service.hrDailyBuckets(coupleId, date));
+    }
+
+
+    @Operation(summary = "걸음수 누적 평균(전기간)",
+            description = "날짜 제한 없이 전체 데이터에서 평균. 구간: 00-12, 00-16. steps>0만 포함.")
+    @GetMapping("/overall-cumulative-avg")
+    public ResponseEntity<HealthDtos.StepResponse> overallCumulativeAvg(
+            @RequestParam Long coupleId
+    ) {
+//        Long coupleId = couple.requireCoupleId();
+        return ResponseEntity.ok(service.overallCumulativeAvg(coupleId));
+    }
+
+
 }
