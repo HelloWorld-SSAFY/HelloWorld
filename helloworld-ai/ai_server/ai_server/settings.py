@@ -75,8 +75,18 @@ WSGI_APPLICATION = 'ai_server.wsgi.application'
 # ---- DB ---------------------------------------------------------------------
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.getenv("DB_NAME"),
+        "USER": os.getenv("DB_USER"),
+        "PASSWORD": os.getenv("DB_PASSWORD"),
+        "HOST": os.getenv("DB_HOST"),
+        "PORT": os.getenv("DB_PORT", "5432"),
+        "CONN_MAX_AGE": 60,
+        "OPTIONS": {
+            "sslmode": os.getenv("DB_SSLMODE", "prefer"),
+            # 전용 스키마를 쓸 때만 ↓
+            "options": f"-c search_path={os.getenv('DB_SEARCH_PATH','public')}",
+        },
     }
 }
 
