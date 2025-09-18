@@ -39,7 +39,7 @@ spec:
         trap : TERM INT; sleep infinity & wait"]
       tty: true
       workingDir: /home/jenkins/agent
-      securityContext: { runAsUser: 1000, runAsGroup: 1000 }
+      securityContext: { runAsUser: 0}
 
   volumes:
     - name: docker-config
