@@ -6,112 +6,192 @@ import java.util.*
 
 object TestLoggingUtils {
 
-    private const val TAG = "HealthDataLogger"
-    private val dateFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
-    private val fullDateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+    private const val TAG = "싸피_TestLogging"
+    private val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
 
-    // 실시간 심박수 데이터 로그
+    /**
+     * 심박수 데이터 로깅
+     */
     fun logHeartRateData(heartRate: Double) {
         val timestamp = dateFormat.format(Date())
-        Log.d(TAG, "[$timestamp] 심박수: ${heartRate.toInt()} BPM")
+        val category = when {
+            heartRate < 60 -> "서맥"
+            heartRate > 100 -> "빈맥"
+            else -> "정상"
+        }
+
+        Log.d(TAG, "=== 심박수 데이터 ===")
+        Log.d(TAG, "시간: $timestamp")
+        Log.d(TAG, "심박수: ${heartRate.toInt()} BPM")
+        Log.d(TAG, "분류: $category")
+        Log.d(TAG, "==================")
     }
 
-    // 측정 시작 로그
+    /**
+     * 스트레스 데이터 로깅
+     */
+    fun logStressData(stressIndex: Int, stressLevel: String, advice: String) {
+        val timestamp = dateFormat.format(Date())
+        val stressColor = when (stressIndex) {
+            in 0..20 -> "🟢"    // 녹색
+            in 21..40 -> "🟡"   // 노란색
+            in 41..60 -> "🟠"   // 주황색
+            in 61..80 -> "🔴"   // 빨간색
+            else -> "🚨"        // 경고
+        }
+
+        Log.d(TAG, "=== 스트레스 데이터 ===")
+        Log.d(TAG, "시간: $timestamp")
+        Log.d(TAG, "스트레스 지수: $stressIndex/100 $stressColor")
+        Log.d(TAG, "스트레스 레벨: $stressLevel")
+        Log.d(TAG, "조언: $advice")
+        Log.d(TAG, "=====================")
+    }
+
+    /**
+     * 통합 건강 데이터 로깅 (심박수 + 스트레스)
+     */
+    fun logHealthData(heartRate: Double, stressIndex: Int, stressLevel: String) {
+        val timestamp = dateFormat.format(Date())
+        val heartCategory = when {
+            heartRate < 60 -> "서맥"
+            heartRate > 100 -> "빈맥"
+            else -> "정상"
+        }
+
+        val stressEmoji = when (stressIndex) {
+            in 0..20 -> "😌"    // 매우 낮음
+            in 21..40 -> "🙂"   // 낮음
+            in 41..60 -> "😐"   // 보통
+            in 61..80 -> "😰"   // 높음
+            else -> "😱"        // 매우 높음
+        }
+
+        Log.d(TAG, "========================")
+        Log.d(TAG, "   통합 건강 모니터링")
+        Log.d(TAG, "========================")
+        Log.d(TAG, "📅 시간: $timestamp")
+        Log.d(TAG, "❤️ 심박수: ${heartRate.toInt()} BPM ($heartCategory)")
+        Log.d(TAG, "🧠 스트레스: $stressIndex/100 ($stressLevel) $stressEmoji")
+
+        // 위험 상황 감지
+        if (heartRate > 120 || stressIndex >= 80) {
+            Log.w(TAG, "⚠️ 주의: 비정상 수치 감지!")
+            if (heartRate > 120) {
+                Log.w(TAG, "   - 심박수가 매우 높습니다 (${heartRate.toInt()} BPM)")
+            }
+            if (stressIndex >= 80) {
+                Log.w(TAG, "   - 스트레스 지수가 매우 높습니다 ($stressIndex/100)")
+            }
+        }
+
+        Log.d(TAG, "========================")
+    }
+
+    /**
+     * 측정 시작 로깅
+     */
     fun logMeasurementStart() {
-        val timestamp = fullDateFormat.format(Date())
-        Log.i(TAG, "[$timestamp] ============================================")
-        Log.i(TAG, "[$timestamp] 심박수 측정 시작 - 10초 간격으로 측정")
-        Log.i(TAG, "[$timestamp] ============================================")
+        val timestamp = dateFormat.format(Date())
+        Log.i(TAG, "🚀 건강 모니터링 시작")
+        Log.i(TAG, "시작 시간: $timestamp")
+        Log.i(TAG, "측정 간격: 10초")
+        Log.i(TAG, "측정 항목: 심박수, 스트레스 지수")
     }
 
-    // 측정 중지 로그
+    /**
+     * 측정 종료 로깅
+     */
     fun logMeasurementStop(measurementType: String) {
-        val timestamp = fullDateFormat.format(Date())
-        Log.i(TAG, "[$timestamp] ============================================")
-        Log.i(TAG, "[$timestamp] $measurementType 측정 중지")
-        Log.i(TAG, "[$timestamp] ============================================")
-    }
-
-    // 서비스 상태 변경 로그
-    fun logServiceStatusChange(isRunning: Boolean, reason: String = "") {
-        val timestamp = fullDateFormat.format(Date())
-        val status = if (isRunning) "시작됨" else "중지됨"
-        val reasonText = if (reason.isNotEmpty()) " - $reason" else ""
-
-        Log.i(TAG, "[$timestamp] 서비스 상태 변경: $status$reasonText")
-    }
-
-    // 심박수 이상 징후 로그
-    fun logHeartRateAnomaly(heartRate: Double, anomalyType: String) {
-        val timestamp = fullDateFormat.format(Date())
-        Log.w(TAG, "[$timestamp] 심박수 이상: $anomalyType - ${heartRate.toInt()} BPM")
-    }
-
-    // 백그라운드 서비스 상태 로그
-    fun logBackgroundStatus(message: String) {
         val timestamp = dateFormat.format(Date())
-        Log.d(TAG, "[$timestamp] [백그라운드] $message")
+        Log.i(TAG, "🛑 $measurementType 측정 종료")
+        Log.i(TAG, "종료 시간: $timestamp")
     }
 
-    // UI 업데이트 로그
-    fun logUIUpdate(heartRate: Double) {
+    /**
+     * 에러 로깅
+     */
+    fun logError(errorType: String, errorMessage: String, exception: Exception? = null) {
         val timestamp = dateFormat.format(Date())
-        Log.d(TAG, "[$timestamp] [UI 업데이트] 심박수: ${heartRate.toInt()} BPM")
+        Log.e(TAG, "❌ 오류 발생")
+        Log.e(TAG, "시간: $timestamp")
+        Log.e(TAG, "오류 유형: $errorType")
+        Log.e(TAG, "오류 메시지: $errorMessage")
+        exception?.let {
+            Log.e(TAG, "예외 상세: ${it.localizedMessage}")
+        }
     }
 
-    // 권한 관련 로그
-    fun logPermissionStatus(permission: String, granted: Boolean) {
+    /**
+     * 센서 상태 로깅
+     */
+    fun logSensorStatus(sensorType: String, status: String, isAvailable: Boolean) {
         val timestamp = dateFormat.format(Date())
-        val status = if (granted) "허용됨" else "거부됨"
-        Log.i(TAG, "[$timestamp] 권한 $permission: $status")
+        val statusEmoji = if (isAvailable) "✅" else "❌"
+
+        Log.i(TAG, "$statusEmoji 센서 상태 업데이트")
+        Log.i(TAG, "시간: $timestamp")
+        Log.i(TAG, "센서: $sensorType")
+        Log.i(TAG, "상태: $status")
+        Log.i(TAG, "사용 가능: $isAvailable")
     }
 
-    // 센서 가용성 로그
-    fun logSensorAvailability(availability: String) {
+    /**
+     * 성능 측정 로깅
+     */
+    fun logPerformance(operation: String, startTime: Long, endTime: Long) {
+        val duration = endTime - startTime
         val timestamp = dateFormat.format(Date())
-        Log.d(TAG, "[$timestamp] 센서 상태: $availability")
+
+        Log.d(TAG, "⏱️ 성능 측정")
+        Log.d(TAG, "시간: $timestamp")
+        Log.d(TAG, "작업: $operation")
+        Log.d(TAG, "소요 시간: ${duration}ms")
+
+        if (duration > 1000) {
+            Log.w(TAG, "⚠️ 긴 처리 시간 감지: ${duration}ms")
+        }
     }
 
-    // 토글 상태 변경 로그
-    fun logToggleStateChange(enabled: Boolean, source: String = "") {
-        val timestamp = fullDateFormat.format(Date())
-        val state = if (enabled) "활성화" else "비활성화"
-        val sourceText = if (source.isNotEmpty()) " ($source)" else ""
-
-        Log.i(TAG, "[$timestamp] 토글 상태: $state$sourceText")
-    }
-
-    // 앱 생명주기 로그
-    fun logAppLifecycle(event: String, details: String = "") {
-        val timestamp = fullDateFormat.format(Date())
-        val detailsText = if (details.isNotEmpty()) " - $details" else ""
-
-        Log.i(TAG, "[$timestamp] [앱 생명주기] $event$detailsText")
-    }
-
-    // 에러 로그
-    fun logError(error: String, exception: Throwable? = null) {
-        val timestamp = fullDateFormat.format(Date())
-        Log.e(TAG, "[$timestamp] 오류: $error", exception)
-    }
-
-    // 측정 세션 요약 로그
-    fun logMeasurementSummary(
-        sessionDuration: Long,
-        measurementCount: Int,
-        avgHeartRate: Double,
-        minHeartRate: Double,
-        maxHeartRate: Double
+    /**
+     * 알고리즘 상세 로깅 (디버깅용)
+     */
+    fun logAlgorithmDetails(
+        heartRateHistory: List<Double>,
+        hrvScore: Int,
+        trendScore: Int,
+        variabilityScore: Int,
+        finalStress: Int
     ) {
-        val timestamp = fullDateFormat.format(Date())
-        val durationMinutes = sessionDuration / 60000
+        val timestamp = dateFormat.format(Date())
 
-        Log.i(TAG, "[$timestamp] ============================================")
-        Log.i(TAG, "[$timestamp] 측정 세션 요약:")
-        Log.i(TAG, "[$timestamp] - 지속 시간: ${durationMinutes}분")
-        Log.i(TAG, "[$timestamp] - 평균 심박수: ${avgHeartRate.toInt()} BPM")
-        Log.i(TAG, "[$timestamp] - 최소 심박수: ${minHeartRate.toInt()} BPM")
-        Log.i(TAG, "[$timestamp] - 최대 심박수: ${maxHeartRate.toInt()} BPM")
-        Log.i(TAG, "[$timestamp] ============================================")
+        Log.d(TAG, "🔍 스트레스 알고리즘 상세")
+        Log.d(TAG, "시간: $timestamp")
+        Log.d(TAG, "심박수 히스토리: $heartRateHistory")
+        Log.d(TAG, "HRV 점수: $hrvScore")
+        Log.d(TAG, "트렌드 점수: $trendScore")
+        Log.d(TAG, "변동성 점수: $variabilityScore")
+        Log.d(TAG, "최종 스트레스: $finalStress")
+    }
+
+    /**
+     * 일일 요약 로깅
+     */
+    fun logDailySummary(
+        totalMeasurements: Int,
+        avgHeartRate: Double,
+        avgStressIndex: Int,
+        maxHeartRate: Double,
+        maxStressIndex: Int
+    ) {
+        val timestamp = dateFormat.format(Date())
+
+        Log.i(TAG, "📊 일일 건강 요약")
+        Log.i(TAG, "날짜: $timestamp")
+        Log.i(TAG, "총 측정 횟수: $totalMeasurements")
+        Log.i(TAG, "평균 심박수: ${avgHeartRate.toInt()} BPM")
+        Log.i(TAG, "평균 스트레스: $avgStressIndex/100")
+        Log.i(TAG, "최고 심박수: ${maxHeartRate.toInt()} BPM")
+        Log.i(TAG, "최고 스트레스: $maxStressIndex/100")
     }
 }
