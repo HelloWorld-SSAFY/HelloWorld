@@ -28,7 +28,7 @@ spec:
       securityContext: { runAsUser: 0 }
 
     - name: kubectl
-      image: bitnami/kubectl:1.30
+      image: registry.k8s.io/kubectl:v1.33.4
       command: ["cat"]
       tty: true
       workingDir: /home/jenkins/agent
