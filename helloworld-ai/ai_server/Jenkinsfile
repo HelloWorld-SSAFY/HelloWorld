@@ -41,7 +41,6 @@ spec:
       workingDir: /home/jenkins/agent
       securityContext: { runAsUser: 1000, runAsGroup: 1000 }
 
-
   volumes:
     - name: docker-config
       emptyDir: {}
