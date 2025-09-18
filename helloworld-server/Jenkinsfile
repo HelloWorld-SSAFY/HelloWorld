@@ -4,20 +4,17 @@ pipeline {
     kubernetes {
       label 'k8s-ephemeral'
       defaultContainer 'jnlp'
-      yaml ```
+      yaml '''
 apiVersion: v1
 kind: Pod
 metadata:
   labels:
     ci: jenkins
 spec:
-  # apps 네임스페이스에 있는 ServiceAccount (RBAC 미리 생성 필요)
   serviceAccountName: jenkins
   restartPolicy: Never
-
   securityContext:
     fsGroup: 1000
-
 
   containers:
     - name: jnlp
@@ -39,7 +36,7 @@ spec:
     - name: kubectl
       image: alpine:3.20
       imagePullPolicy: IfNotPresent
-      securityContext: { runAsUser: 0 }   # apk 설치용 루트
+      securityContext: { runAsUser: 0 }
       command: ["sh","-lc","set -eux; \
         apk add --no-cache curl ca-certificates; \
         arch=$(uname -m); case $arch in x86_64) arch=amd64 ;; aarch64) arch=arm64 ;; *) echo unsupported: $arch; exit 1 ;; esac; \
@@ -50,11 +47,10 @@ spec:
       tty: true
       workingDir: /home/jenkins/agent
 
-
   volumes:
     - name: docker-config
       emptyDir: {}
-```
+'''
     }
   }
 
