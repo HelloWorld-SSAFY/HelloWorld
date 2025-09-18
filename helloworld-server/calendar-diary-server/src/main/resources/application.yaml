@@ -11,10 +11,15 @@ spring:
       enabled: false
 
   datasource:
-    url: jdbc:postgresql://calendar-postgres-svc.apps.svc.cluster.local:5432/calendar_db
-    username: postgres
-    password: ${POSTGRES_PASSWORD:strong_calendar_pw}
+#    url: jdbc:postgresql://calendar-postgres-svc.apps.svc.cluster.local:5432/calendar-db
+#    username: postgres
+#    password: ${POSTGRES_PASSWORD:strong_calendar_pw}
     driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://localhost:5432/calendar_diary?sslmode=disable
+    username: postgres
+    password: root
+
+
   jpa:
     hibernate:
       ddl-auto: none   # create, update, validate, none 중 선택
@@ -23,6 +28,14 @@ spring:
         format_sql: true
         show_sql: true
     database-platform: org.hibernate.dialect.PostgreSQLDialect
+
+  jackson:
+    time-zone: Asia/Seoul
+    mvc:
+      format:
+        date: yyyy-MM-dd
+        date-time: yyyy-MM-dd'T'HH:mm:ss
+
 
 # 로그 보기 편하게
 logging:
@@ -58,3 +71,6 @@ management:
       enabled: true
     readinessstate:
       enabled: true
+
+
+

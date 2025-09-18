@@ -4,15 +4,21 @@ package com.example.helloworld.calendar_diary_server.controller;
 import com.example.helloworld.calendar_diary_server.dto.*;
 import com.example.helloworld.calendar_diary_server.service.DiaryService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
@@ -22,6 +28,48 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class DiaryController {
     private final DiaryService diaryApiService;
+
+
+
+    @GetMapping("/week")
+    @Operation(
+            summary = "임신 주차별 다이어리 조회 (GET)",
+            description = "임신 n주차를 기준으로 (7n-6)일차 ~ 7n일차에 해당하는 target_date 범위를 계산해 해당 커플의 다이어리를 반환합니다."
+    )
+
+    public ResponseEntity<WeekResult> getByWeek(
+            @Parameter(description = "커플 ID", example = "1")
+            @RequestParam Long coupleId,
+
+            @Parameter(description = "임신 주차(1..40)", example = "2")
+            @RequestParam @Min(1) @Max(40) int week,
+
+            @Parameter(description = "LMP(마지막 생리일). ISO 날짜(YYYY-MM-DD)",
+                    schema = @Schema(type = "string", format = "date", example = "2025-01-10"))
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate lmpDate
+    ) {
+        return ResponseEntity.ok(diaryApiService.getByWeek(coupleId, week, lmpDate));
+    }
+
+    @GetMapping("/day")
+    @Operation(
+            summary = "임신 일차별 다이어리 조회 (GET)",
+            description = "임신 day일차(1..280)를 LMP 기준으로 특정 날짜로 변환해 해당 커플의 다이어리를 반환합니다. 응답에 해당 주차도 함께 포함됩니다."
+    )
+    public ResponseEntity<DayResult> getByDay(
+            @Parameter(description = "커플 ID", example = "1")
+            @RequestParam Long coupleId,
+
+            @Parameter(description = "임신 일차(1..280)", example = "4")
+            @RequestParam @Min(1) @Max(280) int day,
+
+            @Parameter(description = "LMP(마지막 생리일). ISO 날짜(YYYY-MM-DD)",
+                    schema = @Schema(type = "string", format = "date", example = "2025-01-10"))
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate lmpDate
+    ) {
+        return ResponseEntity.ok(diaryApiService.getByDay(coupleId, day, lmpDate));
+    }
+
 
     /** 6.1 일기 전체 조회 //앱범용// */
     @Operation(summary = " 일기 전체 조회 //앨범용//",
