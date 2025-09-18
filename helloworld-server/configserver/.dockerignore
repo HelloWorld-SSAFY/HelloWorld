@@ -1,8 +1,0 @@
-.git
-.build
-.gradle
-node_modules
-**/out
-**/target
-**/build
-*.log
