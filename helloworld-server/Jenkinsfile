@@ -105,8 +105,9 @@ spec:
             sh '''
               set -e
               # 기준: 최근 성공 커밋(없으면 최초 커밋)
-              base=${GIT_PREVIOUS_SUCCESSFUL_COMMIT:-$(git rev-list --max-parents=0 HEAD)}
-              changed_files=$(git diff --name-only "$base"...HEAD || true)
+              G='git -c safe.directory="$WORKSPACE"'
+              base=${GIT_PREVIOUS_SUCCESSFUL_COMMIT:-$($G rev-list --max-parents=0 HEAD)}
+              changed_files=$($G diff --name-only "$base"...HEAD || true)
   
               # 1) 서비스 코드 변경: helloworld-server/<svc>/...
               svc_from_code=$(printf "%s\n" "$changed_files" \
