@@ -24,6 +24,8 @@ urlpatterns = [
     # path('admin/', admin.site.urls),
     path("v1/", include("api.urls")),
     path("docs/", TemplateView.as_view(template_name="swagger.html"), name="swagger-ui"),
+    path("schema/", SpectacularAPIView.as_view(permission_classes=[AllowAny]), name="schema"),
+    path("swagger/", SpectacularSwaggerView.as_view(url_name="schema", permission_classes=[AllowAny]), name="swagger-ui"),
 ]
 
 # BASE_DIR는 보통 'ai_server' (바깥 폴더)
