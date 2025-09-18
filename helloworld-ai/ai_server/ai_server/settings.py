@@ -14,12 +14,14 @@ APP_TOKEN = os.getenv("APP_TOKEN")
 DEBUG = os.getenv("DJANGO_DEBUG", "True") == "True"
 ALLOWED_HOSTS = [h for h in os.getenv("DJANGO_ALLOWED_HOSTS", "").split(",") if h]
 CORS_ALLOWED_ORIGINS = [h for h in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if h]
+# HTTPS(선택: Ingress가 X-Forwarded-Proto 세팅한다면)
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 # ---- 경로 -------------------------------------------------------------------
 BASE_DIR = Path(__file__).resolve().parent.parent  # .../helloworld-ai/ai_server
 
 # 보안 키 (운영에서는 env로 빼는 걸 권장)
-SECRET_KEY = "django-insecure-vv_ci4xdaa5gq#ow!^_a4sf11+zpf+nse9acy9l7ip)(#^kdgh"
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
 
 # ---- 앱 ---------------------------------------------------------------------
 INSTALLED_APPS = [
