@@ -38,7 +38,7 @@ spec:
       imagePullPolicy: IfNotPresent
       securityContext: { runAsUser: 0 }
       command: ["sh","-lc","set -eux; \
-        apk add --no-cache curl ca-certificates; \
+        apk add --no-cache curl ca-certificates bash; \
         arch=$(uname -m); case $arch in x86_64) arch=amd64 ;; aarch64) arch=arm64 ;; *) echo unsupported: $arch; exit 1 ;; esac; \
         curl -fsSL -o /usr/local/bin/kubectl https://dl.k8s.io/release/v1.33.4/bin/linux/${arch}/kubectl; \
         chmod +x /usr/local/bin/kubectl; \
