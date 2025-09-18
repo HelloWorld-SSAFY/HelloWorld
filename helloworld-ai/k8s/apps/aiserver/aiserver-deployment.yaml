@@ -41,12 +41,19 @@ spec:
           # 🔹 command/args 제거 → Dockerfile의 gunicorn ENTRYPOINT 사용
 
           readinessProbe:
-            httpGet: { path: /v1/healthz, port: 8000 }
-            initialDelaySeconds: 10
-            periodSeconds: 5
-            failureThreshold: 6
+            httpGet:
+              path: /v1/healthz
+              port: 8000
+              httpHeaders:
+                - name: Host
+                  value: aiserver-svc
           livenessProbe:
-            httpGet: { path: /v1/healthz, port: 8000 }
+            httpGet:
+              path: /v1/healthz
+              port: 8000
+              httpHeaders:
+                - name: Host
+                  value: aiserver-svc
             initialDelaySeconds: 30
             periodSeconds: 10
             failureThreshold: 6
