@@ -4,7 +4,7 @@ pipeline {
     kubernetes {
       label 'k8s-ephemeral'
       defaultContainer 'jnlp'
-      yaml """
+      yaml ```
 apiVersion: v1
 kind: Pod
 metadata:
@@ -54,7 +54,7 @@ spec:
   volumes:
     - name: docker-config
       emptyDir: {}
-"""
+```
     }
   }
 
