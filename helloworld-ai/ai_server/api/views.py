@@ -2,7 +2,8 @@
 import os
 import json
 import uuid
-from datetime import datetime, timezone, date
+from math import radians, cos, sin, asin, sqrt
+from datetime import datetime, timezone, date, timedelta
 
 from django.http import JsonResponse, HttpRequest
 from django.utils.decorators import method_decorator
@@ -12,6 +13,7 @@ from django.views import View
 from services.anomaly import AnomalyDetector, AnomalyConfig, KST
 from services.orm_stats_provider import OrmStatsProvider
 from services.policy_service import categories_for_trigger  # DB 우선 + 폴백
+from services.weather_gateway import get_weather_gateway  # env 없이 동작(기본 stub)
 
 from api.models import (
     Content,
@@ -20,7 +22,16 @@ from api.models import (
     ItemRec,
     Feedback as FeedbackModel,
     Outcome as OutcomeModel,
+    # ↓ steps-check/places에 필요한 모델
+    TriggerCategoryPolicy,
+    UserStepsTodStatsDaily,
+    PlaceInside,
+    PlaceOutside,
+    # PlaceExposure는 없을 수도 있어 try/except로 사용
 )
+
+# 걸음수 check 임계값 고정
+STEPS_DIFF_THRESHOLD = 500
 
 # ── 싱글턴 ────────────────────────────────────────────────────────────────────
 _config = AnomalyConfig()
@@ -46,6 +57,25 @@ def _iso_to_utc(ts_str: str):
     # "2025-09-16T10:00:00+09:00" / "...Z" 모두 지원
     return datetime.fromisoformat(ts_str.replace("Z", "+00:00")).astimezone(timezone.utc)
 
+def _to_kst(dt_utc: datetime) -> datetime:
+    if dt_utc.tzinfo is None:
+        dt_utc = dt_utc.replace(tzinfo=timezone.utc)
+    return dt_utc.astimezone(KST)
+
+def _bucket_index_4h(kst_dt: datetime) -> int:
+    return kst_dt.hour // 4  # 0..5
+
+def _haversine_km(lat1, lon1, lat2, lon2):
+    R = 6371.0
+    dlat = radians(lat2-lat1)
+    dlon = radians(lon2-lon1)
+    a = sin(dlat/2)**2 + cos(radians(lat1))*cos(radians(lat2))*sin(dlon/2)**2
+    c = 2*asin(sqrt(a))
+    return R*c
+
+def _clamp(v, lo, hi):
+    return max(lo, min(hi, v))
+
 def _session_model_fields():
     return {f.name for f in RecommendationSession._meta.get_fields()
             if getattr(f, "concrete", False) and not getattr(f, "auto_created", False)}
@@ -68,6 +98,8 @@ def _create_session_dynamic(*, mode: str, user_ref: str, trigger: str,
         "reasons": reasons,
         "as_of": as_of_date.isoformat(),
         "bucket_4h": bucket4h,
+        "kst_date": as_of_date.isoformat(),  # 재사용 조회용
+        "bucket": bucket4h,
     }
     if have_as_of:  kwargs["as_of"] = as_of_date
     if have_bucket: kwargs["bucket_4h"] = bucket4h
@@ -229,10 +261,238 @@ def telemetry(request: HttpRequest):
         logging.getLogger(__name__).exception("telemetry error")
         return JsonResponse({"detail": "internal error", "error": type(e).__name__, "message": str(e)}, status=500)
 
+# ── /v1/steps-check ──────────────────────────────────────────────────────────
+@csrf_exempt
+def steps_check(request: HttpRequest):
+    """
+    고정 시각(12/16/20 KST) 누적 걸음수로 저활동 판단 → restrict 세션 발급
+    - 기준: 동시간대 평균(mu)보다 'threshold'(기본 500) 걸음 이상 부족하면 저활동
+    - 동일 일자·버킷 재호출 시 기존 session 재사용(context.kst_date/bucket)
+    """
+    if request.method != "POST":
+        return JsonResponse({"ok": False, "error": "INVALID_METHOD"}, status=405)
+    if not _auth_ok(request):
+        return JsonResponse({"detail": "invalid app token"}, status=401)
+
+    try:
+        body = _json(request)
+        user_ref = body["user_ref"]
+        ts_utc = _iso_to_utc(body["ts"]) if body.get("ts") else datetime.now(timezone.utc)
+        cum_steps = int(body["cum_steps"])  # 메인서버가 누적 걸음수 전달
+    except Exception:
+        return JsonResponse({"ok": False, "error": "INVALID_BODY"}, status=400)
+
+    # KST 기준 버킷
+    kst = _to_kst(ts_utc)
+    b = _bucket_index_4h(kst)
+
+    # 기준선: 오늘 우선 → 없으면 최근일 (동시간대 평균만 사용)
+    qs = UserStepsTodStatsDaily.objects.filter(user_ref=user_ref, bucket=b)
+    base = qs.filter(d=kst.date()).first() or qs.order_by("-d").first()
+    if not base:
+        return JsonResponse({"ok": True, "anomaly": False, "mode": "normal", "note": "no_baseline"}, status=200)
+
+    threshold = STEPS_DIFF_THRESHOLD
+    mu = float(base.cum_mu if base.cum_mu is not None else 0.0)
+    diff = mu - float(cum_steps)           # +면 평균보다 부족, -면 평균보다 많음
+    is_low = diff >= threshold             # 평균보다 threshold 이상 부족하면 저활동
+
+    if not is_low:
+        return JsonResponse({"ok": True, "anomaly": False, "mode": "normal"}, status=200)
+
+    # 동일 일자·버킷 steps_low 세션 재사용
+    sess = (RecommendationSession.objects
+            .filter(user_ref=user_ref, mode="restrict", trigger="steps_low")
+            .filter(context__kst_date=str(kst.date()), context__bucket=b)
+            .order_by("-created_at")
+            .first())
+    if not sess:
+        sess = _create_session_dynamic(
+            mode="restrict", user_ref=user_ref, trigger="steps_low",
+            reasons=[f"steps_diff={int(diff)}"], as_of_date=kst.date(), bucket4h=b
+        )
+
+    # 정책(우선순위 오름차순)
+    pols = (TriggerCategoryPolicy.objects
+            .filter(trigger="steps_low", is_active=True)
+            .order_by("priority"))
+    cats = [{
+        "category": p.category,
+        "rank": p.priority,
+        "reason": "steps low vs avg"
+    } for p in pols]
+
+    return JsonResponse({
+        "ok": True,
+        "anomaly": True,
+        "mode": "restrict",
+        "trigger": "steps_low",
+        "reasons": [
+            f"steps_diff={int(diff)} (threshold={threshold}, bucket={b})",
+            f"cum_steps={int(cum_steps)}, mu={int(mu)}"
+        ],
+        "recommendation": {
+            "session_id": str(sess.id),
+            "categories": cats
+        }
+    }, status=200)
+
+# ── /v1/places ───────────────────────────────────────────────────────────────
+@csrf_exempt
+def places(request: HttpRequest):
+    """
+    OUTING: 위치/날씨 기반 장소 추천
+    - 입력: user_ref, session_id, category=OUTING, lat, lng, max_distance_km(기본 3.0), limit(기본 3)
+    - 검증: session(user_ref 소유, mode=restrict, trigger=steps_low), category=OUTING
+    - 날씨 게이트: clear/clouds → 실외 PlaceOutside, 그 외 → 실내 PlaceInside
+    - 중복 제거: 최근 14일 내 동일 place_type/place_id 노출 제외 (PlaceExposure 없으면 폴백)
+    - 테스트용 weather override: body.weather_kind = clear|clouds|rain|snow|thunder|dust
+    """
+    if request.method != "POST":
+        return JsonResponse({"ok": False, "error": "INVALID_METHOD"}, status=405)
+    if not _auth_ok(request):
+        return JsonResponse({"detail": "invalid app token"}, status=401)
+
+    body = _json(request)
+    required = {"user_ref","session_id","category","lat","lng"}
+    if not required.issubset(body):
+        return JsonResponse({"ok": False, "error": "INVALID_BODY"}, status=400)
+
+    user_ref = str(body["user_ref"])
+    session_id = str(body["session_id"])
+    category = str(body["category"]).upper().strip()
+    if category != "OUTING":
+        return JsonResponse({"ok": False, "error": "CATEGORY_NOT_ALLOWED"}, status=422)
+
+    try:
+        lat = float(body["lat"])
+        lng = float(body["lng"])
+    except Exception:
+        return JsonResponse({"ok": False, "error": "INVALID_BODY:latlng"}, status=400)
+
+    limit = int(_clamp(int(body.get("limit", 3)), 1, 5))
+    max_distance_km = float(_clamp(float(body.get("max_distance_km", 3.0)), 0.5, 10.0))
+
+    # 세션 검증: 소유 + restrict + steps_low
+    try:
+        sess = RecommendationSession.objects.get(id=uuid.UUID(session_id))
+    except Exception:
+        return JsonResponse({"ok": False, "error": "INVALID_SESSION"}, status=404)
+    if getattr(sess, "user_ref", None) != user_ref:
+        return JsonResponse({"ok": False, "error": "SESSION_OWNERSHIP"}, status=403)
+    if sess.mode != "restrict" or getattr(sess, "trigger", "") != "steps_low":
+        return JsonResponse({"ok": False, "error": "SESSION_CLOSED"}, status=409)
+
+    # 날씨 게이트 (+ 요청 바디 오버라이드)
+    override_kind = None
+    if "weather_kind" in body:
+        k = str(body["weather_kind"]).lower()
+        if k in {"clear","clouds","rain","snow","thunder","dust"}:
+            override_kind = k  # type: ignore
+    kind, outdoor_ok = get_weather_gateway().get_kind_and_gate(lat, lng, override_kind=override_kind)
+
+    # 후보 쿼리: 실외/실내 중 하나 선택
+    if outdoor_ok:
+        qset = PlaceOutside.objects.filter(is_active=True)
+        place_type = "outside"
+    else:
+        qset = PlaceInside.objects.filter(is_active=True)
+        place_type = "inside"
+
+    # 바운딩 박스 프리필터
+    lat_delta = max_distance_km / 111.0
+    lng_delta = max_distance_km / max(1e-6, (111.0 * cos(radians(lat))))
+    qset = qset.filter(
+        lat__isnull=False, lon__isnull=False,
+        lat__gte=lat - lat_delta, lat__lte=lat + lat_delta,
+        lon__gte=lng - lng_delta, lon__lte=lng + lng_delta
+    )[:500]
+
+    # 최근 14일 중복 제거 (PlaceExposure 있으면 사용)
+    since = datetime.now(timezone.utc) - timedelta(days=14)
+    recent_ids = set()
+    try:
+        from api.models import PlaceExposure
+        recent_ids = set(
+            PlaceExposure.objects.filter(
+                user_ref=user_ref, place_type=place_type, created_at__gte=since
+            ).values_list("place_id", flat=True)
+        )
+    except Exception:
+        recent_ids = set()
+
+    # 거리 계산/정렬 및 필터 적용
+    items = []
+    for r in qset:
+        if r.id in recent_ids:
+            continue
+        d = _haversine_km(lat, lng, float(r.lat), float(r.lon))
+        if d <= max_distance_km:
+            items.append({"obj": r, "distance_km": d})
+    items.sort(key=lambda x: x["distance_km"])
+
+    picked = items[:limit]
+
+    # 노출 로그 저장 (PlaceExposure 있으면 기록)
+    try:
+        from api.models import PlaceExposure
+        for it in picked:
+            PlaceExposure.objects.create(user_ref=user_ref, place_type=place_type, place_id=it["obj"].id)
+    except Exception:
+        pass
+
+    # 응답 변환 (+ 주소/카테고리 추가)
+    resp_items = []
+    for rank, it in enumerate(picked, start=1):
+        p = it["obj"]
+        title = getattr(p, "name", "") or getattr(p, "title", "")
+        addr_road = (getattr(p, "address_road", "") or "").strip()
+        addr_jibun = (getattr(p, "address", "") or "").strip()
+        addr = addr_road or addr_jibun
+        resp_items.append({
+            "content_id": p.id,
+            "title": title,
+            "lat": float(p.lat),
+            "lng": float(p.lon),
+            "distance_km": round(it["distance_km"], 2),
+            "rank": rank,
+            "reason": "distance",
+            "weather_gate": "OK" if outdoor_ok else "INDOOR",
+            "address": addr,
+            "address_road": addr_road or None,
+            "address_jibun": addr_jibun or None,
+            "place_category": (getattr(p, "category", "") or None),
+        })
+
+    # 후보 0건이면 실내 대체 카드 반환 (fallback)
+    if not resp_items:
+        return JsonResponse({
+            "ok": True,
+            "session_id": str(sess.id),
+            "category": "OUTING",
+            "items": [],
+            "fallback_used": True,
+            "safe_templates": [
+                {"category":"WALK","title":"실내 워킹 10분"},
+                {"category":"STRETCHING","title":"전신 스트레칭 5분"}
+            ],
+            "weather": {"kind": kind, "outdoor_ok": outdoor_ok}
+        }, status=200)
+
+    return JsonResponse({
+        "ok": True,
+        "session_id": str(sess.id),
+        "category": "OUTING",
+        "items": resp_items,
+        "fallback_used": False,
+        "weather": {"kind": kind, "outdoor_ok": outdoor_ok}
+    }, status=200)
+
 # ── /v1/feedback ─────────────────────────────────────────────────────────────
 @csrf_exempt
 def feedback(request: HttpRequest):
-    """명세서 준수: { "ok": true } 만 반환"""
+    """명세서 준수: { "ok": true } 만 반환
+       steps_low 세션은 No-Op (로그/학습 비반영)"""
     if request.method != "POST":
         return JsonResponse({"error": "method_not_allowed"}, status=405)
     if not _auth_ok(request):
@@ -254,6 +514,10 @@ def feedback(request: HttpRequest):
             session_obj = RecommendationSession.objects.filter(id=uuid.UUID(str(sid))).first()
         except Exception:
             session_obj = None
+
+    # steps_low 세션은 No-Op
+    if session_obj and session_obj.trigger == "steps_low":
+        return JsonResponse({"ok": True}, status=200)
 
     cid = body.get("content_id")
     if cid:
@@ -307,5 +571,12 @@ class TelemetryView(View):
 class FeedbackView(View):
     def post(self, request, *args, **kwargs):
         return feedback(request)
+    def get(self, request, *args, **kwargs):
+        return JsonResponse({"error": "method_not_allowed"}, status=405)
+
+@method_decorator(csrf_exempt, name="dispatch")
+class StepsCheckView(View):
+    def post(self, request, *args, **kwargs):
+        return steps_check(request)
     def get(self, request, *args, **kwargs):
         return JsonResponse({"error": "method_not_allowed"}, status=405)

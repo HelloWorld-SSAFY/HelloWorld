@@ -22,18 +22,30 @@ FEEDBACK_TYPE_CHOICES = (
 
 # ─────────────────────────────────────────────────────────────────────
 # 콘텐츠 (외부 제공자 매핑 + 금기/활성 여부)
+# 장소 추천 지원을 위해 type/lat/lng/tags/safety_flags 추가
 # ─────────────────────────────────────────────────────────────────────
 class Content(models.Model):
     provider = models.CharField(max_length=50)             # 예: "sp" (spotify 등)
     external_id = models.CharField(max_length=200)         # 공급자 측 식별자
-    category = models.CharField(max_length=50)             # BREATHING / MEDITATION 등
+    category = models.CharField(max_length=50)             # BREATHING / MEDITATION / OUTING 등
     title = models.CharField(max_length=200, blank=True, default="")
     url = models.URLField(max_length=500, blank=True, default="")
     is_active = models.BooleanField(default=True)
 
+    # 장소형 컨텐츠용 필드
+    type = models.CharField(max_length=10, default="CONTENT")  # CONTENT / PLACE
+    lat = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    lng = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    tags = models.JSONField(null=True, blank=True)             # ["SHADE","STROLLER_OK"]
+    safety_flags = models.JSONField(null=True, blank=True)     # ["RESTROOM_NEARBY"]
+
     class Meta:
         db_table = "content"
         unique_together = (("provider", "external_id"),)
+        indexes = [
+            models.Index(fields=["type"]),
+            models.Index(fields=["lat", "lng"]),
+        ]
 
     def __str__(self) -> str:
         return f"{self.provider}:{self.external_id} ({self.category})"
@@ -146,10 +158,11 @@ class Outcome(models.Model):
 
 # ─────────────────────────────────────────────────────────────────────
 # 트리거→카테고리 우선순위 정책
+# (주의: 필드명 priority / is_active 사용)
 # ─────────────────────────────────────────────────────────────────────
 class TriggerCategoryPolicy(models.Model):
     trigger = models.CharField(max_length=50)         # "stress_up" / "hr_low" / "hr_high" / "steps_low"
-    category = models.CharField(max_length=50)        # "BREATHING" / "MEDITATION" / ...
+    category = models.CharField(max_length=50)        # "BREATHING" / "MEDITATION" / "WALK" / "OUTING" ...
     priority = models.IntegerField(default=1)         # 1이 최상위 노출
     is_active = models.BooleanField(default=True)
 
@@ -201,6 +214,10 @@ class UserTodStatsDaily(models.Model):
     def __str__(self) -> str:
         return f"{self.user_ref} {self.as_of} {self.metric}/{self.stat}"
 
+
+# ─────────────────────────────────────────────────────────────────────
+# 장소 원장 테이블(원천 보관용) — 추천용 Content(type=PLACE)로 동기화 예정
+# ─────────────────────────────────────────────────────────────────────
 class PlaceBase(models.Model):
     name = models.CharField(max_length=200, db_index=True)
     category = models.CharField(max_length=100, blank=True, default="")
@@ -212,22 +229,63 @@ class PlaceBase(models.Model):
     source = models.CharField(max_length=50, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     raw = models.JSONField(default=dict, blank=True)
+
     class Meta:
         abstract = True
+
 
 class PlaceInside(PlaceBase):
     postal_code = models.CharField(max_length=20, blank=True, default="")
     epsg5174_x = models.FloatField(null=True, blank=True)
     epsg5174_y = models.FloatField(null=True, blank=True)
+
     class Meta:
         db_table = "place_inside"
         indexes = [models.Index(fields=["category"])]
+
 
 class PlaceOutside(PlaceBase):
     sido = models.CharField(max_length=40, blank=True, default="")
     sigungu = models.CharField(max_length=60, blank=True, default="")
     eupmyeondong = models.CharField(max_length=80, blank=True, default="")
+
     class Meta:
         db_table = "place_outside"
-        indexes = [models.Index(fields=["sido","sigungu"])]
+        indexes = [models.Index(fields=["sido", "sigungu"])]
 
+
+# ─────────────────────────────────────────────────────────────────────
+# 4시간 버킷 누적 걸음수 기준선(steps-check용)
+# ─────────────────────────────────────────────────────────────────────
+class UserStepsTodStatsDaily(models.Model):
+    user_ref = models.CharField(max_length=64, db_index=True)
+    d = models.DateField()                       # 기준 날짜(KST)
+    bucket = models.IntegerField()               # 0..5
+    cum_mu = models.FloatField()
+    cum_sigma = models.FloatField()
+    p20 = models.FloatField()
+
+    class Meta:
+        db_table = "user_steps_tod_stats_daily"
+        unique_together = (("user_ref", "d", "bucket"),)
+        indexes = [
+            models.Index(fields=["user_ref", "d"]),
+            models.Index(fields=["bucket"]),
+        ]
+
+class PlaceExposure(models.Model):
+    user_ref = models.CharField(max_length=64, db_index=True)
+    place_type = models.CharField(max_length=10)  # "inside" | "outside"
+    place_id = models.IntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "place_exposure"
+        indexes = [
+            models.Index(fields=["user_ref", "place_type", "place_id"]),
+            models.Index(fields=["created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user_ref}:{self.place_type}:{self.place_id}"
+    
