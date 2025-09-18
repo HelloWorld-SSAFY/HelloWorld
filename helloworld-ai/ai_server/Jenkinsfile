@@ -4,7 +4,7 @@ pipeline {
     kubernetes {
       label 'k8s-ephemeral'
       defaultContainer 'jnlp'
-      yaml """
+      yaml '''
 apiVersion: v1
 kind: Pod
 metadata:
@@ -30,6 +30,7 @@ spec:
     - name: kubectl
       image: alpine:3.20
       imagePullPolicy: IfNotPresent
+      securityContext: { runAsUser: 0 }   # apk 설치용 루트
       command: ["sh","-lc","set -eux; \
         apk add --no-cache curl ca-certificates; \
         arch=$(uname -m); case $arch in x86_64) arch=amd64 ;; aarch64) arch=arm64 ;; *) echo unsupported: $arch; exit 1 ;; esac; \
@@ -39,13 +40,11 @@ spec:
         trap : TERM INT; sleep infinity & wait"]
       tty: true
       workingDir: /home/jenkins/agent
-      securityContext: { runAsUser: 1000, runAsGroup: 1000 }
-
 
   volumes:
     - name: docker-config
       emptyDir: {}
-"""
+'''
     }
   }
 
@@ -59,8 +58,8 @@ spec:
 
     // 이 파이프라인 고정 값
     ROOT_DIR   = "helloworld-ai"
-    SVC_DIR    = "ai_server"      // Dockerfile 위치
-    APP_NAME   = "aiserver"       // Deployment/이미지 이름
+    SVC_DIR    = "ai_server"       // Dockerfile 위치
+    APP_NAME   = "aiserver"        // Deployment/이미지 이름
     MAN_DIR    = "helloworld-ai/k8s/apps/aiserver" // k8s 매니페스트 디렉터리
   }
 
@@ -69,6 +68,16 @@ spec:
       steps {
         checkout scm
         sh 'git --version; git rev-parse --short HEAD'
+      }
+    }
+
+    // SHA 한 번만 계산해서 전역 env로
+    stage('Compute SHA') {
+      steps {
+        script {
+          env.SHA = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+          echo "Using SHA=${env.SHA}"
+        }
       }
     }
 
@@ -96,6 +105,7 @@ spec:
       }
     }
 
+    // 도커 데몬/소켓 없이 Kaniko로 이미지 빌드+푸시
     stage('Docker build & push (Kaniko)') {
       when { expression { return env.CODE_CHANGED == 'yes' } }
       steps {
@@ -103,14 +113,17 @@ spec:
           withCredentials([usernamePassword(credentialsId: env.DH_CREDS, usernameVariable: 'DH_USER', passwordVariable: 'DH_TOKEN')]) {
             sh '''
 set -eux
+
+# 1) Docker auth JSON
 rm -f /kaniko/.docker/config.json
 mkdir -p /kaniko/.docker
 auth="$(printf "%s:%s" "$DH_USER" "$DH_TOKEN" | base64 | tr -d '\n')"
 cat >/kaniko/.docker/config.json <<EOF
 {"auths":{"https://index.docker.io/v1/":{"auth":"$auth"}}}
 EOF
+# 보안상 내용 출력은 생략 (필요하면 파일 존재만 확인)
 
-SHA="$(git rev-parse --short HEAD)"
+# 2) 빌드/푸시
 ctx="${ROOT_DIR}/${SVC_DIR}"
 df="${ctx}/Dockerfile"
 
@@ -151,7 +164,6 @@ kubectl -n "${ns}" apply -f "${man_dir}"
           sh '''
 set -eux
 ns="${K8S_NS}"
-SHA="$(git rev-parse --short HEAD)"
 img="${REGISTRY}/${IMAGE_REPO}:${APP_NAME}-${SHA}"
 
 # aiserver Deployment만 고려
