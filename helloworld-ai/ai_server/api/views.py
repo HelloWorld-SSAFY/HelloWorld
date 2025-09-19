@@ -15,7 +15,6 @@ from rest_framework.response import Response
 from rest_framework import serializers
 from drf_spectacular.utils import (
     extend_schema,
-    OpenApiParameter,
     OpenApiTypes,
     inline_serializer,
 )
@@ -125,11 +124,6 @@ class TelemetryView(APIView):
         responses={200: TelemetryOut},
         tags=["telemetry"],
         summary="Telemetry ingest & anomaly decision",
-        # (선택) 엔드포인트 카드에 헤더 입력칸도 보이게 하고 싶다면:
-        parameters=[OpenApiParameter(
-            name="X-App-Token", location=OpenApiParameter.HEADER,
-            required=True, type=OpenApiTypes.STR, description="App token"
-        )],
     )
     def post(self, request: HttpRequest):
         bad = _assert_app_token(request)
@@ -174,10 +168,6 @@ class FeedbackView(APIView):
         responses={200: FeedbackOut},
         tags=["feedback"],
         summary="Log feedback for a recommendation session",
-        parameters=[OpenApiParameter(
-            name="X-App-Token", location=OpenApiParameter.HEADER,
-            required=True, type=OpenApiTypes.STR, description="App token"
-        )],
     )
     def post(self, request: HttpRequest):
         bad = _assert_app_token(request)
@@ -212,10 +202,6 @@ class StepsCheckView(APIView):
         responses={200: StepsCheckOut},
         tags=["steps"],
         summary="Check cumulative steps at 12/16/20(KST) and issue steps_low session",
-        parameters=[OpenApiParameter(
-            name="X-App-Token", location=OpenApiParameter.HEADER,
-            required=True, type=OpenApiTypes.STR, description="App token"
-        )],
     )
     def post(self, request: HttpRequest):
         bad = _assert_app_token(request)
@@ -258,10 +244,6 @@ class PlacesView(APIView):
         responses={200: PlacesOut},
         tags=["places"],
         summary="Recommend outing places guarded by weather/air quality",
-        parameters=[OpenApiParameter(
-            name="X-App-Token", location=OpenApiParameter.HEADER,
-            required=True, type=OpenApiTypes.STR, description="App token"
-        )],
     )
     def post(self, request: HttpRequest):
         bad = _assert_app_token(request)
