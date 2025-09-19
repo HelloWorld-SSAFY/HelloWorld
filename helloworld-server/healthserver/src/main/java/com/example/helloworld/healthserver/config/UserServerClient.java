@@ -12,5 +12,5 @@ public interface UserServerClient {
     @GetMapping("/api/users/me")
     MeResponse me();
 
-    record MeResponse(Long userId, Long coupleId, String email) {}
+    record MeResponse(Long userId, Long coupleId) {}
 }
