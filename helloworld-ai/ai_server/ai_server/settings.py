@@ -136,6 +136,10 @@ SPECTACULAR_SETTINGS = {
             "description": "앱 인증 토큰을 입력하세요. 예) X-App-Token: <your-token>",
         }
     },
+    "SERVERS": [
+        {"url": "/ai", "description": "via gateway"},   # 게이트웨이로 노출될 때
+        {"url": "/", "description": "in-cluster direct"},  # 클러스터 내부/서비스 직접 호출
+    ],
     # 보기 좋게: 요청과 응답을 분리해서 표시
     "COMPONENT_SPLIT_REQUEST": True,
     # (선택) 프리픽스 필터링: 필요시 수정
