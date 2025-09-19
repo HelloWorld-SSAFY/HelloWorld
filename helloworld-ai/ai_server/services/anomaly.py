@@ -2,7 +2,8 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta, date
-from typing import Dict, Tuple, Protocol, Optional
+from typing import Dict, Tuple, Protocol, Optional, runtime_checkable
+import uuid
 
 # ──────────────────────────────────────────────────────────────────────────────
 # KST / 버킷
@@ -20,6 +21,7 @@ def bucket_index_4h(kst_dt: datetime) -> int:
 # ──────────────────────────────────────────────────────────────────────────────
 # 기준선 공급자
 # ──────────────────────────────────────────────────────────────────────────────
+@runtime_checkable
 class StatsProvider(Protocol):
     def get_bucket_stats(
         self, user_ref: str, as_of: date, metric: str, bucket_idx: int
@@ -86,11 +88,32 @@ class AnomalyResult:
 # 탐지기
 # ──────────────────────────────────────────────────────────────────────────────
 class AnomalyDetector:
-    def __init__(self, stats: StatsProvider, config: Optional[AnomalyConfig] = None):
-        self.stats = stats
+    """
+    __init__ 호환성:
+      - 신규: AnomalyDetector(config=<AnomalyConfig>, provider=<StatsProvider>)
+      - 레거시: AnomalyDetector(<StatsProvider>, config=<AnomalyConfig>)
+      - 또는 AnomalyDetector(config=..., stats=...) 도 허용
+    """
+    def __init__(
+        self,
+        config: Optional[AnomalyConfig] = None,
+        provider: Optional[StatsProvider] = None,
+        *,
+        stats: Optional[StatsProvider] = None
+    ):
+        # 레거시 대응: 첫 인자가 StatsProvider였던 형태 지원
+        if isinstance(config, StatsProvider) and provider is None and stats is None:
+            provider = config
+            config = None
+
+        self.stats: Optional[StatsProvider] = provider or stats
         self.cfg = config or AnomalyConfig()
+        if self.stats is None:
+            raise ValueError("Stats provider is required")
+
         self._users: Dict[str, UserState] = {}
 
+    # 내부: Z-score 계산
     def _z(self, x: float, mu: Optional[float], sigma: Optional[float]) -> Optional[float]:
         if mu is None or sigma is None or sigma <= 1e-6:
             return None
@@ -99,6 +122,7 @@ class AnomalyDetector:
         except Exception:
             return None
 
+    # 외부: 평가 (UTC 기준)
     def evaluate(self, *, user_ref: str, ts_utc: datetime, metrics: Dict[str, float]) -> AnomalyResult:
         S = self._users.setdefault(user_ref, UserState())
 
@@ -107,7 +131,7 @@ class AnomalyDetector:
             return AnomalyResult(
                 ok=True, anomaly=True, risk_level="critical", mode="emergency",
                 reasons=(f"emergency_cooldown_until={S.emergency_until.isoformat()}",),
-                trigger="hr_high"  # 의미 없음(응급은 카테고리 안 씀)
+                trigger="hr_high"  # 응급은 카테고리 안 씀
             )
 
         present = [m for m in self.cfg.supported_metrics if m in metrics]
@@ -147,7 +171,7 @@ class AnomalyDetector:
             res_hr_inst_lo = (hrf is not None and hrf <= self.cfg.hr_inst_restrict_low)
 
             if forward:
-                S.emg_hr_z_c   = (S.emg_hr_z_c   + 1) if emg_hr_z else 0
+                S.emg_hr_z_c    = (S.emg_hr_z_c    + 1) if emg_hr_z else 0
                 S.res_hr_high_c = (S.res_hr_high_c + 1) if (res_hr_z_hi or res_hr_inst_hi) else 0
                 S.res_hr_low_c  = (S.res_hr_low_c  + 1) if (res_hr_z_lo or res_hr_inst_lo) else 0
 
@@ -223,7 +247,34 @@ class AnomalyDetector:
             reason = ("|STRESS_Z|>={:.1f} x{}".format(self.cfg.z_restrict, self.cfg.consecutive_required)
                       if stress_z is not None
                       else "STRESS_abs>={:.2f} x{}".format(self.cfg.stress_abs_fallback, self.cfg.consecutive_required))
+        # (주의: 위 if에서 return 누락되면 정상모드로 떨어질 수 있음)
             return AnomalyResult(True, True, "high", "restrict", (reason,), trigger="stress_up", z=stress_z)
 
         # 8) 이상 없음
         return AnomalyResult(True, False, "low", "normal", ())
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # views.py 호환용: handle_telemetry
+    #   - 입력 ts가 KST든 UTC든 상관없이 tz-aware면 UTC로 변환, naive면 UTC 가정
+    #   - 반환: {"level": "normal|restrict|emergency", "trigger": "...", "session_id": "..."}
+    # ──────────────────────────────────────────────────────────────────────────
+    def handle_telemetry(self, *, user_ref: str, ts: datetime, metrics: Dict[str, float]) -> Dict[str, Optional[str]]:
+        # ts를 UTC로 정규화
+        ts_utc = ts
+        if ts_utc.tzinfo is None:
+            ts_utc = ts_utc.replace(tzinfo=timezone.utc)
+        else:
+            ts_utc = ts_utc.astimezone(timezone.utc)
+
+        res = self.evaluate(user_ref=user_ref, ts_utc=ts_utc, metrics=metrics)
+
+        out = {
+            "level": res.mode,          # "normal" | "restrict" | "emergency"
+            "trigger": res.trigger,     # None 가능
+        }
+
+        # restrict / emergency에서 session_id 필요 → 여기서 생성(영속 저장은 상위에서)
+        if res.mode in ("restrict", "emergency"):
+            out["session_id"] = str(uuid.uuid4())
+
+        return out
