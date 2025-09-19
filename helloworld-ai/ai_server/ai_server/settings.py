@@ -138,6 +138,12 @@ SPECTACULAR_SETTINGS = {
     # ② 전역 보안 요구사항: 모든 엔드포인트에 AppToken 적용(healthz 등은 개별로 끔)
     "SECURITY": [{"AppToken": []}],
 
+    "SERVERS": [
+        {"url": "/ai", "description": "via gateway"},        # 게이트웨이로 노출될 때
+        {"url": "/",  "description": "in-cluster direct"},   # 클러스터 내부/서비스 직접 호출
+    ],
+
+
     # (옵션) Swagger UI 보기 설정
     "SORT_OPERATION_PARAMETERS": False,
     "SWAGGER_UI_SETTINGS": {
