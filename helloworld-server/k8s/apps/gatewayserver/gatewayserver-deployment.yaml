@@ -4,7 +4,7 @@ metadata:
   name: gatewayserver
   namespace: apps
 spec:
-  replicas: 3
+  replicas: 2
   strategy:
     type: RollingUpdate
     rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
@@ -32,6 +32,15 @@ spec:
         ports:
         - containerPort: 8080
         env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+
         - name: SPRING_CONFIG_IMPORT
           value: "optional:configserver:http://configserver-svc.apps.svc.cluster.local:8888"
         - name: SPRING_CLOUD_CONFIG_FAIL_FAST
@@ -76,7 +85,7 @@ metadata:
   name: gatewayserver-pdb
   namespace: apps
 spec:
-  minAvailable: 2
+  minAvailable: 1
   selector:
     matchLabels:
       app: gatewayserver
@@ -92,7 +101,7 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: gatewayserver
-  minReplicas: 3
+  minReplicas: 2
   maxReplicas: 10
   metrics:
   - type: Resource

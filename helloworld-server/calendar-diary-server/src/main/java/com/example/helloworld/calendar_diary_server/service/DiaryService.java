@@ -2,6 +2,7 @@ package com.example.helloworld.calendar_diary_server.service;
 
 
 import com.example.helloworld.calendar_diary_server.dto.*;
+
 import com.example.helloworld.calendar_diary_server.entity.Diary;
 import com.example.helloworld.calendar_diary_server.entity.DiaryPhoto;
 import com.example.helloworld.calendar_diary_server.repository.DiaryPhotoRepository;
@@ -28,6 +29,52 @@ public class DiaryService {
 
     private static final ZoneId ZONE = ZoneId.of("Asia/Seoul");
     private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+
+    // 주차 조회: week(1..40), lmpDate, coupleId
+    public WeekResult getByWeek(Long coupleId, int week, LocalDate lmpDate) {
+        validateWeek(week);
+        if (lmpDate == null) throw new IllegalArgumentException("lmpDate is required");
+
+        int startDay = (week - 1) * 7 + 1;
+        int endDay   = week * 7;
+
+        LocalDate startDate = lmpDate.plusDays(startDay - 1L);
+        LocalDate endDate   = lmpDate.plusDays(endDay - 1L);
+
+        List<DiaryResponse> items = diaryRepository
+                .findByCoupleIdAndTargetDateBetweenOrderByTargetDateAscDiaryIdAsc(coupleId, startDate, endDate)
+                .stream().map(DiaryResponse::from).toList();
+
+        return new WeekResult(
+                coupleId, week, startDate, endDate, items.size(), items
+        );
+    }
+
+    // 일차 조회: day(1..280), lmpDate, coupleId
+    public DayResult getByDay(Long coupleId, int day, LocalDate lmpDate) {
+        validateDay(day);
+        if (lmpDate == null) throw new IllegalArgumentException("lmpDate is required");
+
+        LocalDate date = lmpDate.plusDays(day - 1L);
+        int week = ((day - 1) / 7) + 1;
+
+        List<DiaryResponse> items = diaryRepository
+                .findByCoupleIdAndTargetDateOrderByTargetDateAscDiaryIdAsc(coupleId, date)
+                .stream().map(DiaryResponse::from).toList();
+
+        return new DayResult(
+                coupleId, day, week, date, items.size(), items
+        );
+    }
+
+    private void validateWeek(int week) {
+        if (week < 1 || week > 40) throw new IllegalArgumentException("week must be 1..40");
+    }
+    private void validateDay(int day) {
+        if (day < 1 || day > 280) throw new IllegalArgumentException("day must be 1..280");
+    }
+
+
 
     /** 6.1 일기 전체 조회 */
     public Page<DiaryListItemDto> list(Long coupleId, Pageable pageable) {
@@ -92,11 +139,12 @@ public class DiaryService {
         Diary d = Diary.builder()
                 .coupleId(req.getCoupleId())
                 .authorId(req.getAuthorId())
-                .authorRole("mother".equalsIgnoreCase(req.getAuthorRole()) ?
-                        Diary.AuthorRole.MOTHER : Diary.AuthorRole.FATHER)
+                .authorRole("female".equalsIgnoreCase(req.getAuthorRole()) ?
+                        Diary.AuthorRole.FEMALE : Diary.AuthorRole.MALE)
                 .diaryTitle(req.getDiaryTitle())
                 .diaryContent(req.getDiaryContent())
                 .createdAt(startOfDay)
+                .targetDate(req.getTargetDate())
                 .build();
 
         d = diaryRepository.save(d);

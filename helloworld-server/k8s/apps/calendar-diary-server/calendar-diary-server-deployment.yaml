@@ -4,7 +4,7 @@ metadata:
   name: calendar-diary-server
   namespace: apps
 spec:
-  replicas: 3
+  replicas: 2
   strategy:
     type: RollingUpdate
     rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
@@ -32,11 +32,14 @@ spec:
         - containerPort: 8080
 
         env:
-        # Spring Cloud Config / Eureka 비활성화 (이중 안전장치)
-        - name: SPRING_CLOUD_CONFIG_ENABLED
-          value: "false"
-        - name: EUREKA_CLIENT_ENABLED
-          value: "false"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
 
         # Datasource (Service DNS, Secret에서 비번 주입)
         - name: SPRING_DATASOURCE_URL
@@ -71,7 +74,7 @@ metadata:
   name: calendar-diary-server-pdb
   namespace: apps
 spec:
-  minAvailable: 2
+  minAvailable: 1
   selector:
     matchLabels:
       app: calendar-diary-server
@@ -86,7 +89,7 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: calendar-diary-server
-  minReplicas: 3
+  minReplicas: 2
   maxReplicas: 10
   metrics:
   - type: Resource

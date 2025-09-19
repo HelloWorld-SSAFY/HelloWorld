@@ -4,7 +4,7 @@ metadata:
   name: userserver
   namespace: apps
 spec:
-  replicas: 3
+  replicas: 2
   strategy:
     type: RollingUpdate
     rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
@@ -32,11 +32,14 @@ spec:
         - containerPort: 8080
 
         env:
-        # (옵션) Config/Eureka OFF 안전장치
-        - name: SPRING_CLOUD_CONFIG_ENABLED
-          value: "false"
-        - name: EUREKA_CLIENT_ENABLED
-          value: "false"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
 
         # === Postgres (user-postgres) ===
         - name: SPRING_DATASOURCE_URL
@@ -108,7 +111,7 @@ metadata:
   name: userserver-pdb
   namespace: apps
 spec:
-  minAvailable: 2
+  minAvailable: 1
   selector:
     matchLabels:
       app: userserver
@@ -124,7 +127,7 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: userserver
-  minReplicas: 3
+  minReplicas: 2
   maxReplicas: 10
   metrics:
   - type: Resource

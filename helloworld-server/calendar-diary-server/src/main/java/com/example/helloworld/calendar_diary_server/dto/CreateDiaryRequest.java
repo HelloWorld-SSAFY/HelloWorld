@@ -3,6 +3,10 @@ package com.example.helloworld.calendar_diary_server.dto;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
+import org.springframework.cglib.core.Local;
+
+import java.sql.Timestamp;
+import java.time.LocalDate;
 
 
 @Getter
@@ -22,4 +26,7 @@ public class CreateDiaryRequest {
     private Long coupleId;
     @NotNull private Long authorId;
     @NotBlank private String authorRole;  // "father" | "mother"
+
+    @NotNull private LocalDate targetDate;
+
 }

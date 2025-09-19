@@ -4,20 +4,17 @@ pipeline {
     kubernetes {
       label 'k8s-ephemeral'
       defaultContainer 'jnlp'
-      yaml """
+      yaml '''
 apiVersion: v1
 kind: Pod
 metadata:
   labels:
     ci: jenkins
 spec:
-  # apps 네임스페이스에 있는 ServiceAccount (RBAC 미리 생성 필요)
   serviceAccountName: jenkins
   restartPolicy: Never
-
   securityContext:
     fsGroup: 1000
-
 
   containers:
     - name: jnlp
@@ -37,18 +34,23 @@ spec:
         runAsUser: 0
 
     - name: kubectl
-      image: bitnami/kubectl:latest
-      command: ["cat"]
+      image: alpine:3.20
+      imagePullPolicy: IfNotPresent
+      securityContext: { runAsUser: 0 }
+      command: ["sh","-lc","set -eux; \
+        apk add --no-cache curl ca-certificates bash git; \
+        arch=$(uname -m); case $arch in x86_64) arch=amd64 ;; aarch64) arch=arm64 ;; *) echo unsupported: $arch; exit 1 ;; esac; \
+        curl -fsSL -o /usr/local/bin/kubectl https://dl.k8s.io/release/v1.33.4/bin/linux/${arch}/kubectl; \
+        chmod +x /usr/local/bin/kubectl; \
+        kubectl version --client=true; \
+        trap : TERM INT; sleep infinity & wait"]
       tty: true
       workingDir: /home/jenkins/agent
-      securityContext:
-        runAsUser: 1000
-        runAsGroup: 1000
 
   volumes:
     - name: docker-config
       emptyDir: {}
-"""
+'''
     }
   }
 
@@ -71,7 +73,14 @@ spec:
     stage('Checkout') {
       steps {
         checkout scm
-        sh 'git --version; git rev-parse --short HEAD'
+        container('kubectl') {
+          sh '''
+            set -e
+            git --version
+            git config --global --add safe.directory "$WORKSPACE" || true
+            git rev-parse --short HEAD
+          '''
+        }
       }
     }
 
@@ -92,38 +101,41 @@ spec:
     stage('Detect changed (code/k8s/ingress)') {
       steps {
         script {
-          sh '''
-            set -e
-            # 기준: 최근 성공 커밋(없으면 최초 커밋)
-            base=${GIT_PREVIOUS_SUCCESSFUL_COMMIT:-$(git rev-list --max-parents=0 HEAD)}
-            changed_files=$(git diff --name-only "$base"...HEAD || true)
-
-            # 1) 서비스 코드 변경: helloworld-server/<svc>/...
-            svc_from_code=$(printf "%s\n" "$changed_files" \
-              | grep -E '^helloworld-server/[^/]+/' \
-              | awk -F/ '{print $2}' \
-              | grep -vE '^(k8s)$' \
-              | sort -u || true)
-
-            # 2) k8s 매니페스트 변경: helloworld-server/k8s/apps/<svc>/**.yaml
-            svc_from_k8s=$(printf "%s\n" "$changed_files" \
-              | grep -E '^helloworld-server/k8s/apps/[^/]+/.*\\.ya?ml$' \
-              | awk -F/ '{print $4}' \
-              | sort -u || true)
-
-            # 3) ingress 변경 감지
-            ingress_changed=$(printf "%s\n" "$changed_files" \
-              | grep -E '^helloworld-server/k8s/ingress/.*\\.ya?ml$' || true)
-
-            mkdir -p helloworld-server
-            echo "$svc_from_code" | tr '\\n' ' ' > helloworld-server/changed_code.txt
-            echo "$svc_from_k8s"  | tr '\\n' ' ' > helloworld-server/changed_k8s.txt
-            if [ -n "$ingress_changed" ]; then echo "true" > helloworld-server/ingress_changed; else : > helloworld-server/ingress_changed; fi
-
-            echo "Code-changed services: $(cat helloworld-server/changed_code.txt)"
-            echo "K8s-changed services : $(cat helloworld-server/changed_k8s.txt)"
-            echo "Ingress changed      : $(cat helloworld-server/ingress_changed | tr -d '\\n' | sed -e 's/^$/false/')"
-          '''
+          container('kubectl') {
+            sh '''
+              set -e
+              # 기준: 최근 성공 커밋(없으면 최초 커밋)
+              G='git -c safe.directory="$WORKSPACE"'
+              base=${GIT_PREVIOUS_SUCCESSFUL_COMMIT:-$($G rev-list --max-parents=0 HEAD)}
+              changed_files=$($G diff --name-only "$base"...HEAD || true)
+  
+              # 1) 서비스 코드 변경: helloworld-server/<svc>/...
+              svc_from_code=$(printf "%s\n" "$changed_files" \
+                | grep -E '^helloworld-server/[^/]+/' \
+                | awk -F/ '{print $2}' \
+                | grep -vE '^(k8s)$' \
+                | sort -u || true)
+  
+              # 2) k8s 매니페스트 변경: helloworld-server/k8s/apps/<svc>/**.yaml
+              svc_from_k8s=$(printf "%s\n" "$changed_files" \
+                | grep -E '^helloworld-server/k8s/apps/[^/]+/.*\\.ya?ml$' \
+                | awk -F/ '{print $4}' \
+                | sort -u || true)
+  
+              # 3) ingress 변경 감지
+              ingress_changed=$(printf "%s\n" "$changed_files" \
+                | grep -E '^helloworld-server/k8s/ingress/.*\\.ya?ml$' || true)
+  
+              mkdir -p helloworld-server
+              echo "$svc_from_code" | tr '\\n' ' ' > helloworld-server/changed_code.txt
+              echo "$svc_from_k8s"  | tr '\\n' ' ' > helloworld-server/changed_k8s.txt
+              if [ -n "$ingress_changed" ]; then echo "true" > helloworld-server/ingress_changed; else : > helloworld-server/ingress_changed; fi
+  
+              echo "Code-changed services: $(cat helloworld-server/changed_code.txt)"
+              echo "K8s-changed services : $(cat helloworld-server/changed_k8s.txt)"
+              echo "Ingress changed      : $(cat helloworld-server/ingress_changed | tr -d '\\n' | sed -e 's/^$/false/')"
+            '''
+          }
           env.CHANGED_CODE    = sh(script: "cat helloworld-server/changed_code.txt 2>/dev/null", returnStdout: true).trim()
           env.CHANGED_K8S     = sh(script: "cat helloworld-server/changed_k8s.txt  2>/dev/null", returnStdout: true).trim()
           env.INGRESS_CHANGED = sh(script: "cat helloworld-server/ingress_changed 2>/dev/null", returnStdout: true).trim()
@@ -212,7 +224,7 @@ done
             container('kubectl') {
                 sh '''
 bash -euo pipefail -c '
-SHA=$(git -C helloworld-server rev-parse --short HEAD)
+SHA="${GIT_COMMIT:0:7}"
 ns="${K8S_NS}"
 
 for svc in ${DEPLOY_SERVICES}; do
