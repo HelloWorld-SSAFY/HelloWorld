@@ -3,6 +3,7 @@ package com.example.helloworld.calendar_diary_server.entity;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.LocalDate;
 import java.time.ZonedDateTime;
 
 
@@ -41,6 +42,10 @@ public class Diary {
 
     @Column(name = "diary_content", columnDefinition = "TEXT")
     private String diaryContent;
+
+    @Column(name = "target_date", nullable = false)
+    private LocalDate targetDate; // 주차/캘린더 조회의 기준
+
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private ZonedDateTime createdAt;
