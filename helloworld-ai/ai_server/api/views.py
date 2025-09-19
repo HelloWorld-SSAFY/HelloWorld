@@ -41,7 +41,8 @@ from api.models import (
 # ──────────────────────────────────────────────────────────────────────────────
 _config = AnomalyConfig()
 _provider = OrmStatsProvider()
-_detector = AnomalyDetector(config=_config, stats_provider=_provider)
+# FIX: AnomalyDetector 시그니처에 맞게 provider로 전달
+_detector = AnomalyDetector(config=_config, provider=_provider)
 
 APP_TOKEN = os.getenv("APP_TOKEN", "").strip()
 
