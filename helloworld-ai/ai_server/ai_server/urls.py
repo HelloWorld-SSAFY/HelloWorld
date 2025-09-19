@@ -24,7 +24,7 @@ from rest_framework.permissions import AllowAny
 
 urlpatterns = [
     # path('admin/', admin.site.urls),
-    path("v1/", include("api.urls")),
+    path("ai/v1/", include("api.urls")),
     path("docs/", TemplateView.as_view(template_name="swagger.html"), name="swagger-templete"),
     path("schema/", SpectacularAPIView.as_view(permission_classes=[AllowAny]), name="schema"),
     path("swagger/", SpectacularSwaggerView.as_view(url_name="schema", permission_classes=[AllowAny]), name="swagger-ui"),
