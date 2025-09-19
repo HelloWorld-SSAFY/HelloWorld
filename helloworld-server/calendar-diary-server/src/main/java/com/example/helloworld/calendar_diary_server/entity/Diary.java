@@ -58,7 +58,7 @@ public class Diary {
      * FATHER, MOTHER
      */
     public enum AuthorRole {
-        FATHER, MOTHER
+        FEMALE, MALE
     }
 
     @PrePersist
