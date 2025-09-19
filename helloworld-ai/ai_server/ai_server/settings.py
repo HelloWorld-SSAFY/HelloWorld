@@ -119,3 +119,18 @@ REST_FRAMEWORK = {
     ],
     "DEFAULT_THROTTLE_RATES": {"anon": "3/second", "user": "3/second"},
 }
+
+
+SPECTACULAR_SETTINGS = {
+    "SECURITY": [
+        {"X-App-Token": []},  # X-App-Token을 사용한 인증
+    ],
+    "SECURITY_SCHEMES": {
+        "X-App-Token": {
+            "type": "apiKey",  # apiKey 타입을 사용
+            "in": "header",    # 헤더에 포함
+            "name": "X-App-Token",  # 헤더 이름 설정
+        },
+    },
+}
+
