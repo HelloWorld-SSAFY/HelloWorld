@@ -82,9 +82,6 @@ public class CoupleInviteService {
         Member male = memberRepository.findById(maleId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Member not found"));
 
-        if (male.getGender() == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "먼저 프로필을 등록(gender=male)하세요");
-        }
 
         // 이미 어떤 커플에 속해 있나?
         boolean alreadyInCouple = coupleRepository.findByUserBId(maleId).isPresent()
