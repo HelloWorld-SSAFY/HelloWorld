@@ -13,5 +13,5 @@ public interface UserServerClient {
     @GetMapping("/api/users/me")          // 유저서버가 JWT 검증 후 반환
     MeResponse me();
 
-    record MeResponse(Long userId, Long coupleId, String email) {}
+    record MeResponse(Long userId, Long coupleId) {}
 }

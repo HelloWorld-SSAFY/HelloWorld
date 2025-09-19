@@ -204,5 +204,4 @@ public class RecordsController {
         return ResponseEntity.ok(service.overallCumulativeAvg(coupleId));
     }
 
-
 }
