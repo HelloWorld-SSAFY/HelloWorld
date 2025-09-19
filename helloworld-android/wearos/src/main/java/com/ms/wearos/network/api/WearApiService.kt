@@ -1,42 +1,19 @@
 package com.ms.wearos.network.api
 
-import com.ms.wearos.repository.WearApiResponse
-import com.ms.wearos.repository.HeartRateRequest
-import com.ms.wearos.repository.FetalMovementRequest
-import com.ms.wearos.repository.LaborDataRequest
+import com.ms.wearos.dto.request.HealthDataRequest
 import retrofit2.Response
 import retrofit2.http.Body
-import retrofit2.http.GET
-import retrofit2.http.Header
 import retrofit2.http.POST
+import retrofit2.http.Query
 
 interface WearApiService {
 
-    @GET("/api/user/profile")
-    suspend fun getUserData(
-        @Header("Authorization") authorization: String
-    ): Response<WearApiResponse>
+    // 건강 데이터 전송 (심박수 + 스트레스 지수)
+    @POST("/health/api/records")
+    suspend fun sendHealthData(
+        @Query("coupleId") coupleId: Int,
+        @Body healthData: HealthDataRequest
+    ): Response<Any>
 
-    @GET("/api/wear/data")
-    suspend fun getWearSpecificData(
-        @Header("Authorization") authorization: String
-    ): Response<WearApiResponse>
 
-    @POST("/api/health/heart-rate")
-    suspend fun sendHeartRateData(
-        @Header("Authorization") authorization: String,
-        @Body request: HeartRateRequest
-    ): Response<WearApiResponse>
-
-    @POST("/api/pregnancy/fetal-movement")
-    suspend fun sendFetalMovementData(
-        @Header("Authorization") authorization: String,
-        @Body request: FetalMovementRequest
-    ): Response<WearApiResponse>
-
-    @POST("/api/pregnancy/labor")
-    suspend fun sendLaborData(
-        @Header("Authorization") authorization: String,
-        @Body request: LaborDataRequest
-    ): Response<WearApiResponse>
 }

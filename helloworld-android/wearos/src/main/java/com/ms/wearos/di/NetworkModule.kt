@@ -1,6 +1,7 @@
 package com.ms.wearos.di
 
 import com.ms.wearos.network.AuthInterceptor
+import com.ms.wearos.network.api.AuthApiService
 import com.ms.wearos.network.api.WearApiService
 import dagger.Module
 import dagger.Provides
@@ -17,7 +18,7 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
 
-    private const val BASE_URL = "http://j13d204.p.ssafy.io:80" // TODO: 실제 서버 URL로 변경
+    private const val BASE_URL = "http://j13d204.p.ssafy.io:80"
 
     // HTTP 로깅 인터셉터
     @Provides
@@ -59,6 +60,12 @@ object NetworkModule {
     @Singleton
     fun provideWearApi(retrofit: Retrofit): WearApiService {
         return retrofit.create(WearApiService::class.java)
+    }
+
+    @Provides
+    @Singleton
+    fun provideAuthApiService(retrofit: Retrofit): AuthApiService {
+        return retrofit.create(AuthApiService::class.java)
     }
 
 }
