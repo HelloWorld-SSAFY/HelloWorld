@@ -6,6 +6,8 @@ ALLOW_PREFIXES = (
     "/docs",          # Swagger UI
     "/static",        # openapi.yaml, 정적 파일
     "/favicon.ico",
+    "/swagger",
+    "/schema",
 )
 ALLOW_EXACT = {"/v1/healthz"}  # 헬스체크는 토큰 없이 허용
 
