@@ -85,9 +85,6 @@ public class CoupleInviteService {
         if (male.getGender() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "먼저 프로필을 등록(gender=male)하세요");
         }
-        if (male.getGender() != Member.Gender.MALE) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "남성만 초대코드로 합류 가능");
-        }
 
         // 이미 어떤 커플에 속해 있나?
         boolean alreadyInCouple = coupleRepository.findByUserBId(maleId).isPresent()
