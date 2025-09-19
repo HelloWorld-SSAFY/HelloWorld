@@ -144,3 +144,4 @@ SPECTACULAR_SETTINGS = {
         "persistAuthorization": False,  # 전역 인증 안 쓰므로 의미 없음
     },
 }
+
