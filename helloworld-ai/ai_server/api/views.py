@@ -14,8 +14,10 @@ from django.views import View  # (남겨둠: 내부 재사용용)
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
+from rest_framework import serializers  # ← 추가
 from drf_spectacular.utils import (
-    extend_schema, OpenApiResponse, OpenApiTypes, OpenApiExample
+    extend_schema, OpenApiResponse, OpenApiTypes, OpenApiExample,
+    inline_serializer, OpenApiParameter,                      # ← 추가
 )
 
 from services.anomaly import AnomalyDetector, AnomalyConfig, KST
@@ -53,6 +55,15 @@ def _auth_ok(request: HttpRequest) -> bool:
     if not APP_TOKEN:
         return True
     return request.headers.get("X-App-Token", "").strip() == APP_TOKEN
+
+# ── Swagger 공통 헤더 파라미터 ───────────────────────────────────────────────
+APP_TOKEN_HEADER = OpenApiParameter(
+    name="X-App-Token",
+    type=OpenApiTypes.STR,
+    location=OpenApiParameter.HEADER,
+    required=False,
+    description="앱 인증 토큰(환경에 따라 생략 가능)"
+)
 
 # ── 유틸 ─────────────────────────────────────────────────────────────────────
 def _json(request: HttpRequest):
@@ -167,7 +178,9 @@ def _infer_trigger_code(reasons, metrics):
 # ── /v1/healthz ──────────────────────────────────────────────────────────────
 @extend_schema(
     tags=["health"],
-    description="Liveness/Readiness probe",
+    summary="헬스체크",
+    description="Liveness/Readiness probe.",
+    parameters=[APP_TOKEN_HEADER],
     responses={200: OpenApiResponse(response=OpenApiTypes.OBJECT, description="OK")},
 )
 @api_view(["GET"])
@@ -352,9 +365,76 @@ def steps_check(request: HttpRequest):
 # ── /v1/places ───────────────────────────────────────────────────────────────
 @extend_schema(
     tags=["ai", "places"],
-    description="OUTING 카테고리: 날씨 게이트 + 거리 기반 장소 추천",
-    request=OpenApiTypes.OBJECT,
-    responses={200: OpenApiResponse(response=OpenApiTypes.OBJECT)},
+    summary="OUTING 장소 추천 (날씨 게이트 + 거리)",
+    description=(
+        "OUTING 카테고리에서, 날씨/거리 기반으로 실내·실외 장소를 추천합니다.\n"
+        "- 입력: user_ref, session_id, category=OUTING, lat, lng, (선택) max_distance_km, limit, weather_kind\n"
+        "- 날씨 게이트: clear/clouds → 실외 후보 / 그 외 → 실내 후보\n"
+        "- 중복 방지: 최근 14일 동일 후보 노출 제외(PlaceExposure 있을 때)\n"
+        "- 테스트용 `weather_kind`로 날씨 강제 가능"
+    ),
+    parameters=[APP_TOKEN_HEADER],
+    request=inline_serializer(
+        name="PlacesReq",
+        fields={
+            "user_ref": serializers.CharField(),
+            "session_id": serializers.CharField(help_text="UUID 문자열"),
+            "category": serializers.ChoiceField(choices=["OUTING"]),
+            "lat": serializers.FloatField(),
+            "lng": serializers.FloatField(),
+            "max_distance_km": serializers.FloatField(required=False, default=3.0, min_value=0.5, max_value=10.0),
+            "limit": serializers.IntegerField(required=False, default=3, min_value=1, max_value=5),
+            "weather_kind": serializers.ChoiceField(
+                choices=["clear","clouds","rain","snow","thunder","dust"], required=False
+            ),
+        },
+    ),
+    responses={
+        200: inline_serializer(
+            name="PlacesResp",
+            fields={
+                "ok": serializers.BooleanField(),
+                "session_id": serializers.CharField(),
+                "category": serializers.ChoiceField(choices=["OUTING"]),
+                "items": serializers.ListSerializer(
+                    child=inline_serializer(
+                        name="PlaceItem",
+                        fields={
+                            "content_id": serializers.IntegerField(),
+                            "title": serializers.CharField(),
+                            "lat": serializers.FloatField(),
+                            "lng": serializers.FloatField(),
+                            "distance_km": serializers.FloatField(),
+                            "rank": serializers.IntegerField(),
+                            "reason": serializers.CharField(),
+                            "weather_gate": serializers.CharField(),
+                            "address": serializers.CharField(allow_blank=True),
+                            "address_road": serializers.CharField(allow_null=True, required=False),
+                            "address_jibun": serializers.CharField(allow_null=True, required=False),
+                            "place_category": serializers.CharField(allow_null=True, required=False),
+                        }
+                    )
+                ),
+                "fallback_used": serializers.BooleanField(),
+                "weather": inline_serializer(
+                    name="WeatherMeta",
+                    fields={"kind": serializers.CharField(), "outdoor_ok": serializers.BooleanField()}
+                ),
+                "safe_templates": serializers.ListField(  # fallback일 때만 존재
+                    child=inline_serializer(
+                        name="SafeTpl",
+                        fields={"category": serializers.CharField(), "title": serializers.CharField()}
+                    ),
+                    required=False
+                ),
+            }
+        ),
+        400: OpenApiResponse(description="INVALID_BODY"),
+        401: OpenApiResponse(description="invalid app token"),
+        403: OpenApiResponse(description="SESSION_OWNERSHIP"),
+        404: OpenApiResponse(description="INVALID_SESSION"),
+        409: OpenApiResponse(description="SESSION_CLOSED"),
+    },
 )
 @api_view(["POST"])
 def places(request: HttpRequest):
@@ -581,20 +661,67 @@ def feedback(request: HttpRequest):
 class TelemetryView(APIView):
     @extend_schema(
         tags=["ai"],
-        description="착용 데이터(심박/스트레스 등)를 평가하여 normal/restrict/emergency 응답",
-        request=OpenApiTypes.OBJECT,
+        summary="웨어러블 텔레메트리 평가",
+        description=(
+            "착용 데이터(심박/스트레스 등)를 받아 이상 여부 판단.\n"
+            "- mode: normal | restrict | emergency\n"
+            "- restrict일 때 추천용 session_id와 categories 반환\n"
+            "- emergency일 때 즉시 액션 템플릿 반환(세션/카테고리 없음)\n"
+            "- `metrics` 또는 상위 필드 `hr`, `stress` 사용 가능"
+        ),
+        parameters=[APP_TOKEN_HEADER],
+        request=inline_serializer(
+            name="TelemetryReq",
+            fields={
+                "user_ref": serializers.CharField(required=False, help_text="기본 u1"),
+                "ts": serializers.DateTimeField(required=False, help_text="ISO8601(+offset). 미전달시 서버 now"),
+                "metrics": serializers.DictField(child=serializers.FloatField(), required=False,
+                                                 help_text='예: {"hr":142,"stress":0.62}'),
+                "hr": serializers.FloatField(required=False, allow_null=True),
+                "stress": serializers.FloatField(required=False, allow_null=True),
+                "gestational_week": serializers.IntegerField(required=False, min_value=0),
+            },
+        ),
         responses={
-            200: OpenApiResponse(response=OpenApiTypes.OBJECT, description="결과"),
+            200: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
+                description="normal / restrict / emergency 모두 200으로 응답",
+                examples=[
+                    OpenApiExample(
+                        "normal",
+                        value={"ok": True, "anomaly": False, "risk_level": "low", "mode": "normal"},
+                    ),
+                    OpenApiExample(
+                        "restrict",
+                        value={
+                            "ok": True, "anomaly": True, "risk_level": "high", "mode": "restrict",
+                            "reasons": ["z(hr)=3.1"],
+                            "recommendation": {
+                                "session_id": "2c3ef0f0-1111-2222-3333-abcdefabcdef",
+                                "categories": [
+                                    {"category": "BREATHING", "rank": 1, "reason": "hr high"},
+                                    {"category": "MUSIC", "rank": 2, "reason": "hr high"}
+                                ]
+                            }
+                        },
+                    ),
+                    OpenApiExample(
+                        "emergency",
+                        value={
+                            "ok": True, "anomaly": True, "risk_level": "critical", "mode": "emergency",
+                            "reasons": ["hr>=150 sustained"],
+                            "action": {"type": "EMERGENCY_CONTACT", "cooldown_min": 60},
+                            "safe_templates": [
+                                {"category": "BREATHING", "title": "안전 호흡 3분"},
+                                {"category": "BREATHING", "title": "안전 호흡 5분"}
+                            ]
+                        },
+                    ),
+                ],
+            ),
             401: OpenApiResponse(description="invalid app token"),
             405: OpenApiResponse(description="method not allowed"),
         },
-        examples=[
-            OpenApiExample(
-                "normal",
-                value={"ok": True, "anomaly": False, "risk_level": "low", "mode": "normal"},
-                response_only=True,
-            )
-        ],
     )
     def post(self, request, *args, **kwargs):
         return telemetry(request._request)  # 기존 로직 재사용
@@ -607,9 +734,39 @@ class TelemetryView(APIView):
 class FeedbackView(APIView):
     @extend_schema(
         tags=["ai"],
-        description="사용자 피드백 수집",
-        request=OpenApiTypes.OBJECT,
-        responses={200: OpenApiResponse(response=OpenApiTypes.OBJECT, description="ok")},
+        summary="추천 피드백 수집",
+        description=(
+            "사용자 클릭/완료/효과(EFFECT) 피드백을 수집합니다.\n"
+            "- steps_low 세션은 학습/로그 비반영(No-Op)\n"
+            "- EFFECT: hr/stress before/after 값을 Outcome으로 기록"
+        ),
+        parameters=[APP_TOKEN_HEADER],
+        request=inline_serializer(
+            name="FeedbackReq",
+            fields={
+                "user_ref": serializers.CharField(),
+                "type": serializers.ChoiceField(choices=["CLICK","COMPLETE","EFFECT"]),
+                "session_id": serializers.CharField(required=False),
+                "content_id": serializers.IntegerField(required=False),
+                "value": serializers.CharField(required=False),
+                "dwell_ms": serializers.IntegerField(required=False),
+                "watched_pct": serializers.FloatField(required=False),
+                "hr_before": serializers.FloatField(required=False),
+                "hr_after_30m": serializers.FloatField(required=False),
+                "stress_before": serializers.FloatField(required=False),
+                "stress_after_30m": serializers.FloatField(required=False),
+                "effect": serializers.CharField(required=False),
+            },
+        ),
+        responses={
+            200: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
+                description="ok",
+                examples=[OpenApiExample("ok", value={"ok": True})],
+            ),
+            400: OpenApiResponse(description="missing_fields"),
+            401: OpenApiResponse(description="invalid app token"),
+        },
     )
     def post(self, request, *args, **kwargs):
         return feedback(request._request)
@@ -622,10 +779,50 @@ class FeedbackView(APIView):
 class StepsCheckView(APIView):
     @extend_schema(
         tags=["ai"],
-        description="누적 걸음수 기반 저활동 판단 및 restrict 세션 발급",
-        request=OpenApiTypes.OBJECT,
+        summary="누적 걸음수 저활동 판정",
+        description=(
+            "고정 시각(12/16/20 KST) 누적 걸음수로 저활동 판단 → restrict 세션 발급.\n"
+            "- 기준: 동시간대 평균(mu) 대비 부족분이 threshold(기본 500) 이상이면 저활동\n"
+            "- 동일 일자·버킷 재호출 시 기존 session 재사용"
+        ),
+        parameters=[APP_TOKEN_HEADER],
+        request=inline_serializer(
+            name="StepsCheckReq",
+            fields={
+                "user_ref": serializers.CharField(),
+                "ts": serializers.DateTimeField(required=False),
+                "cum_steps": serializers.IntegerField(),
+            },
+        ),
         responses={
-            200: OpenApiResponse(response=OpenApiTypes.OBJECT, description="결과"),
+            200: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
+                description="normal 또는 no_baseline / restrict도 200으로 응답",
+                examples=[
+                    OpenApiExample("normal", value={"ok": True, "anomaly": False, "mode": "normal"}),
+                    OpenApiExample("no_baseline", value={"ok": True, "anomaly": False, "mode": "normal", "note": "no_baseline"}),
+                    OpenApiExample(
+                        "restrict",
+                        value={
+                            "ok": True,
+                            "anomaly": True,
+                            "mode": "restrict",
+                            "trigger": "steps_low",
+                            "reasons": [
+                                "steps_diff=600 (threshold=500, bucket=3)",
+                                "cum_steps=1200, mu=1800"
+                            ],
+                            "recommendation": {
+                                "session_id": "9c5a2c77-aaaa-bbbb-cccc-1234567890ab",
+                                "categories": [
+                                    {"category": "WALK", "rank": 1, "reason": "steps low vs avg"},
+                                    {"category": "OUTING", "rank": 2, "reason": "steps low vs avg"}
+                                ]
+                            }
+                        },
+                    ),
+                ],
+            ),
             400: OpenApiResponse(description="INVALID_BODY"),
             401: OpenApiResponse(description="invalid app token"),
         },
