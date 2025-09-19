@@ -117,4 +117,10 @@ dependencies {
     // 개발/디버그
     debugImplementation(libs.androidx.ui.tooling)
 
+    // Google Play Services - Wearable
+    implementation("com.google.android.gms:play-services-wearable:18.1.0")
+
+    // 기타 필요한 의존성들
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")
+
 }
