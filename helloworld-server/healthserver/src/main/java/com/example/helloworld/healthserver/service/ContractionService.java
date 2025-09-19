@@ -52,7 +52,7 @@ public class ContractionService {
                 : repo.findByCoupleIdOrderByStartTimeDesc(coupleId);
 
         var items = list.stream().map(s ->
-                new CsListResponse.Item(
+                new CsListResponse.CSItem(
                         s.getId(),
                         s.getStartTime(),
                         s.getEndTime(),

@@ -12,10 +12,7 @@ public final class HealthDtos {
     public record CreateRequest(
             Instant date,
             Integer stress,
-            @JsonProperty("sleep_hours") Integer sleepHours,
-            Integer heartrate,
-            Integer steps,
-            @JsonProperty("is_danger") Boolean isDanger
+            Integer heartrate
     ) {}
 
     // 단건 조회 응답
@@ -23,10 +20,7 @@ public final class HealthDtos {
             @JsonProperty("health_id") Long healthId,
             Instant date,
             Integer stress,
-            @JsonProperty("sleep_hours") Integer sleepHours,
-            Integer heartrate,
-            Integer steps,
-            @JsonProperty("is_danger") Boolean isDanger
+            Integer heartrate
     ) {}
 
 //    // 목록 응답
@@ -72,5 +66,4 @@ public final class HealthDtos {
                 @JsonProperty("avg_steps") Double avgSteps
         ) {}
     }
-
 }

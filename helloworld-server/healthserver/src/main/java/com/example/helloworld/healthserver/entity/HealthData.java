@@ -34,15 +34,9 @@ public class HealthData {
     @Column(name = "stress")
     private Integer stress;                // 스트레스 (nullable)
 
-    @Column(name = "sleep_hours")
-    private Integer sleepHours;            // 수면 시간 (nullable)
-
     @Column(name = "heartrate")
     private Integer heartrate;             // 심박수 (nullable)
 
     @Column(name = "steps")
     private Integer steps;                 // 걸음수 (nullable)
-
-    @Column(name = "is_danger")
-    private Boolean isDanger;              // 위험 여부 (nullable)
 }
