@@ -4,9 +4,9 @@ import java.time.Instant;
 import java.util.List;
 
 public record CsListResponse(
-        List<Item> sessions
+        List<CSItem> sessions
 ) {
-    public record Item(
+    public record CSItem(
             Long id,
             Instant start_time,
             Instant end_time,

@@ -29,7 +29,6 @@ public class FetalMovementService {
         FetalMovement fm = FetalMovement.builder()
                 .coupleId(coupleId)
                 .recordedAt(at)
-                .notes(req.notes())
                 .build();
         repo.save(fm);
         return new FmCreateResponse("fm_" + fm.getId(), fm.getRecordedAt());
@@ -55,7 +54,7 @@ public class FetalMovementService {
                 .map(e -> {
                     // 일자 00:00 (app zone)을 UTC Instant로
                     Instant dayStartUtc = e.getKey().atStartOfDay(zone).toInstant();
-                    return new FmListResponse.Item(dayStartUtc, e.getValue().intValue());
+                    return new FmListResponse.FmListItem(dayStartUtc, e.getValue().intValue());
                 })
                 .toList();
 

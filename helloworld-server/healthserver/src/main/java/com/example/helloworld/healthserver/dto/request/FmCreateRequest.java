@@ -7,7 +7,5 @@ import java.time.Instant;
 
 public record FmCreateRequest(
         @Schema(description = "기록 시각(UTC). 비우면 서버 now()", example = "2025-09-02T15:00:00Z")
-        Instant recorded_at,
-        @Size(max = 500)
-        String notes
+        Instant recorded_at
 ) {}

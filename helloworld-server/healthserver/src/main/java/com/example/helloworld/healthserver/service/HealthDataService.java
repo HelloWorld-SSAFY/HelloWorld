@@ -31,10 +31,8 @@ public class HealthDataService {
                 .coupleId(coupleId)
                 .date(req.date())
                 .stress(req.stress())
-                .sleepHours(req.sleepHours())
                 .heartrate(req.heartrate())
-                .steps(req.steps())
-                .isDanger(req.isDanger())
+//                .steps(req.steps())
                 .build();
         hd = repo.save(hd);
         return toGet(hd);
@@ -133,16 +131,15 @@ public class HealthDataService {
         // 혹시 둘 중 일부가 비어도 일관된 순서가 되도록 보정하고 싶다면 여기서 채워 넣어도 됨.
         return new StepResponse(items);
     }
+
     // ---- mappers ----
     private GetResponse toGet(HealthData hd) {
         return new GetResponse(
                 hd.getHealthId(),
                 hd.getDate(),
                 hd.getStress(),
-                hd.getSleepHours(),
-                hd.getHeartrate(),
-                hd.getSteps(),
-                hd.getIsDanger()
+                hd.getHeartrate()
+//                hd.getSteps()
         );
     }
 
