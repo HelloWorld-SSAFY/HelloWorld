@@ -126,7 +126,13 @@ SPECTACULAR_SETTINGS = {
     "TITLE": "임산부 헬스케어 API",
     "VERSION": "v0.2.1",
     # 전역 인증 비활성화 (상단 Authorize 버튼 제거)
-    "SECURITY": [],
+    "SECURITY": [{"AppToken": []}],
+
+    "SERVERS": [
+        {"url": "/ai", "description": "via gateway"},        # 게이트웨이로 노출될 때
+        {"url": "/",  "description": "in-cluster direct"},   # 클러스터 내부/서비스 직접 호출
+    ],
+ 
 
     # 만약 예전에 이렇게 선언해두었다면 제거:
     # "COMPONENTS": {
@@ -138,7 +144,7 @@ SPECTACULAR_SETTINGS = {
     #         }
     #     }
     # },
-
+    "SORT_OPERATION_PARAMETERS": False,
     # 선택: Swagger UI 설정은 그대로 두거나 필요 시 조정
     "SWAGGER_UI_SETTINGS": {
         "persistAuthorization": False,  # 전역 인증 안 쓰므로 의미 없음
