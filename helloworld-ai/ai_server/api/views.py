@@ -8,7 +8,15 @@ from datetime import datetime, timezone, date, timedelta
 from django.http import JsonResponse, HttpRequest
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
-from django.views import View
+from django.views import View  # (남겨둠: 내부 재사용용)
+
+# === DRF / Spectacular 추가 ===
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.decorators import api_view
+from drf_spectacular.utils import (
+    extend_schema, OpenApiResponse, OpenApiTypes, OpenApiExample
+)
 
 from services.anomaly import AnomalyDetector, AnomalyConfig, KST
 from services.orm_stats_provider import OrmStatsProvider
@@ -120,7 +128,6 @@ def _create_session_dynamic(*, mode: str, user_ref: str, trigger: str,
         return RecommendationSession.objects.create(**kwargs)
 
 def _build_category_reason(trigger_code: str) -> str:
-    # 카테고리 사유 간단 라벨
     if trigger_code == "hr_high": return "hr high"
     if trigger_code == "hr_low":  return "hr low"
     if trigger_code == "steps_low": return "steps low"
@@ -158,8 +165,14 @@ def _infer_trigger_code(reasons, metrics):
     return "unknown"
 
 # ── /v1/healthz ──────────────────────────────────────────────────────────────
+@extend_schema(
+    tags=["health"],
+    description="Liveness/Readiness probe",
+    responses={200: OpenApiResponse(response=OpenApiTypes.OBJECT, description="OK")},
+)
+@api_view(["GET"])
 def healthz(request: HttpRequest):
-    return JsonResponse({"status": "ok", "model": "rec_v0.1"})
+    return Response({"status": "ok", "model": "rec_v0.1"})
 
 # ── /v1/telemetry ────────────────────────────────────────────────────────────
 @csrf_exempt
@@ -202,12 +215,11 @@ def telemetry(request: HttpRequest):
         bucket4h = kst.hour // 4
         reasons = list(getattr(result, "reasons", []) or [])
 
-        # 트리거: 엔진 제공값 우선 → 추론(엔진이 trigger 지원)
+        # 트리거: 엔진 제공값 우선 → 추론
         trigger_code = getattr(result, "trigger", None) or _infer_trigger_code(reasons, metrics)
 
         # emergency
         if getattr(result, "mode", None) == "emergency":
-            # v1 명세: emergency는 세션/카테고리 없이 액션/템플릿만
             return JsonResponse({
                 "ok": True,
                 "anomaly": True,
@@ -338,7 +350,13 @@ def steps_check(request: HttpRequest):
     }, status=200)
 
 # ── /v1/places ───────────────────────────────────────────────────────────────
-@csrf_exempt
+@extend_schema(
+    tags=["ai", "places"],
+    description="OUTING 카테고리: 날씨 게이트 + 거리 기반 장소 추천",
+    request=OpenApiTypes.OBJECT,
+    responses={200: OpenApiResponse(response=OpenApiTypes.OBJECT)},
+)
+@api_view(["POST"])
 def places(request: HttpRequest):
     """
     OUTING: 위치/날씨 기반 장소 추천
@@ -348,27 +366,26 @@ def places(request: HttpRequest):
     - 중복 제거: 최근 14일 내 동일 place_type/place_id 노출 제외 (PlaceExposure 없으면 폴백)
     - 테스트용 weather override: body.weather_kind = clear|clouds|rain|snow|thunder|dust
     """
-    if request.method != "POST":
-        return JsonResponse({"ok": False, "error": "INVALID_METHOD"}, status=405)
-    if not _auth_ok(request):
-        return JsonResponse({"detail": "invalid app token"}, status=401)
+    # DRF 요청객체를 기존 함수 로직이 그대로 사용 가능
+    if not _auth_ok(request._request):
+        return Response({"detail": "invalid app token"}, status=401)
 
-    body = _json(request)
+    body = _json(request._request)
     required = {"user_ref","session_id","category","lat","lng"}
     if not required.issubset(body):
-        return JsonResponse({"ok": False, "error": "INVALID_BODY"}, status=400)
+        return Response({"ok": False, "error": "INVALID_BODY"}, status=400)
 
     user_ref = str(body["user_ref"])
     session_id = str(body["session_id"])
     category = str(body["category"]).upper().strip()
     if category != "OUTING":
-        return JsonResponse({"ok": False, "error": "CATEGORY_NOT_ALLOWED"}, status=422)
+        return Response({"ok": False, "error": "CATEGORY_NOT_ALLOWED"}, status=422)
 
     try:
         lat = float(body["lat"])
         lng = float(body["lng"])
     except Exception:
-        return JsonResponse({"ok": False, "error": "INVALID_BODY:latlng"}, status=400)
+        return Response({"ok": False, "error": "INVALID_BODY:latlng"}, status=400)
 
     limit = int(_clamp(int(body.get("limit", 3)), 1, 5))
     max_distance_km = float(_clamp(float(body.get("max_distance_km", 3.0)), 0.5, 10.0))
@@ -377,11 +394,11 @@ def places(request: HttpRequest):
     try:
         sess = RecommendationSession.objects.get(id=uuid.UUID(session_id))
     except Exception:
-        return JsonResponse({"ok": False, "error": "INVALID_SESSION"}, status=404)
+        return Response({"ok": False, "error": "INVALID_SESSION"}, status=404)
     if getattr(sess, "user_ref", None) != user_ref:
-        return JsonResponse({"ok": False, "error": "SESSION_OWNERSHIP"}, status=403)
+        return Response({"ok": False, "error": "SESSION_OWNERSHIP"}, status=403)
     if sess.mode != "restrict" or getattr(sess, "trigger", "") != "steps_low":
-        return JsonResponse({"ok": False, "error": "SESSION_CLOSED"}, status=409)
+        return Response({"ok": False, "error": "SESSION_CLOSED"}, status=409)
 
     # 날씨 게이트 (+ 요청 바디 오버라이드)
     override_kind = None
@@ -466,7 +483,7 @@ def places(request: HttpRequest):
 
     # 후보 0건이면 실내 대체 카드 반환 (fallback)
     if not resp_items:
-        return JsonResponse({
+        return Response({
             "ok": True,
             "session_id": str(sess.id),
             "category": "OUTING",
@@ -479,7 +496,7 @@ def places(request: HttpRequest):
             "weather": {"kind": kind, "outdoor_ok": outdoor_ok}
         }, status=200)
 
-    return JsonResponse({
+    return Response({
         "ok": True,
         "session_id": str(sess.id),
         "category": "OUTING",
@@ -559,24 +576,62 @@ def feedback(request: HttpRequest):
 
     return JsonResponse({"ok": True}, status=200)
 
-# ── CBV 래퍼 ─────────────────────────────────────────────────────────────────
+# ── CBV → DRF APIView 래퍼 ───────────────────────────────────────────────────
 @method_decorator(csrf_exempt, name="dispatch")
-class TelemetryView(View):
+class TelemetryView(APIView):
+    @extend_schema(
+        tags=["ai"],
+        description="착용 데이터(심박/스트레스 등)를 평가하여 normal/restrict/emergency 응답",
+        request=OpenApiTypes.OBJECT,
+        responses={
+            200: OpenApiResponse(response=OpenApiTypes.OBJECT, description="결과"),
+            401: OpenApiResponse(description="invalid app token"),
+            405: OpenApiResponse(description="method not allowed"),
+        },
+        examples=[
+            OpenApiExample(
+                "normal",
+                value={"ok": True, "anomaly": False, "risk_level": "low", "mode": "normal"},
+                response_only=True,
+            )
+        ],
+    )
     def post(self, request, *args, **kwargs):
-        return telemetry(request)
+        return telemetry(request._request)  # 기존 로직 재사용
+
     def get(self, request, *args, **kwargs):
-        return JsonResponse({"error": "method_not_allowed"}, status=405)
+        return Response({"error": "method_not_allowed"}, status=405)
+
 
 @method_decorator(csrf_exempt, name="dispatch")
-class FeedbackView(View):
+class FeedbackView(APIView):
+    @extend_schema(
+        tags=["ai"],
+        description="사용자 피드백 수집",
+        request=OpenApiTypes.OBJECT,
+        responses={200: OpenApiResponse(response=OpenApiTypes.OBJECT, description="ok")},
+    )
     def post(self, request, *args, **kwargs):
-        return feedback(request)
+        return feedback(request._request)
+
     def get(self, request, *args, **kwargs):
-        return JsonResponse({"error": "method_not_allowed"}, status=405)
+        return Response({"error": "method_not_allowed"}, status=405)
+
 
 @method_decorator(csrf_exempt, name="dispatch")
-class StepsCheckView(View):
+class StepsCheckView(APIView):
+    @extend_schema(
+        tags=["ai"],
+        description="누적 걸음수 기반 저활동 판단 및 restrict 세션 발급",
+        request=OpenApiTypes.OBJECT,
+        responses={
+            200: OpenApiResponse(response=OpenApiTypes.OBJECT, description="결과"),
+            400: OpenApiResponse(description="INVALID_BODY"),
+            401: OpenApiResponse(description="invalid app token"),
+        },
+    )
     def post(self, request, *args, **kwargs):
-        return steps_check(request)
+        return steps_check(request._request)
+
     def get(self, request, *args, **kwargs):
-        return JsonResponse({"error": "method_not_allowed"}, status=405)
+        return Response({"error": "method_not_allowed"}, status=405)
