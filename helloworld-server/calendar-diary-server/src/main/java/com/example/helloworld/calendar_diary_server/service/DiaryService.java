@@ -2,6 +2,7 @@ package com.example.helloworld.calendar_diary_server.service;
 
 
 import com.example.helloworld.calendar_diary_server.dto.*;
+
 import com.example.helloworld.calendar_diary_server.entity.Diary;
 import com.example.helloworld.calendar_diary_server.entity.DiaryPhoto;
 import com.example.helloworld.calendar_diary_server.repository.DiaryPhotoRepository;
@@ -75,9 +76,6 @@ public class DiaryService {
 
 
 
-
-
-
     /** 6.1 일기 전체 조회 */
     public Page<DiaryListItemDto> list(Long coupleId, Pageable pageable) {
         return diaryRepository.findAllByCoupleIdOrderByCreatedAtDesc(coupleId, pageable)
@@ -141,11 +139,12 @@ public class DiaryService {
         Diary d = Diary.builder()
                 .coupleId(req.getCoupleId())
                 .authorId(req.getAuthorId())
-                .authorRole("mother".equalsIgnoreCase(req.getAuthorRole()) ?
-                        Diary.AuthorRole.MOTHER : Diary.AuthorRole.FATHER)
+                .authorRole("female".equalsIgnoreCase(req.getAuthorRole()) ?
+                        Diary.AuthorRole.MALE : Diary.AuthorRole.FEMALE)
                 .diaryTitle(req.getDiaryTitle())
                 .diaryContent(req.getDiaryContent())
                 .createdAt(startOfDay)
+                .targetDate(req.getTargetDate())
                 .build();
 
         d = diaryRepository.save(d);
