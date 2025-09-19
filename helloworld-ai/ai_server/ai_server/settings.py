@@ -122,24 +122,21 @@ REST_FRAMEWORK = {
 
 # ---- drf-spectacular (Swagger/OpenAPI) --------------------------------------
 # 전역 인증을 Swagger의 Authorize 버튼으로 노출하고, 모든 엔드포인트에 기본 적용
+# settings.py
 SPECTACULAR_SETTINGS = {
-    "TITLE": "임산부 헬스케어 AI 서버 API",
-    "DESCRIPTION": "v0.2.1 명세",
-    "VERSION": "0.2.1",
-    # Swagger 상단 Authorize 버튼
-    "SECURITY": [{"AppToken": []}],  # 기본으로 전 엔드포인트에 적용
-    "SECURITY_SCHEMES": {
-        "AppToken": {
-            "type": "apiKey",
-            "in": "header",
-            "name": "X-App-Token",
-            "description": "앱 인증 토큰을 입력하세요. 예) X-App-Token: <your-token>",
+    "TITLE": "AI Server",
+    "VERSION": "v0.2.1",
+    # Swagger 상단 Authorize에 우리 토큰 스킴 추가
+    "APPEND_COMPONENTS": {
+        "securitySchemes": {
+            "AppTokenAuth": {         # 이름은 임의
+                "type": "apiKey",
+                "in": "header",
+                "name": "X-App-Token",  # 실제 헤더 이름
+            }
         }
     },
-    # 보기 좋게: 요청과 응답을 분리해서 표시
-    "COMPONENT_SPLIT_REQUEST": True,
-    # (선택) 프리픽스 필터링: 필요시 수정
-    # "SCHEMA_PATH_PREFIX": r"/(v1|admin|api).*",
-    # (선택) 서버 목록
-    # "SERVERS": [{"url": "/"}],
+    # 모든 엔드포인트에 기본 적용 (필요 시 개별 뷰에서 끌 수 있음)
+    "SECURITY": [{"AppTokenAuth": []}],
 }
+
