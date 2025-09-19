@@ -5,6 +5,7 @@ import android.content.*
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -78,7 +79,7 @@ class MainActivity : ComponentActivity() {
                     currentHeartRate.value = heartRate
                     lastUpdateTime.value = timestamp
 
-                    Log.d(TAG, "UI updated - Heart rate: $heartRate BPM")
+                    Log.d(TAG, "심박수: $heartRate BPM")
                 }
 
                 HealthDataService.ACTION_STRESS_UPDATE -> {
@@ -91,8 +92,8 @@ class MainActivity : ComponentActivity() {
                     currentStressLevel.value = stressLevel
                     stressAdvice.value = advice
 
-                    Log.d(TAG, "UI updated - Stress: $stressIndex ($stressLevel)")
-                    Log.d(TAG, "Stress advice: $advice")
+                    Log.d(TAG, "스트레스 지수: $stressIndex ($stressLevel)")
+                    Log.d(TAG, "스트레스 advice: $advice")
                 }
 
                 HealthDataService.ACTION_SERVICE_STATUS -> {
@@ -104,7 +105,7 @@ class MainActivity : ComponentActivity() {
                         heartStatus.value = status
                     }
 
-                    Log.d(TAG, "Service status updated: $isRunning")
+                    Log.d(TAG, "서비스 상태 업데이트: $isRunning")
                 }
             }
         }
@@ -115,7 +116,7 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         val allGranted = permissions.values.all { it }
-        Log.d("Permissions", "All permissions granted: $allGranted")
+        Log.d(TAG, "모든 권한 승인: $allGranted")
         if (allGranted) {
             checkAndRestoreToggleState()
         }
@@ -138,7 +139,8 @@ class MainActivity : ComponentActivity() {
         // 토큰 상태 로깅 시작
         lifecycleScope.launch {
             delay(1000) // 잠시 대기 후 시작
-            val viewModel: WearMainViewModel = ViewModelProvider(this@MainActivity)[WearMainViewModel::class.java]
+            val viewModel: WearMainViewModel =
+                ViewModelProvider(this@MainActivity)[WearMainViewModel::class.java]
             logTokenStatus(viewModel)
         }
     }
@@ -154,7 +156,7 @@ class MainActivity : ComponentActivity() {
         try {
             unregisterReceiver(healthDataReceiver)
         } catch (e: Exception) {
-            Log.e(TAG, "Error unregistering receiver", e)
+            Log.e(TAG, "수신기 등록 해제 오류", e)
         }
     }
 
@@ -169,7 +171,7 @@ class MainActivity : ComponentActivity() {
 
     private fun checkAndRestoreToggleState() {
         if (isToggleEnabled.value) {
-            Log.d(TAG, "Restoring toggle state - starting service")
+            Log.d(TAG, "토글 상태 복원 - 서비스 시작 서비스")
             HealthServiceHelper.startService(this)
         }
     }
@@ -177,11 +179,11 @@ class MainActivity : ComponentActivity() {
     private fun logTokenStatus(viewModel: WearMainViewModel) {
         lifecycleScope.launch {
             viewModel.uiState.collect { state ->
-                Log.d(TAG, "Authentication status changed: ${state.isAuthenticated}")
+                Log.d(TAG, "인증 상태가 변경되었습니다: ${state.isAuthenticated}")
                 if (state.isAuthenticated) {
-                    Log.d(TAG, "Access token available for API calls")
+                    Log.d(TAG, "Access 토큰 있음")
                 } else {
-                    Log.d(TAG, "No access token - authentication required")
+                    Log.d(TAG, "Access 토큰 없음")
                 }
             }
         }
@@ -206,36 +208,40 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // 인증 상태를 확인하고 Toast를 표시하는 함수
-    private fun checkAuthenticationWithToast(
+    private suspend fun ensureAuthAndCouple(
         viewModel: WearMainViewModel,
         onAuthenticated: () -> Unit,
         featureName: String = "이 기능"
-    ) : Boolean {
+    ): Boolean {
         val tokenStatus = viewModel.checkTokenStatus()
-        Log.d(TAG, "인증 상태 확인 - $featureName: $tokenStatus")
 
-        return if (viewModel.uiState.value.isAuthenticated) {
-            Log.d(TAG, "인증 상태 확인됨 - $featureName 사용 가능")
-            onAuthenticated()
-            true
-        } else {
-            Log.w(TAG, "인증되지 않음 - $featureName 사용 불가: $tokenStatus")
-
-            val message = when {
+        // 토큰 확인
+        if (!viewModel.uiState.value.isAuthenticated) {
+            val msg = when {
                 tokenStatus.contains("토큰 없음") -> "모바일 앱에서 로그인해주세요."
                 tokenStatus.contains("토큰 만료됨") -> "토큰이 만료되었습니다. 모바일 앱에서 다시 로그인해주세요."
                 else -> "모바일 로그인이 필요합니다."
             }
-
-            android.widget.Toast.makeText(
-                this,
-                message,
-                android.widget.Toast.LENGTH_LONG
-            ).show()
-            false
+            Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+            return false
         }
+
+        // 커플ID 확인 (네트워크 호출, suspend)
+        val coupleId = viewModel.getCoupleIdIfValid()
+        if (coupleId == null) {
+            Toast.makeText(
+                this,
+                "커플 연동이 필요합니다. 모바일 앱에서 커플 등록을 완료해주세요.",
+                Toast.LENGTH_LONG
+            ).show()
+            return false
+        }
+
+        Log.d(TAG, "인증+커플 확인됨 - $featureName 사용 가능 (coupleId=$coupleId)")
+        onAuthenticated()
+        return true
     }
+
 
     // 10초 간격 심박수 서버 전송 함수
     private fun startHeartRateServerSync(viewModel: WearMainViewModel) {
@@ -243,11 +249,30 @@ class MainActivity : ComponentActivity() {
         heartRateJob = lifecycleScope.launch {
             while (isToggleEnabled.value) {
                 val uiState = viewModel.uiState.value
+
                 if (uiState.isAuthenticated) {
-                    val heartRate = currentHeartRate.value
-                    if (heartRate > 0) {
-                        Log.d(TAG, "서버로 심박수 데이터 전송: $heartRate BPM")
-                        viewModel.sendHeartRateData(heartRate)
+                    // 커플 아이디 조회
+                    val coupleId = viewModel.getCoupleIdIfValid()
+                    if (coupleId != null) {
+                        val heartRate = currentHeartRate.value
+                        val stressIndex = currentStressIndex.value
+
+                        // 현재 시간을 ISO 8601 형식으로 생성
+                        val currentTime = java.time.Instant.now().toString()
+
+                        Log.d(
+                            TAG,
+                            "서버로 건강 데이터 전송: HeartRate=$heartRate BPM, Stress=$stressIndex, Time=$currentTime"
+                        )
+
+                        // 심박수와 스트레스 지수를 함께 전송
+                        viewModel.sendHealthData(
+                            date = currentTime,
+                            heartRate = if (heartRate > 0) heartRate.toInt() else 0,
+                            stress = stressIndex
+                        )
+                    } else {
+                        Log.w(TAG, "건강 데이터 서버 전송 실패 - 커플 아이디 조회 실패")
                     }
                 } else {
                     Log.w(TAG, "심박수 서버 전송 실패 - 인증 필요")
@@ -261,24 +286,26 @@ class MainActivity : ComponentActivity() {
     private fun toggleHeartRateMeasurement(enabled: Boolean, viewModel: WearMainViewModel) {
         if (enabled) {
             // 심박수 측정 시작 시 인증 체크
-            checkAuthenticationWithToast(
-                viewModel = viewModel,
-                onAuthenticated = {
-                    lifecycleScope.launch {
-                        sharedPreferences.edit()
-                            .putBoolean("heart_rate_toggle", enabled)
-                            .apply()
+            lifecycleScope.launch {
+                ensureAuthAndCouple(
+                    viewModel = viewModel,
+                    onAuthenticated = {
+                        lifecycleScope.launch {
+                            sharedPreferences.edit()
+                                .putBoolean("heart_rate_toggle", enabled)
+                                .apply()
 
-                        Log.d(TAG, "Starting heart rate service with server sync")
-                        HealthServiceHelper.startService(this@MainActivity)
-                        heartStatus.value = "서비스 시작 중..."
+                            Log.d(TAG, "Starting heart rate service with server sync")
+                            HealthServiceHelper.startService(this@MainActivity)
+                            heartStatus.value = "서비스 시작 중..."
 
-                        // 서버 동기화 시작
-                        startHeartRateServerSync(viewModel)
-                    }
-                },
-                featureName = "심박수 서버 연동"
-            )
+                            // 서버 동기화 시작
+                            startHeartRateServerSync(viewModel)
+                        }
+                    },
+                    featureName = "심박수 서버 연동"
+                )
+            }
         } else {
             // 측정 중지는 인증 없이 가능
             lifecycleScope.launch {
@@ -304,32 +331,33 @@ class MainActivity : ComponentActivity() {
     }
 
     // 태동 기록 (인증 체크 포함)
-    private fun recordFetalMovement(viewModel: WearMainViewModel) : Boolean {
-        return checkAuthenticationWithToast(
+    private suspend fun recordFetalMovement(viewModel: WearMainViewModel): Boolean {
+        return ensureAuthAndCouple(
             viewModel = viewModel,
             onAuthenticated = {
-                val currentTime = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
-                    .format(java.util.Date())
+                val currentTime =
+                    java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
+                        .format(java.util.Date())
 
                 Log.d(TAG, "태동 기록됨: $currentTime")
-                viewModel.sendFetalMovementData(currentTime)
+//                viewModel.sendFetalMovementData(currentTime)
             },
             featureName = "태동 기록 서버 전송"
         )
     }
 
     // 진통 기록 (인증 체크 포함)
-    private fun recordLaborData(
+    private suspend fun recordLaborData(
         viewModel: WearMainViewModel,
         isActive: Boolean,
         duration: String? = null,
         interval: String? = null
-    ) : Boolean{
-        return checkAuthenticationWithToast(
+    ): Boolean {
+        return ensureAuthAndCouple(
             viewModel = viewModel,
             onAuthenticated = {
                 Log.d(TAG, "서버로 진통 데이터 전송 - 활성: $isActive, 지속시간: $duration, 간격: $interval")
-                viewModel.sendLaborData(isActive, duration, interval)
+//                viewModel.sendLaborData(isActive, duration, interval)
             },
             featureName = "진통 기록 서버 전송"
         )
@@ -339,6 +367,31 @@ class MainActivity : ComponentActivity() {
     fun AppContent() {
         HelloWorldTheme {
             val viewModel: WearMainViewModel = hiltViewModel()
+
+            // 에러 및 성공 메시지 처리 추가
+            val uiState by viewModel.uiState.collectAsState()
+
+            LaunchedEffect(uiState.errorMessage, uiState.successMessage) {
+                uiState.errorMessage?.let { error ->
+                    Log.e(TAG, "UI Error: $error")
+                    Toast.makeText(
+                        this@MainActivity,
+                        error,
+                        Toast.LENGTH_LONG
+                    ).show()
+                    viewModel.clearError()
+                }
+
+                uiState.successMessage?.let { success ->
+                    Log.i(TAG, "UI Success: $success")
+                    Toast.makeText(
+                        this@MainActivity,
+                        success,
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    viewModel.clearSuccess()
+                }
+            }
 
             val screen by currentScreen
             when (screen) {
@@ -352,7 +405,6 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     fun MainScreen() {
-        val viewModel: WearMainViewModel = hiltViewModel()
         val scrollState = rememberScrollState()
 
         Column(
@@ -370,21 +422,6 @@ class MainActivity : ComponentActivity() {
                 color = MaterialTheme.colors.primary,
                 textAlign = TextAlign.Center
             )
-
-            Button(
-                onClick = {
-                    val uiState = viewModel.uiState.value
-                    Log.d(TAG, "디버깅 - 인증 상태: ${uiState.isAuthenticated}")
-                    android.widget.Toast.makeText(
-                        this@MainActivity,
-                        if (uiState.isAuthenticated) "토큰 있음" else "토큰 없음",
-                        android.widget.Toast.LENGTH_SHORT
-                    ).show()
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("토큰 상태 확인")
-            }
 
             MenuCard(
                 title = "심박수",
@@ -454,8 +491,6 @@ class MainActivity : ComponentActivity() {
 
         val heartRate by currentHeartRate
         val toggleEnabled by isToggleEnabled
-        val status by heartStatus
-        val updateTime by lastUpdateTime
 
         Column(
             modifier = Modifier
@@ -558,8 +593,10 @@ class MainActivity : ComponentActivity() {
 
             Button(
                 onClick = {
-                    if (recordFetalMovement(viewModel)) {
-                        fetalMovementCount++
+                    lifecycleScope.launch {
+                        if (recordFetalMovement(viewModel)) {
+                            fetalMovementCount++
+                        }
                     }
                 },
                 modifier = Modifier
@@ -614,8 +651,9 @@ class MainActivity : ComponentActivity() {
             Button(
                 onClick = {
                     val currentTimeMs = System.currentTimeMillis()
-                    val currentTimeString = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
-                        .format(java.util.Date(currentTimeMs))
+                    val currentTimeString =
+                        java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
+                            .format(java.util.Date(currentTimeMs))
 
                     if (!isLaborActive) {
                         // 진통 시작
@@ -629,15 +667,17 @@ class MainActivity : ComponentActivity() {
                             laborInterval = intervalToSend
 
                             Log.d(TAG, "진통 시작됨: $currentTimeString, 이전 진통과의 간격: $intervalToSend")
-                        }
-                        else {
+                        } else {
                             Log.d(TAG, "첫 번째 진통 시작됨: $currentTimeString")
                         }
 
+                        var success = false
                         // 서버로 진통 시작 데이터 전송 (인증 체크 포함)
-                        val success = recordLaborData(viewModel, true, null, intervalToSend)
+                        lifecycleScope.launch {
+                            success = recordLaborData(viewModel, true, null, intervalToSend)
+                        }
 
-                        if(success){
+                        if (success) {
                             isLaborActive = true
                             laborStartTime = currentTimeMs
                             laborDuration = ""
@@ -658,23 +698,23 @@ class MainActivity : ComponentActivity() {
                         // 진통 종료
                         var durationToSend = ""
 
-//                        isLaborActive = false
-//                        laborCount++
-//
-//                        lastLaborEndTime = currentTimeString
-//                        previousLaborEndTime = currentTimeMs
-
                         if (laborStartTime != null) {
                             val durationMs = currentTimeMs - laborStartTime!!
                             val durationMinutes = durationMs / (1000 * 60)
                             val durationSeconds = (durationMs % (1000 * 60)) / 1000
                             durationToSend = "${durationMinutes}분 ${durationSeconds}초"
 
-                            Log.d(TAG, "진통 종료됨: $currentTimeString, 지속시간: $laborDuration, 총 횟수: $laborCount")
+                            Log.d(
+                                TAG,
+                                "진통 종료됨: $currentTimeString, 지속시간: $laborDuration, 총 횟수: $laborCount"
+                            )
                         }
 
                         // 서버로 진통 종료 데이터 전송 (인증 체크 포함)
-                        val success = recordLaborData(viewModel, false, durationToSend, null)
+                        var success = false
+                        lifecycleScope.launch {
+                            success = recordLaborData(viewModel, false, durationToSend, null)
+                        }
 
                         // 인증이 성공한 경우에만 상태 변경
                         if (success) {
@@ -686,7 +726,6 @@ class MainActivity : ComponentActivity() {
                             laborStartTime = null
                         }
 
-//                        laborStartTime = null
                     }
                 },
                 modifier = Modifier

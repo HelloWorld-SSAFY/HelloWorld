@@ -1,4 +1,4 @@
-package com.ms.wearos.dto
+package com.ms.wearos.dto.response
 
 data class RefreshTokenResponse(
     val accessToken: String,

@@ -8,14 +8,11 @@ import com.ms.helloworld.network.api.AuthApi
 import javax.inject.Inject
 import javax.inject.Singleton
 
+private const val TAG = "싸피_AuthRepository"
 @Singleton
 class AuthRepository @Inject constructor(
     private val authApi: AuthApi
 ) {
-    companion object {
-        private const val TAG = "AuthRepository"
-    }
-
     suspend fun socialLogin(request: GoogleLoginRequest): LoginResponse? {
         return try {
             Log.d(TAG, "Making API call to socialLogin")

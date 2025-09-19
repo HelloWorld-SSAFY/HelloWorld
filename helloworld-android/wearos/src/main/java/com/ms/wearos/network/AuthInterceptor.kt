@@ -6,8 +6,7 @@ import okhttp3.Interceptor
 import okhttp3.Response
 import javax.inject.Inject
 
-private const val TAG = "WearAuthInterceptor"
-
+private const val TAG = "싸피_AuthInterceptor"
 class AuthInterceptor @Inject constructor(
     private val wearTokenManager: WearTokenManager
 ) : Interceptor {

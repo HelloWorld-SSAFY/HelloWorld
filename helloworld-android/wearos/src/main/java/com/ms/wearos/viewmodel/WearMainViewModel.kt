@@ -3,6 +3,8 @@ package com.ms.wearos.viewmodel
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ms.wearos.dto.request.HealthDataRequest
+import com.ms.wearos.repository.AuthRepository
 import com.ms.wearos.repository.WearApiRepository
 import com.ms.wearos.util.WearTokenManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -21,15 +23,14 @@ data class WearMainUiState(
     val tokenAge: Long? = null
 )
 
+private const val TAG = "싸피_WearMainViewModel"
+
 @HiltViewModel
 class WearMainViewModel @Inject constructor(
     private val wearRepository: WearApiRepository,
+    private val authRepository: AuthRepository,
     private val tokenManager: WearTokenManager
 ) : ViewModel() {
-
-    companion object {
-        private const val TAG = "WearMainViewModel"
-    }
 
     private val _uiState = MutableStateFlow(WearMainUiState())
     val uiState: StateFlow<WearMainUiState> = _uiState.asStateFlow()
@@ -69,114 +70,69 @@ class WearMainViewModel @Inject constructor(
         }
     }
 
-    // 인증이 필요한 작업 실행 전 토큰 검증
-    private fun executeWithAuth(
-        operation: suspend () -> Unit,
-        errorMessage: String = "인증이 필요합니다"
-    ) {
-        viewModelScope.launch {
-            if (!tokenManager.isTokenValid()) {
-                Log.w(TAG, "Authentication required for operation")
-                _uiState.value = _uiState.value.copy(
-                    errorMessage = errorMessage
-                )
-                return@launch
-            }
+    // 커플 ID 조회 및 검증
+    suspend fun getCoupleIdIfValid(): Int? {
+        return try {
+            Log.d(TAG, "Checking couple ID...")
+            val userInfo = authRepository.getUserInfo()
 
-            try {
-                _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
-                operation()
-                _uiState.value = _uiState.value.copy(isLoading = false)
-            } catch (e: Exception) {
-                Log.e(TAG, "Operation failed", e)
+            if (userInfo != null) {
+                val coupleId = userInfo.couple?.couple_id
+                Log.d(TAG, "Couple ID retrieved: $coupleId")
+
+                if (coupleId != null && coupleId > 0) {
+                    Log.d(TAG, "Valid couple ID found: $coupleId")
+                    coupleId
+                } else {
+                    Log.w(TAG, "No valid couple ID found")
+                    _uiState.value = _uiState.value.copy(
+                        errorMessage = "커플 연동이 필요합니다. 모바일 앱에서 커플 등록을 완료해주세요."
+                    )
+                    null
+                }
+            } else {
+                Log.e(TAG, "Failed to get user info")
                 _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    errorMessage = "작업 실행 중 오류: ${e.message}"
+                    errorMessage = "사용자 정보 조회에 실패했습니다."
                 )
+                null
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting couple ID", e)
+            _uiState.value = _uiState.value.copy(
+                errorMessage = "커플 정보 조회 중 오류: ${e.message}"
+            )
+            null
         }
     }
 
-    fun sendHeartRateData(heartRate: Double) {
-        executeWithAuth(
-            operation = {
-                val authHeader = tokenManager.getAuthorizationHeader()
-                if (authHeader != null) {
-                    Log.d(TAG, "Sending heart rate data: $heartRate BPM")
-                    val response = wearRepository.sendHeartRateData(heartRate, authHeader)
+    /**
+     * 심박수와 스트레스 지수를 함께 서버로 전송
+     */
+    fun sendHealthData(date: String, heartRate: Int, stress: Int) {
+        viewModelScope.launch {
+            try {
+                val healthData = HealthDataRequest(date, heartRate, stress)
 
-                    if (response.isSuccessful) {
-                        Log.d(TAG, "Heart rate data sent successfully")
-                        _uiState.value = _uiState.value.copy(
-                            successMessage = "심박수 데이터 전송 완료"
-                        )
-                    } else {
-                        Log.e(TAG, "Failed to send heart rate data: ${response.code()}")
-                        _uiState.value = _uiState.value.copy(
-                            errorMessage = "심박수 데이터 전송 실패"
-                        )
-                    }
+                Log.d("WearMainViewModel", "건강 데이터 전송 시도: $healthData")
+
+                val response = wearRepository.sendHealthData(healthData)
+
+                if (response.isSuccessful) {
+                    Log.d("WearMainViewModel", "건강 데이터 전송 성공: 심박수=${healthData.heartrate}, 스트레스=$healthData.stress")
                 } else {
-                    throw Exception("인증 헤더 생성 실패")
+                    Log.e("WearMainViewModel", "건강 데이터 전송 실패: ${response.code()}")
+                    _uiState.value = _uiState.value.copy(
+                        errorMessage = "건강 데이터 전송 실패: ${response.code()}"
+                    )
                 }
-            },
-            errorMessage = "심박수 데이터 전송을 위해 모바일 로그인이 필요합니다"
-        )
-    }
-
-    fun sendFetalMovementData(timestamp: String) {
-        executeWithAuth(
-            operation = {
-                val authHeader = tokenManager.getAuthorizationHeader()
-                if (authHeader != null) {
-                    Log.d(TAG, "Sending fetal movement data: $timestamp")
-                    val response = wearRepository.sendFetalMovementData(timestamp, authHeader)
-
-                    if (response.isSuccessful) {
-                        Log.d(TAG, "Fetal movement data sent successfully")
-                        _uiState.value = _uiState.value.copy(
-                            successMessage = "태동 기록 전송 완료"
-                        )
-                    } else {
-                        Log.e(TAG, "Failed to send fetal movement data: ${response.code()}")
-                        _uiState.value = _uiState.value.copy(
-                            errorMessage = "태동 기록 전송 실패"
-                        )
-                    }
-                } else {
-                    throw Exception("인증 헤더 생성 실패")
-                }
-            },
-            errorMessage = "태동 기록을 위해 모바일 로그인이 필요합니다"
-        )
-    }
-
-    fun sendLaborData(isActive: Boolean, duration: String?, interval: String?) {
-        executeWithAuth(
-            operation = {
-                val authHeader = tokenManager.getAuthorizationHeader()
-                if (authHeader != null) {
-                    Log.d(TAG, "Sending labor data - Active: $isActive, Duration: $duration, Interval: $interval")
-                    val response = wearRepository.sendLaborData(isActive, duration, interval, authHeader)
-
-                    if (response.isSuccessful) {
-                        Log.d(TAG, "Labor data sent successfully")
-                        val message = if (isActive) "진통 시작 기록 완료" else "진통 종료 기록 완료"
-                        _uiState.value = _uiState.value.copy(
-                            successMessage = message
-                        )
-                    } else {
-                        Log.e(TAG, "Failed to send labor data: ${response.code()}")
-                        _uiState.value = _uiState.value.copy(
-                            errorMessage = "진통 기록 전송 실패"
-                        )
-                    }
-                } else {
-                    throw Exception("인증 헤더 생성 실패")
-                }
-            },
-            errorMessage = "진통 기록을 위해 모바일 로그인이 필요합니다"
-        )
+            } catch (e: Exception) {
+                Log.e("WearMainViewModel", "건강 데이터 전송 중 오류 발생", e)
+                _uiState.value = _uiState.value.copy(
+                    errorMessage = "건강 데이터 전송 오류: ${e.message}"
+                )
+            }
+        }
     }
 
     // 에러 메시지 초기화
@@ -187,22 +143,5 @@ class WearMainViewModel @Inject constructor(
     // 성공 메시지 초기화
     fun clearSuccess() {
         _uiState.value = _uiState.value.copy(successMessage = null)
-    }
-
-    // 토큰 만료 시간 계산 (시간 단위)
-    fun getTokenAgeInHours(): Long? {
-        val timestamp = tokenManager.tokenTimestamp.value
-        return if (timestamp != null) {
-            val currentTime = System.currentTimeMillis()
-            (currentTime - timestamp) / (1000 * 60 * 60)
-        } else null
-    }
-
-    // 토큰 만료까지 남은 시간 계산
-    fun getTokenRemainingHours(): Long? {
-        val ageInHours = getTokenAgeInHours()
-        return if (ageInHours != null) {
-            maxOf(0, 24 - ageInHours) // 24시간 만료 기준
-        } else null
     }
 }
