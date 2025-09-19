@@ -140,7 +140,7 @@ public class DiaryService {
                 .coupleId(req.getCoupleId())
                 .authorId(req.getAuthorId())
                 .authorRole("female".equalsIgnoreCase(req.getAuthorRole()) ?
-                        Diary.AuthorRole.MALE : Diary.AuthorRole.FEMALE)
+                        Diary.AuthorRole.FEMALE : Diary.AuthorRole.MALE)
                 .diaryTitle(req.getDiaryTitle())
                 .diaryContent(req.getDiaryContent())
                 .createdAt(startOfDay)
