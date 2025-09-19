@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<wearableApp package="com.ms.wearos">
+    <versionCode>1</versionCode>
+    <versionName>1.0</versionName>
+
+    <!-- WearOS 앱이 독립 실행 가능한지 여부 -->
+    <wearableAppStandalone>false</wearableAppStandalone>
+
+    <!-- 모바일 앱과의 연동이 필요함을 명시 -->
+    <applicationName>임신 케어</applicationName>
+</wearableApp>

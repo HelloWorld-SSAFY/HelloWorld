@@ -28,12 +28,19 @@ import androidx.lifecycle.lifecycleScope
 import androidx.wear.compose.material.*
 import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.filled.Face
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.ViewModelProvider
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import com.ms.wearos.presentation.theme.HelloWorldTheme
 import com.ms.wearos.service.HealthDataService
 import com.ms.wearos.service.HealthServiceHelper
+import com.ms.wearos.viewmodel.WearMainViewModel
+import dagger.hilt.android.AndroidEntryPoint
 
 private const val TAG = "싸피_MainActivity"
+
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
     private lateinit var sharedPreferences: SharedPreferences
@@ -47,27 +54,45 @@ class MainActivity : ComponentActivity() {
     private var heartStatus = mutableStateOf("심박수: 준비됨")
     private var lastUpdateTime = mutableStateOf("")
 
+    // 스트레스 상태 변수
+    private var currentStressIndex = mutableStateOf(0)
+    private var currentStressLevel = mutableStateOf("측정 대기")
+    private var stressAdvice = mutableStateOf("")
+
+    // 서버 전송 관련 상태
+    private var heartRateJob: kotlinx.coroutines.Job? = null
+
     // 화면 enum
     enum class Screen {
         Main, HeartRate, FetalMovement, LaborRecord
     }
 
     // 서비스로부터 심박수 데이터를 받기 위한 브로드캐스트 리시버
-    private val heartRateReceiver = object : BroadcastReceiver() {
+    private val healthDataReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
                 HealthDataService.ACTION_HEART_RATE_UPDATE -> {
                     val heartRate = intent.getDoubleExtra("heart_rate", 0.0)
                     val timestamp = intent.getStringExtra("timestamp") ?: ""
-                    val status = intent.getStringExtra("status") ?: ""
 
                     currentHeartRate.value = heartRate
                     lastUpdateTime.value = timestamp
-                    if (status.isNotEmpty()) {
-                        heartStatus.value = status
-                    }
 
                     Log.d(TAG, "UI updated - Heart rate: $heartRate BPM")
+                }
+
+                HealthDataService.ACTION_STRESS_UPDATE -> {
+                    val stressIndex = intent.getIntExtra("stress_index", 0)
+                    val stressLevel = intent.getStringExtra("stress_level") ?: "알 수 없음"
+                    val advice = intent.getStringExtra("stress_advice") ?: ""
+                    val timestamp = intent.getStringExtra("timestamp") ?: ""
+
+                    currentStressIndex.value = stressIndex
+                    currentStressLevel.value = stressLevel
+                    stressAdvice.value = advice
+
+                    Log.d(TAG, "UI updated - Stress: $stressIndex ($stressLevel)")
+                    Log.d(TAG, "Stress advice: $advice")
                 }
 
                 HealthDataService.ACTION_SERVICE_STATUS -> {
@@ -101,8 +126,6 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         sharedPreferences = getSharedPreferences("heart_rate_prefs", Context.MODE_PRIVATE)
-
-        // 저장된 토글 상태 복원
         isToggleEnabled.value = sharedPreferences.getBoolean("heart_rate_toggle", false)
 
         requestHealthPermissions()
@@ -111,18 +134,25 @@ class MainActivity : ComponentActivity() {
         setContent {
             AppContent()
         }
+
+        // 토큰 상태 로깅 시작
+        lifecycleScope.launch {
+            delay(1000) // 잠시 대기 후 시작
+            val viewModel: WearMainViewModel = ViewModelProvider(this@MainActivity)[WearMainViewModel::class.java]
+            logTokenStatus(viewModel)
+        }
     }
 
     override fun onResume() {
         super.onResume()
-        // 화면 복귀 시 현재 서비스 상태 확인
         HealthServiceHelper.requestServiceStatus(this)
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        heartRateJob?.cancel()
         try {
-            unregisterReceiver(heartRateReceiver)
+            unregisterReceiver(healthDataReceiver)
         } catch (e: Exception) {
             Log.e(TAG, "Error unregistering receiver", e)
         }
@@ -131,15 +161,29 @@ class MainActivity : ComponentActivity() {
     private fun registerBroadcastReceiver() {
         val filter = IntentFilter().apply {
             addAction(HealthDataService.ACTION_HEART_RATE_UPDATE)
+            addAction(HealthDataService.ACTION_STRESS_UPDATE)
             addAction(HealthDataService.ACTION_SERVICE_STATUS)
         }
-        registerReceiver(heartRateReceiver, filter, RECEIVER_NOT_EXPORTED)
+        registerReceiver(healthDataReceiver, filter, RECEIVER_NOT_EXPORTED)
     }
 
     private fun checkAndRestoreToggleState() {
         if (isToggleEnabled.value) {
             Log.d(TAG, "Restoring toggle state - starting service")
             HealthServiceHelper.startService(this)
+        }
+    }
+
+    private fun logTokenStatus(viewModel: WearMainViewModel) {
+        lifecycleScope.launch {
+            viewModel.uiState.collect { state ->
+                Log.d(TAG, "Authentication status changed: ${state.isAuthenticated}")
+                if (state.isAuthenticated) {
+                    Log.d(TAG, "Access token available for API calls")
+                } else {
+                    Log.d(TAG, "No access token - authentication required")
+                }
+            }
         }
     }
 
@@ -162,22 +206,96 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // 토글 상태 변경
-    private fun toggleHeartRateMeasurement(enabled: Boolean) {
-        lifecycleScope.launch {
-            // SharedPreferences에 상태 저장
-            sharedPreferences.edit()
-                .putBoolean("heart_rate_toggle", enabled)
-                .apply()
+    // 인증 상태를 확인하고 Toast를 표시하는 함수
+    private fun checkAuthenticationWithToast(
+        viewModel: WearMainViewModel,
+        onAuthenticated: () -> Unit,
+        featureName: String = "이 기능"
+    ) : Boolean {
+        val tokenStatus = viewModel.checkTokenStatus()
+        Log.d(TAG, "인증 상태 확인 - $featureName: $tokenStatus")
 
-            if (enabled) {
-                Log.d(TAG, "Starting heart rate service")
-                HealthServiceHelper.startService(this@MainActivity)
-                heartStatus.value = "서비스 시작 중..."
-            } else {
+        return if (viewModel.uiState.value.isAuthenticated) {
+            Log.d(TAG, "인증 상태 확인됨 - $featureName 사용 가능")
+            onAuthenticated()
+            true
+        } else {
+            Log.w(TAG, "인증되지 않음 - $featureName 사용 불가: $tokenStatus")
+
+            val message = when {
+                tokenStatus.contains("토큰 없음") -> "모바일 앱에서 로그인해주세요."
+                tokenStatus.contains("토큰 만료됨") -> "토큰이 만료되었습니다. 모바일 앱에서 다시 로그인해주세요."
+                else -> "모바일 로그인이 필요합니다."
+            }
+
+            android.widget.Toast.makeText(
+                this,
+                message,
+                android.widget.Toast.LENGTH_LONG
+            ).show()
+            false
+        }
+    }
+
+    // 10초 간격 심박수 서버 전송 함수
+    private fun startHeartRateServerSync(viewModel: WearMainViewModel) {
+        heartRateJob?.cancel()
+        heartRateJob = lifecycleScope.launch {
+            while (isToggleEnabled.value) {
+                val uiState = viewModel.uiState.value
+                if (uiState.isAuthenticated) {
+                    val heartRate = currentHeartRate.value
+                    if (heartRate > 0) {
+                        Log.d(TAG, "서버로 심박수 데이터 전송: $heartRate BPM")
+                        viewModel.sendHeartRateData(heartRate)
+                    }
+                } else {
+                    Log.w(TAG, "심박수 서버 전송 실패 - 인증 필요")
+                }
+                delay(10000) // 10초 대기
+            }
+        }
+    }
+
+    // 심박수 측정 토글 (인증 체크 포함)
+    private fun toggleHeartRateMeasurement(enabled: Boolean, viewModel: WearMainViewModel) {
+        if (enabled) {
+            // 심박수 측정 시작 시 인증 체크
+            checkAuthenticationWithToast(
+                viewModel = viewModel,
+                onAuthenticated = {
+                    lifecycleScope.launch {
+                        sharedPreferences.edit()
+                            .putBoolean("heart_rate_toggle", enabled)
+                            .apply()
+
+                        Log.d(TAG, "Starting heart rate service with server sync")
+                        HealthServiceHelper.startService(this@MainActivity)
+                        heartStatus.value = "서비스 시작 중..."
+
+                        // 서버 동기화 시작
+                        startHeartRateServerSync(viewModel)
+                    }
+                },
+                featureName = "심박수 서버 연동"
+            )
+        } else {
+            // 측정 중지는 인증 없이 가능
+            lifecycleScope.launch {
+                sharedPreferences.edit()
+                    .putBoolean("heart_rate_toggle", false)
+                    .apply()
+
                 Log.d(TAG, "Stopping heart rate service")
                 HealthServiceHelper.stopService(this@MainActivity)
+
+                // 서버 동기화 중지
+                heartRateJob?.cancel()
+
                 currentHeartRate.value = 0.0
+                currentStressIndex.value = 0
+                currentStressLevel.value = "측정 대기"
+                stressAdvice.value = ""
                 lastUpdateTime.value = ""
                 heartStatus.value = "측정 중지됨"
                 isToggleEnabled.value = false
@@ -185,22 +303,56 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // 태동 기록 (인증 체크 포함)
+    private fun recordFetalMovement(viewModel: WearMainViewModel) : Boolean {
+        return checkAuthenticationWithToast(
+            viewModel = viewModel,
+            onAuthenticated = {
+                val currentTime = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
+                    .format(java.util.Date())
+
+                Log.d(TAG, "태동 기록됨: $currentTime")
+                viewModel.sendFetalMovementData(currentTime)
+            },
+            featureName = "태동 기록 서버 전송"
+        )
+    }
+
+    // 진통 기록 (인증 체크 포함)
+    private fun recordLaborData(
+        viewModel: WearMainViewModel,
+        isActive: Boolean,
+        duration: String? = null,
+        interval: String? = null
+    ) : Boolean{
+        return checkAuthenticationWithToast(
+            viewModel = viewModel,
+            onAuthenticated = {
+                Log.d(TAG, "서버로 진통 데이터 전송 - 활성: $isActive, 지속시간: $duration, 간격: $interval")
+                viewModel.sendLaborData(isActive, duration, interval)
+            },
+            featureName = "진통 기록 서버 전송"
+        )
+    }
+
     @Composable
     fun AppContent() {
         HelloWorldTheme {
-            val screen by currentScreen
+            val viewModel: WearMainViewModel = hiltViewModel()
 
+            val screen by currentScreen
             when (screen) {
                 Screen.Main -> MainScreen()
-                Screen.HeartRate -> HeartRateScreen()
-                Screen.FetalMovement -> FetalMovementScreen()
-                Screen.LaborRecord -> LaborRecordScreen()
+                Screen.HeartRate -> HeartRateScreen(viewModel)
+                Screen.FetalMovement -> FetalMovementScreen(viewModel)
+                Screen.LaborRecord -> LaborRecordScreen(viewModel)
             }
         }
     }
 
     @Composable
     fun MainScreen() {
+        val viewModel: WearMainViewModel = hiltViewModel()
         val scrollState = rememberScrollState()
 
         Column(
@@ -212,7 +364,6 @@ class MainActivity : ComponentActivity() {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-
             Text(
                 text = "임신 케어",
                 style = MaterialTheme.typography.title2,
@@ -220,8 +371,21 @@ class MainActivity : ComponentActivity() {
                 textAlign = TextAlign.Center
             )
 
+            Button(
+                onClick = {
+                    val uiState = viewModel.uiState.value
+                    Log.d(TAG, "디버깅 - 인증 상태: ${uiState.isAuthenticated}")
+                    android.widget.Toast.makeText(
+                        this@MainActivity,
+                        if (uiState.isAuthenticated) "토큰 있음" else "토큰 없음",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("토큰 상태 확인")
+            }
 
-            // 심박수 카드
             MenuCard(
                 title = "심박수",
                 icon = Icons.Default.Favorite,
@@ -229,7 +393,6 @@ class MainActivity : ComponentActivity() {
                 onClick = { currentScreen.value = Screen.HeartRate }
             )
 
-            // 태동 기록 카드
             MenuCard(
                 title = "태동 기록",
                 icon = Icons.Default.Face,
@@ -237,7 +400,6 @@ class MainActivity : ComponentActivity() {
                 onClick = { currentScreen.value = Screen.FetalMovement }
             )
 
-            // 진통 기록 카드
             MenuCard(
                 title = "진통 기록",
                 icon = Icons.Default.MonitorHeart,
@@ -283,15 +445,13 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    fun HeartRateScreen() {
+    fun HeartRateScreen(viewModel: WearMainViewModel) {
         val scrollState = rememberScrollState()
 
-        // BackHandler 추가 - 뒤로가기 시 메인화면으로
         BackHandler {
             currentScreen.value = Screen.Main
         }
 
-        // 클래스 레벨 상태를 Compose에서 관찰
         val heartRate by currentHeartRate
         val toggleEnabled by isToggleEnabled
         val status by heartStatus
@@ -306,7 +466,6 @@ class MainActivity : ComponentActivity() {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-
             Text(
                 text = "심박수",
                 style = MaterialTheme.typography.title3,
@@ -314,7 +473,6 @@ class MainActivity : ComponentActivity() {
                 textAlign = TextAlign.Center
             )
 
-            // 심박수 섹션
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 onClick = {}
@@ -323,7 +481,6 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.padding(8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-
                     Text(
                         text = "${heartRate.toInt()} BPM",
                         style = MaterialTheme.typography.title1,
@@ -332,11 +489,10 @@ class MainActivity : ComponentActivity() {
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // 토글 버튼
                     ToggleButton(
                         checked = toggleEnabled,
                         onCheckedChange = { enabled ->
-                            toggleHeartRateMeasurement(enabled)
+                            toggleHeartRateMeasurement(enabled, viewModel)
                         },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -363,12 +519,9 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    fun FetalMovementScreen() {
-        // 태동 기록을 위한 상태 관리
+    fun FetalMovementScreen(viewModel: WearMainViewModel) {
         var fetalMovementCount by remember { mutableStateOf(0) }
-        var lastRecordTime by remember { mutableStateOf("") }
 
-        // BackHandler 추가 - 뒤로가기 시 메인화면으로
         BackHandler {
             currentScreen.value = Screen.Main
         }
@@ -381,8 +534,6 @@ class MainActivity : ComponentActivity() {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-
-            // 제목
             Text(
                 text = "태동 기록",
                 style = MaterialTheme.typography.title2,
@@ -390,7 +541,6 @@ class MainActivity : ComponentActivity() {
                 textAlign = TextAlign.Center
             )
 
-            // 아이콘
             Icon(
                 imageVector = Icons.Default.Face,
                 contentDescription = "태동",
@@ -398,15 +548,19 @@ class MainActivity : ComponentActivity() {
                 tint = MaterialTheme.colors.primary
             )
 
-            // 태동 기록 버튼
+            if (fetalMovementCount > 0) {
+                Text(
+                    text = "오늘 태동 횟수: ${fetalMovementCount}회",
+                    style = MaterialTheme.typography.body2,
+                    color = MaterialTheme.colors.onBackground
+                )
+            }
+
             Button(
                 onClick = {
-                    fetalMovementCount++
-                    val currentTime = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
-                        .format(java.util.Date())
-                    lastRecordTime = currentTime
-
-                    Log.d(TAG, "태동 기록됨: $fetalMovementCount 회, 시간: $currentTime")
+                    if (recordFetalMovement(viewModel)) {
+                        fetalMovementCount++
+                    }
                 },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -422,8 +576,7 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    fun LaborRecordScreen() {
-        // 진통 기록을 위한 상태 관리
+    fun LaborRecordScreen(viewModel: WearMainViewModel) {
         var isLaborActive by remember { mutableStateOf(false) }
         var laborStartTime by remember { mutableStateOf<Long?>(null) }
         var laborDuration by remember { mutableStateOf("") }
@@ -432,7 +585,6 @@ class MainActivity : ComponentActivity() {
         var laborInterval by remember { mutableStateOf("") }
         var previousLaborEndTime by remember { mutableStateOf<Long?>(null) }
 
-        // BackHandler 추가 - 뒤로가기 시 메인화면으로
         BackHandler {
             currentScreen.value = Screen.Main
         }
@@ -445,8 +597,6 @@ class MainActivity : ComponentActivity() {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-
-            // 제목
             Text(
                 text = "진통 기록",
                 style = MaterialTheme.typography.title2,
@@ -454,7 +604,6 @@ class MainActivity : ComponentActivity() {
                 textAlign = TextAlign.Center
             )
 
-            // 아이콘
             Icon(
                 imageVector = Icons.Default.MonitorHeart,
                 contentDescription = "진통",
@@ -462,7 +611,6 @@ class MainActivity : ComponentActivity() {
                 tint = MaterialTheme.colors.primary
             )
 
-            // 진통 시작/종료 토글 버튼
             Button(
                 onClick = {
                     val currentTimeMs = System.currentTimeMillis()
@@ -471,11 +619,30 @@ class MainActivity : ComponentActivity() {
 
                     if (!isLaborActive) {
                         // 진통 시작
-                        isLaborActive = true
-                        laborStartTime = currentTimeMs
-                        laborDuration = ""
+                        var intervalToSend: String? = null
 
-                        // 이전 진통과의 간격 계산
+                        if (previousLaborEndTime != null) {
+                            val intervalMs = currentTimeMs - previousLaborEndTime!!
+                            val intervalMinutes = intervalMs / (1000 * 60)
+                            val intervalSeconds = (intervalMs % (1000 * 60)) / 1000
+                            intervalToSend = "${intervalMinutes}분 ${intervalSeconds}초"
+                            laborInterval = intervalToSend
+
+                            Log.d(TAG, "진통 시작됨: $currentTimeString, 이전 진통과의 간격: $intervalToSend")
+                        }
+                        else {
+                            Log.d(TAG, "첫 번째 진통 시작됨: $currentTimeString")
+                        }
+
+                        // 서버로 진통 시작 데이터 전송 (인증 체크 포함)
+                        val success = recordLaborData(viewModel, true, null, intervalToSend)
+
+                        if(success){
+                            isLaborActive = true
+                            laborStartTime = currentTimeMs
+                            laborDuration = ""
+                        }
+
                         if (previousLaborEndTime != null) {
                             val intervalMs = currentTimeMs - previousLaborEndTime!!
                             val intervalMinutes = intervalMs / (1000 * 60)
@@ -489,23 +656,37 @@ class MainActivity : ComponentActivity() {
 
                     } else {
                         // 진통 종료
-                        isLaborActive = false
-                        laborCount++
+                        var durationToSend = ""
 
-                        lastLaborEndTime = currentTimeString
-                        previousLaborEndTime = currentTimeMs
+//                        isLaborActive = false
+//                        laborCount++
+//
+//                        lastLaborEndTime = currentTimeString
+//                        previousLaborEndTime = currentTimeMs
 
-                        // 진통 지속 시간 계산
                         if (laborStartTime != null) {
                             val durationMs = currentTimeMs - laborStartTime!!
                             val durationMinutes = durationMs / (1000 * 60)
                             val durationSeconds = (durationMs % (1000 * 60)) / 1000
-                            laborDuration = "${durationMinutes}분 ${durationSeconds}초"
+                            durationToSend = "${durationMinutes}분 ${durationSeconds}초"
 
                             Log.d(TAG, "진통 종료됨: $currentTimeString, 지속시간: $laborDuration, 총 횟수: $laborCount")
                         }
 
-                        laborStartTime = null
+                        // 서버로 진통 종료 데이터 전송 (인증 체크 포함)
+                        val success = recordLaborData(viewModel, false, durationToSend, null)
+
+                        // 인증이 성공한 경우에만 상태 변경
+                        if (success) {
+                            isLaborActive = false
+                            laborCount++
+                            lastLaborEndTime = currentTimeString
+                            previousLaborEndTime = currentTimeMs
+                            laborDuration = durationToSend
+                            laborStartTime = null
+                        }
+
+//                        laborStartTime = null
                     }
                 },
                 modifier = Modifier
@@ -522,7 +703,6 @@ class MainActivity : ComponentActivity() {
                 )
             }
 
-            // 진통 정보 표시 카드
             if (laborCount > 0 || isLaborActive) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -540,14 +720,12 @@ class MainActivity : ComponentActivity() {
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        // 현재 상태
                         Text(
                             text = if (isLaborActive) "진통 중..." else "진통 대기 중",
                             style = MaterialTheme.typography.body2,
                             color = if (isLaborActive) Color.Red else MaterialTheme.colors.onSurface
                         )
 
-                        // 총 진통 횟수
                         if (laborCount > 0) {
                             Text(
                                 text = "총 진통 횟수: ${laborCount}회",
@@ -556,7 +734,6 @@ class MainActivity : ComponentActivity() {
                             )
                         }
 
-                        // 마지막 진통 지속시간
                         if (laborDuration.isNotEmpty()) {
                             Text(
                                 text = "지속시간: $laborDuration",
@@ -565,7 +742,6 @@ class MainActivity : ComponentActivity() {
                             )
                         }
 
-                        // 진통 간격
                         if (laborInterval.isNotEmpty()) {
                             Text(
                                 text = "간격: $laborInterval",
@@ -574,7 +750,6 @@ class MainActivity : ComponentActivity() {
                             )
                         }
 
-                        // 마지막 진통 종료 시간
                         if (lastLaborEndTime.isNotEmpty() && !isLaborActive) {
                             Text(
                                 text = "마지막 종료: $lastLaborEndTime",

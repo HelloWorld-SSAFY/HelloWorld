@@ -11,10 +11,10 @@ import androidx.health.services.client.HealthServices
 import androidx.health.services.client.MeasureCallback
 import androidx.health.services.client.data.*
 import androidx.health.services.client.unregisterMeasureCallback
+import com.ms.helloworld.R
 import kotlinx.coroutines.*
-import com.ms.wearos.R
+import com.ms.wearos.util.EnhancedStressCalculator
 import com.ms.wearos.util.TestLoggingUtils
-import com.ms.wearos.util.StressCalculator
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -55,8 +55,8 @@ class HealthDataService : Service() {
         isEmulator = isRunningOnEmulator()
         Log.d(TAG, "Service created - Emulator: $isEmulator")
 
-        // 스트레스 계산기 초기화 (사용자 정보는 실제로는 설정에서 가져와야 함)
-        StressCalculator.setUserInfo(age = 30, restingHeartRate = 65.0)
+        // 개선된 스트레스 계산기 초기화
+        EnhancedStressCalculator.setUserInfo(age = 30, restingHeartRate = 65.0)
     }
 
     private fun isRunningOnEmulator(): Boolean {
@@ -124,7 +124,7 @@ class HealthDataService : Service() {
         saveServiceState(true)
 
         // 스트레스 계산기 히스토리 초기화
-        StressCalculator.clearHistory()
+        EnhancedStressCalculator.clearHistory()
 
         if (!isEmulator) {
             // 실제 기기에서만 심박수 콜백 설정
@@ -166,19 +166,29 @@ class HealthDataService : Service() {
                         currentHeartRate = bpm
 
                         val timestamp = dateFormat.format(Date())
-
-                        // 마지막 측정 시간 업데이트
                         lastMeasurementTime = currentTime
 
-                        // 스트레스 지수 계산
-                        val stressIndex = StressCalculator.calculateStressIndex(bpm)
+                        // 개선된 스트레스 지수 계산
+                        val stressIndex = EnhancedStressCalculator.calculateStressIndex(bpm)
                         currentStressIndex = stressIndex
-                        val stressLevel = StressCalculator.getStressLevelText(stressIndex)
+                        val stressLevel = EnhancedStressCalculator.getStressLevelText(stressIndex)
+                        val advice = EnhancedStressCalculator.getStressAdvice(stressIndex)
 
-                        // 로그 출력 (심박수와 스트레스 함께)
+                        // 상세 진단 정보
+                        val detailedDiagnosis = EnhancedStressCalculator.getDetailedDiagnosis()
+
+                        // 개별 로그 출력
                         TestLoggingUtils.logHeartRateData(bpm)
+                        TestLoggingUtils.logStressData(stressIndex, stressLevel, advice)
+
+                        // 통합 로그 출력
+                        TestLoggingUtils.logHealthData(bpm, stressIndex, stressLevel)
+
+                        // 상세 진단 정보 로그
+                        Log.d(TAG, detailedDiagnosis)
+
                         Log.d(TAG, "실제 심박수: ${bpm.toInt()} BPM ($timestamp)")
-                        Log.d(TAG, "스트레스 지수: $stressIndex/100 ($stressLevel) ($timestamp)")
+                        Log.d(TAG, "향상된 스트레스 지수: $stressIndex/100 ($stressLevel) ($timestamp)")
 
                         // 데이터 저장
                         saveHealthData(bpm, stressIndex)
@@ -236,15 +246,27 @@ class HealthDataService : Service() {
         currentHeartRate = fakeHeartRate
         val timestamp = dateFormat.format(Date())
 
-        // 스트레스 지수 계산
-        val stressIndex = StressCalculator.calculateStressIndex(fakeHeartRate)
+        // 개선된 스트레스 지수 계산
+        val stressIndex = EnhancedStressCalculator.calculateStressIndex(fakeHeartRate)
         currentStressIndex = stressIndex
-        val stressLevel = StressCalculator.getStressLevelText(stressIndex)
+        val stressLevel = EnhancedStressCalculator.getStressLevelText(stressIndex)
+        val advice = EnhancedStressCalculator.getStressAdvice(stressIndex)
 
-        // 로그 출력 (심박수와 스트레스 함께)
+        // 상세 진단 정보
+        val detailedDiagnosis = EnhancedStressCalculator.getDetailedDiagnosis()
+
+        // 개별 로그 출력
         TestLoggingUtils.logHeartRateData(fakeHeartRate)
+        TestLoggingUtils.logStressData(stressIndex, stressLevel, advice)
+
+        // 통합 로그 출력
+        TestLoggingUtils.logHealthData(fakeHeartRate, stressIndex, stressLevel)
+
+        // 상세 진단 정보 로그
+        Log.d(TAG, detailedDiagnosis)
+
         Log.d(TAG, "가짜 심박수: $fakeHeartRate BPM $timestamp")
-        Log.d(TAG, "스트레스 지수: $stressIndex/100 ($stressLevel) $timestamp")
+        Log.d(TAG, "향상된 스트레스 지수: $stressIndex/100 ($stressLevel) $timestamp")
 
         // 데이터 저장
         saveHealthData(fakeHeartRate, stressIndex)
@@ -291,7 +313,7 @@ class HealthDataService : Service() {
                 heartRateCallback = null
 
                 // 스트레스 계산기 히스토리 초기화
-                StressCalculator.clearHistory()
+                EnhancedStressCalculator.clearHistory()
 
                 Log.d(TAG, "센서 정리 완료")
                 TestLoggingUtils.logMeasurementStop("심박수 및 스트레스")
@@ -376,7 +398,7 @@ class HealthDataService : Service() {
         val intent = Intent(ACTION_STRESS_UPDATE).apply {
             putExtra("stress_index", stressIndex)
             putExtra("stress_level", stressLevel)
-            putExtra("stress_advice", StressCalculator.getStressAdvice(stressIndex))
+            putExtra("stress_advice", EnhancedStressCalculator.getStressAdvice(stressIndex))
             putExtra("timestamp", timestamp)
             setPackage(packageName)
         }
@@ -451,7 +473,7 @@ class HealthDataService : Service() {
                 heartRateCallback = null
 
                 // 스트레스 계산기 히스토리 초기화
-                StressCalculator.clearHistory()
+                EnhancedStressCalculator.clearHistory()
 
             } catch (e: Exception) {
                 Log.e(TAG, "종료 중 오류", e)

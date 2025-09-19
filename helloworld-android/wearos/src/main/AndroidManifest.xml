@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
     <!-- 심박수 측정을 위한 필수 권한 -->
     <uses-permission android:name="android.permission.BODY_SENSORS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
@@ -12,6 +15,9 @@
     <!-- 부팅 완료 시 자동 시작을 위한 권한 -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
+    <!-- Wearable 데이터 동기화를 위한 권한 추가 -->
+    <uses-permission android:name="com.google.android.permission.PROVIDE_BACKGROUND" />
+
     <!-- 하드웨어 기능 요구사항 -->
     <uses-feature
         android:name="android.hardware.sensor.heartrate"
@@ -21,6 +27,7 @@
         android:required="true" />
 
     <application
+        android:name="com.ms.wearos.WearApplication"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
@@ -31,10 +38,6 @@
             android:name="com.google.android.wearable"
             android:required="true" />
 
-        <meta-data
-            android:name="com.google.android.wearable.standalone"
-            android:value="true" />
-
         <!-- Health Services 메타데이터 -->
         <meta-data
             android:name="com.google.android.wearable.healthservices.required"
@@ -42,7 +45,7 @@
 
         <!-- 메인 액티비티 -->
         <activity
-            android:name=".presentation.MainActivity"
+            android:name="com.ms.wearos.presentation.MainActivity"
             android:exported="true"
             android:theme="@style/MainActivityTheme.Starting">
             <intent-filter>
@@ -51,16 +54,28 @@
             </intent-filter>
         </activity>
 
+        <!-- 데이터 계층 리스너 서비스 - 우선순위 높게 설정 -->
+        <service
+            android:name="com.ms.wearos.service.DataLayerListenerService"
+            android:exported="true"
+            android:priority="1000">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.DATA_CHANGED" />
+                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
+                <data android:scheme="wear" android:host="*" />
+            </intent-filter>
+        </service>
+
         <!-- 백그라운드 심박수 측정 서비스 -->
         <service
-            android:name=".service.HealthDataService"
+            android:name="com.ms.wearos.service.HealthDataService"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="health" />
 
         <!-- 부팅 완료 및 앱 업데이트 시 자동 시작을 위한 리시버 -->
         <receiver
-            android:name=".receiver.BootReceiver"
+            android:name="com.ms.wearos.receiver.BootReceiver"
             android:enabled="true"
             android:exported="true">
             <intent-filter android:priority="1000">
@@ -70,6 +85,10 @@
                 <data android:scheme="package" />
             </intent-filter>
         </receiver>
+
+        <meta-data
+            android:name="com.google.android.wearable.standalone"
+            android:value="false" />
 
     </application>
 

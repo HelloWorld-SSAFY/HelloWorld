@@ -3,49 +3,50 @@ package com.ms.wearos.util
 import android.util.Log
 import kotlin.math.*
 
-private const val TAG = "StressCalculator"
+private const val TAG = "EnhancedStressCalculator"
 
 /**
- * 심박수 기반 스트레스 지수 계산기
- * HRV(Heart Rate Variability) 시뮬레이션과 심박수 패턴 분석을 통한 스트레스 측정
+ * 향상된 스트레스 지수 계산기
+ * 개선된 HRV 추정과 더 정교한 알고리즘 사용
  */
-object StressCalculator {
+object EnhancedStressCalculator {
 
-    // 최근 심박수 데이터를 저장할 큐 (최대 10개)
+    // 최근 심박수 데이터를 저장할 큐 (최대 15개로 확장)
     private val heartRateHistory = mutableListOf<Double>()
     private val timestampHistory = mutableListOf<Long>()
 
-    // 사용자 기본 정보 (실제로는 설정에서 가져와야 함)
+    // 사용자 기본 정보
     private var userAge = 30
     private var userRestingHeartRate = 65.0
 
     /**
-     * 스트레스 지수 계산 (0-100)
-     * @param currentHeartRate 현재 심박수
-     * @return 스트레스 지수 (0: 매우 낮음, 100: 매우 높음)
+     * 향상된 스트레스 지수 계산 (0-100)
      */
     fun calculateStressIndex(currentHeartRate: Double): Int {
         updateHeartRateHistory(currentHeartRate)
 
         val stressScore = when {
             heartRateHistory.size < 3 -> {
-                // 초기 데이터 부족 시 기본 계산
                 calculateBasicStress(currentHeartRate)
             }
+            heartRateHistory.size < 6 -> {
+                calculateIntermediateStress(currentHeartRate)
+            }
             else -> {
-                // 충분한 데이터가 있을 때 고급 계산
-                calculateAdvancedStress(currentHeartRate)
+                calculateAdvancedStressWithHRV(currentHeartRate)
             }
         }
 
-        val finalStress = stressScore.coerceIn(0, 100)
+        // 연령 조정 적용
+        val ageAdjustedScore = ImprovedHRVCalculator.getAgeAdjustedHRVScore(userAge, stressScore)
+        val finalStress = ageAdjustedScore.coerceIn(0, 100)
 
-        Log.d(TAG, "스트레스 지수 계산 완료: $finalStress")
+        Log.d(TAG, "향상된 스트레스 지수 계산 완료: $finalStress")
         return finalStress
     }
 
     /**
-     * 심박수 히스토리 업데이트
+     * 심박수 히스토리 업데이트 (확장된 버퍼)
      */
     private fun updateHeartRateHistory(heartRate: Double) {
         val currentTime = System.currentTimeMillis()
@@ -53,8 +54,8 @@ object StressCalculator {
         heartRateHistory.add(heartRate)
         timestampHistory.add(currentTime)
 
-        // 최대 10개까지만 저장 (약 100초 분량)
-        if (heartRateHistory.size > 10) {
+        // 최대 15개까지 저장 (약 150초 분량)
+        if (heartRateHistory.size > 15) {
             heartRateHistory.removeAt(0)
             timestampHistory.removeAt(0)
         }
@@ -67,103 +68,171 @@ object StressCalculator {
      */
     private fun calculateBasicStress(heartRate: Double): Int {
         val maxHeartRate = 220 - userAge
-        val heartRateReserve = maxHeartRate - userRestingHeartRate
-        val currentIntensity = (heartRate - userRestingHeartRate) / heartRateReserve
+        val targetZone = userRestingHeartRate + (maxHeartRate - userRestingHeartRate) * 0.5
 
         val baseStress = when {
-            heartRate < userRestingHeartRate * 0.9 -> 15 // 너무 낮음
-            heartRate < userRestingHeartRate * 1.1 -> 25 // 정상
-            heartRate < userRestingHeartRate * 1.3 -> 45 // 약간 높음
-            heartRate < userRestingHeartRate * 1.5 -> 65 // 높음
-            else -> 85 // 매우 높음
+            heartRate < userRestingHeartRate * 0.85 -> 25  // 너무 낮음 (이상 상황)
+            heartRate < userRestingHeartRate * 1.1 -> 30   // 정상 안정 상태
+            heartRate < targetZone * 0.7 -> 45              // 약간 상승
+            heartRate < targetZone -> 60                    // 중간 강도
+            heartRate < targetZone * 1.3 -> 75              // 높음
+            else -> 85                                      // 매우 높음
         }
 
-        Log.d(TAG, "기본 스트레스 계산: HR=$heartRate, 기준=${userRestingHeartRate}, 스트레스=$baseStress")
+        Log.d(TAG, "기본 스트레스 계산: HR=$heartRate, 목표구간=${targetZone.toInt()}, 스트레스=$baseStress")
         return baseStress
     }
 
     /**
-     * 고급 스트레스 계산 (충분한 데이터가 있을 때)
+     * 중간 단계 스트레스 계산 (3-5개 데이터)
      */
-    private fun calculateAdvancedStress(currentHeartRate: Double): Int {
-        val hrvScore = calculateHRVSimulation()
+    private fun calculateIntermediateStress(currentHeartRate: Double): Int {
+        val basicScore = calculateBasicStress(currentHeartRate)
+        val simpleVariability = calculateSimpleVariability()
+        val simpleTrend = calculateSimpleTrend()
+
+        // 가중 평균
+        val intermediateScore = (basicScore * 0.6 + simpleVariability * 0.25 + simpleTrend * 0.15).toInt()
+
+        Log.d(TAG, "중간 스트레스 계산: 기본=$basicScore, 변동성=$simpleVariability, 트렌드=$simpleTrend, 최종=$intermediateScore")
+        return intermediateScore
+    }
+
+    /**
+     * 고급 스트레스 계산 (HRV 포함)
+     */
+    private fun calculateAdvancedStressWithHRV(currentHeartRate: Double): Int {
+        // 향상된 HRV 계산
+        val hrvResult = ImprovedHRVCalculator.calculateImprovedHRV(heartRateHistory)
+        val hrvQuality = ImprovedHRVCalculator.assessHRVQuality(heartRateHistory)
+
+        // 기존 지표들도 계산
         val trendScore = calculateHeartRateTrend()
         val variabilityScore = calculateHeartRateVariability()
         val restingDeviationScore = calculateRestingDeviation(currentHeartRate)
+        val temporalScore = calculateTemporalPatterns()
+
+        // HRV 품질에 따른 가중치 조정
+        val hrvWeight = when (hrvQuality) {
+            ImprovedHRVCalculator.HRVQuality.EXCELLENT -> 0.4
+            ImprovedHRVCalculator.HRVQuality.GOOD -> 0.35
+            ImprovedHRVCalculator.HRVQuality.FAIR -> 0.25
+            ImprovedHRVCalculator.HRVQuality.POOR -> 0.15
+        }
+
+        val otherWeight = 1.0 - hrvWeight
 
         // 가중 평균으로 최종 스트레스 점수 계산
         val finalScore = (
-                hrvScore * 0.3 +           // HRV 시뮬레이션 30%
-                        trendScore * 0.25 +        // 심박수 트렌드 25%
-                        variabilityScore * 0.25 +  // 심박수 변동성 25%
-                        restingDeviationScore * 0.2 // 안정시 심박수 편차 20%
+                hrvResult.stressScore * hrvWeight +
+                        trendScore * (otherWeight * 0.3) +
+                        variabilityScore * (otherWeight * 0.25) +
+                        restingDeviationScore * (otherWeight * 0.25) +
+                        temporalScore * (otherWeight * 0.2)
                 ).toInt()
 
-        Log.d(TAG, "고급 스트레스 계산: HRV=$hrvScore, 트렌드=$trendScore, 변동성=$variabilityScore, 편차=$restingDeviationScore, 최종=$finalScore")
+        Log.d(TAG, "고급 스트레스 계산: HRV=${hrvResult.stressScore}(${hrvQuality}), " +
+                "트렌드=$trendScore, 변동성=$variabilityScore, 편차=$restingDeviationScore, " +
+                "시간패턴=$temporalScore, 최종=$finalScore")
+
         return finalScore
     }
 
     /**
-     * HRV(심박 변동성) 시뮬레이션
-     * 실제 HRV는 R-R 간격 측정이 필요하지만, 심박수 패턴으로 추정
+     * 단순 변동성 계산 (데이터 부족 시)
      */
-    private fun calculateHRVSimulation(): Int {
+    private fun calculateSimpleVariability(): Int {
         if (heartRateHistory.size < 3) return 50
 
-        val intervals = mutableListOf<Double>()
+        val range = heartRateHistory.maxOrNull()!! - heartRateHistory.minOrNull()!!
 
-        // 연속된 심박수 간의 차이 계산 (R-R 간격 변화량 시뮬레이션)
-        for (i in 1 until heartRateHistory.size) {
-            val interval = abs(heartRateHistory[i] - heartRateHistory[i-1])
-            intervals.add(interval)
+        return when {
+            range > 20 -> 75  // 높은 변동성
+            range > 10 -> 60  // 중간 변동성
+            range > 5 -> 45   // 낮은 변동성
+            else -> 35        // 매우 낮은 변동성
         }
-
-        val avgInterval = intervals.average()
-        val variance = intervals.map { (it - avgInterval).pow(2) }.average()
-        val rmssd = sqrt(variance) // Root Mean Square of Successive Differences
-
-        // RMSSD를 스트레스 점수로 변환 (낮은 변동성 = 높은 스트레스)
-        val stressFromHRV = when {
-            rmssd > 8.0 -> 20  // 높은 변동성 = 낮은 스트레스
-            rmssd > 5.0 -> 35
-            rmssd > 3.0 -> 50
-            rmssd > 1.5 -> 70
-            else -> 90         // 낮은 변동성 = 높은 스트레스
-        }
-
-        Log.d(TAG, "HRV 시뮬레이션: RMSSD=$rmssd, 스트레스=$stressFromHRV")
-        return stressFromHRV
     }
 
     /**
-     * 심박수 트렌드 분석 (상승/하강 패턴)
+     * 단순 트렌드 계산 (데이터 부족 시)
+     */
+    private fun calculateSimpleTrend(): Int {
+        if (heartRateHistory.size < 3) return 50
+
+        val firstHalf = heartRateHistory.take(heartRateHistory.size / 2).average()
+        val secondHalf = heartRateHistory.drop(heartRateHistory.size / 2).average()
+        val trendChange = secondHalf - firstHalf
+
+        return when {
+            trendChange > 10 -> 75   // 급격한 상승
+            trendChange > 5 -> 60    // 상승
+            trendChange > -5 -> 45   // 안정
+            trendChange > -10 -> 35  // 하강 (회복)
+            else -> 25               // 급격한 하강
+        }
+    }
+
+    /**
+     * 시간적 패턴 분석 (새로운 지표)
+     */
+    private fun calculateTemporalPatterns(): Int {
+        if (timestampHistory.size < 3) return 50
+
+        // 측정 간격의 일정성 확인
+        val intervals = mutableListOf<Long>()
+        for (i in 1 until timestampHistory.size) {
+            intervals.add(timestampHistory[i] - timestampHistory[i-1])
+        }
+
+        val avgInterval = intervals.average()
+        val intervalVariability = intervals.map { abs(it - avgInterval) }.average()
+
+        // 최근 데이터의 급격한 변화 감지
+        val recentChanges = mutableListOf<Double>()
+        for (i in 1 until heartRateHistory.size) {
+            recentChanges.add(abs(heartRateHistory[i] - heartRateHistory[i-1]))
+        }
+
+        val avgChange = recentChanges.average()
+
+        val temporalStress = when {
+            avgChange > 8 && intervalVariability < 2000 -> 80  // 급변하지만 규칙적
+            avgChange > 5 -> 65                                // 중간 변화
+            avgChange > 2 -> 45                                // 작은 변화
+            else -> 30                                         // 매우 안정적
+        }
+
+        Log.d(TAG, "시간패턴 분석: 평균변화=$avgChange, 간격변동성=$intervalVariability, 점수=$temporalStress")
+        return temporalStress
+    }
+
+    /**
+     * 기존 메서드들 (기존 StressCalculator와 동일하지만 개선됨)
      */
     private fun calculateHeartRateTrend(): Int {
         if (heartRateHistory.size < 3) return 50
 
-        val recentData = heartRateHistory.takeLast(5)
+        val recentData = heartRateHistory.takeLast(7) // 더 많은 데이터 사용
         var trendScore = 0
 
-        // 연속적인 상승/하강 패턴 감지
         for (i in 1 until recentData.size) {
             val change = recentData[i] - recentData[i-1]
             when {
-                change > 5 -> trendScore += 15   // 급격한 상승
-                change > 2 -> trendScore += 8    // 완만한 상승
-                change < -5 -> trendScore += 10  // 급격한 하강 (회복)
-                change < -2 -> trendScore += 5   // 완만한 하강
-                else -> trendScore += 3          // 안정적
+                change > 8 -> trendScore += 20   // 급격한 상승 (가중치 증가)
+                change > 4 -> trendScore += 12   // 상승
+                change > 1 -> trendScore += 6    // 약간 상승
+                change > -1 -> trendScore += 3   // 안정
+                change > -4 -> trendScore += 4   // 약간 하강
+                change > -8 -> trendScore += 8   // 하강
+                else -> trendScore += 15         // 급격한 하강
             }
         }
 
-        val finalTrendScore = (trendScore * 2).coerceIn(0, 100)
-        Log.d(TAG, "트렌드 분석: 점수=$finalTrendScore")
+        val finalTrendScore = (trendScore * 1.5).toInt().coerceIn(0, 100)
         return finalTrendScore
     }
 
-    /**
-     * 심박수 변동성 분석
-     */
     private fun calculateHeartRateVariability(): Int {
         if (heartRateHistory.size < 3) return 50
 
@@ -171,36 +240,30 @@ object StressCalculator {
         val variance = heartRateHistory.map { (it - mean).pow(2) }.average()
         val standardDeviation = sqrt(variance)
 
-        // 변동성이 클수록 스트레스가 높다고 가정
         val variabilityStress = when {
-            standardDeviation > 15 -> 80  // 매우 높은 변동성
-            standardDeviation > 10 -> 65  // 높은 변동성
-            standardDeviation > 7 -> 50   // 보통 변동성
-            standardDeviation > 4 -> 35   // 낮은 변동성
+            standardDeviation > 18 -> 85  // 매우 높은 변동성
+            standardDeviation > 12 -> 70  // 높은 변동성
+            standardDeviation > 8 -> 55   // 보통 변동성
+            standardDeviation > 4 -> 40   // 낮은 변동성
             else -> 25                    // 매우 낮은 변동성
         }
 
-        Log.d(TAG, "변동성 분석: SD=$standardDeviation, 스트레스=$variabilityStress")
         return variabilityStress
     }
 
-    /**
-     * 안정시 심박수와의 편차 계산
-     */
     private fun calculateRestingDeviation(currentHeartRate: Double): Int {
         val deviation = abs(currentHeartRate - userRestingHeartRate)
         val deviationPercentage = (deviation / userRestingHeartRate) * 100
 
         val deviationStress = when {
-            deviationPercentage > 50 -> 90  // 50% 이상 편차
-            deviationPercentage > 35 -> 75  // 35% 이상 편차
-            deviationPercentage > 25 -> 60  // 25% 이상 편차
-            deviationPercentage > 15 -> 45  // 15% 이상 편차
-            deviationPercentage > 10 -> 30  // 10% 이상 편차
+            deviationPercentage > 60 -> 95  // 60% 이상 편차
+            deviationPercentage > 45 -> 80  // 45% 이상 편차
+            deviationPercentage > 30 -> 65  // 30% 이상 편차
+            deviationPercentage > 20 -> 50  // 20% 이상 편차
+            deviationPercentage > 10 -> 35  // 10% 이상 편차
             else -> 20                      // 10% 미만 편차
         }
 
-        Log.d(TAG, "편차 분석: 편차=${deviation.toInt()}BPM(${deviationPercentage.toInt()}%), 스트레스=$deviationStress")
         return deviationStress
     }
 
@@ -246,5 +309,31 @@ object StressCalculator {
         heartRateHistory.clear()
         timestampHistory.clear()
         Log.d(TAG, "히스토리 초기화됨")
+    }
+
+    /**
+     * 상세 진단 정보 가져오기
+     */
+    fun getDetailedDiagnosis(): String {
+        if (heartRateHistory.size < 3) {
+            return "데이터가 부족합니다. 더 많은 측정이 필요합니다."
+        }
+
+        val currentHR = heartRateHistory.lastOrNull() ?: 0.0
+        val avgHR = heartRateHistory.average()
+        val hrvResult = ImprovedHRVCalculator.calculateImprovedHRV(heartRateHistory)
+        val quality = ImprovedHRVCalculator.assessHRVQuality(heartRateHistory)
+
+        return buildString {
+            appendLine("=== 상세 스트레스 분석 ===")
+            appendLine("현재 심박수: ${currentHR.toInt()} BPM")
+            appendLine("평균 심박수: ${avgHR.toInt()} BPM")
+            appendLine("RMSSD: ${hrvResult.rmssd.toInt()}ms")
+            appendLine("SDNN: ${hrvResult.sdnn.toInt()}ms")
+            appendLine("pNN50: ${hrvResult.pnn50.toInt()}%")
+            appendLine("데이터 품질: $quality")
+            appendLine("측정 기간: ${heartRateHistory.size * 10}초")
+            appendLine("========================")
+        }
     }
 }

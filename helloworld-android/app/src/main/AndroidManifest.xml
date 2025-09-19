@@ -5,6 +5,10 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- Wearable 관련 권한 추가 -->
+    <uses-permission android:name="com.google.android.permission.PROVIDE_BACKGROUND" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
     <!--HealthConnect의 심박수 데이터에 접근할 수 있는 권한-->
     <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
     <uses-permission android:name="android.permission.health.WRITE_HEART_RATE" />
@@ -41,6 +45,12 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.HelloWorld"
         tools:targetApi="31">
+
+        <!-- Wearable 앱 연결 메타데이터 추가 -->
+        <meta-data
+            android:name="com.google.android.wearable.beta.app"
+            android:resource="@xml/wearable_app_desc" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

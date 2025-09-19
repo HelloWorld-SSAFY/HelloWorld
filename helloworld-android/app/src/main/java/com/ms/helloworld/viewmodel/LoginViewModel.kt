@@ -8,6 +8,9 @@ import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialException
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.android.gms.wearable.PutDataMapRequest
+import com.google.android.gms.wearable.PutDataRequest
+import com.google.android.gms.wearable.Wearable
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 // Kakao 관련 import 임시 주석 처리
@@ -25,6 +28,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
 data class LoginState(
@@ -46,6 +50,10 @@ class LoginViewModel @Inject constructor(
 
     companion object {
         private const val TAG = "LoginViewModel"
+        private const val TOKEN_PATH = "/jwt_token"
+        private const val ACCESS_TOKEN_KEY = "access_token"
+        private const val REFRESH_TOKEN_KEY = "refresh_token"
+        private const val TIMESTAMP_KEY = "timestamp"
     }
 
     fun signInWithGoogle(context: Context) {
@@ -104,6 +112,10 @@ class LoginViewModel @Inject constructor(
                         refreshToken = loginResponse.refreshToken
                     )
 
+                    // WearOS로 토큰 전송
+                    sendTokenToWearOS(context, loginResponse.accessToken, loginResponse.refreshToken)
+
+
                     _state.value = _state.value.copy(
                         isLoading = false,
                         isLoggedIn = true,
@@ -146,6 +158,94 @@ class LoginViewModel @Inject constructor(
                     errorMessage = "로그인 중 오류가 발생했습니다: ${e.message}"
                 )
             }
+        }
+    }
+
+    // 로그아웃 기능 추가
+    fun signOut(context: Context) {
+        viewModelScope.launch {
+            try {
+                Log.d(TAG, "Starting logout process...")
+
+                // 로컬 토큰 삭제
+                tokenManager.clearTokens()
+
+                // WearOS에서 토큰 제거
+                removeTokenFromWearOS(context)
+
+                // 상태 초기화
+                _state.value = LoginState()
+
+                Log.d(TAG, "Logout completed successfully")
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Logout error", e)
+                _state.value = _state.value.copy(
+                    errorMessage = "로그아웃 중 오류가 발생했습니다: ${e.message}"
+                )
+            }
+        }
+    }
+
+    private suspend fun sendTokenToWearOS(context: Context, accessToken: String, refreshToken: String) {
+        try {
+            Log.d(TAG, "Attempting to send tokens to WearOS...")
+            val dataClient = Wearable.getDataClient(context)
+            val nodeClient = Wearable.getNodeClient(context)
+
+            // 연결된 노드 확인
+            val nodes = nodeClient.connectedNodes.await()
+            Log.d(TAG, "Connected nodes: ${nodes.size}")
+            for (node in nodes) {
+                Log.d(TAG, "Node: ${node.displayName} - ${node.id}")
+            }
+
+            if (nodes.isEmpty()) {
+                Log.w(TAG, "No connected WearOS devices found")
+                return
+            }
+
+            val putDataMapRequest = PutDataMapRequest.create(TOKEN_PATH).apply {
+                dataMap.putString(ACCESS_TOKEN_KEY, accessToken)
+                dataMap.putString(REFRESH_TOKEN_KEY, refreshToken)
+                dataMap.putLong(TIMESTAMP_KEY, System.currentTimeMillis()) // 동기화를 위한 타임스탬프
+            }
+
+            val putDataRequest: PutDataRequest = putDataMapRequest.asPutDataRequest()
+            putDataRequest.setUrgent() // 즉시 전송
+
+            val result = dataClient.putDataItem(putDataRequest).await()
+            Log.d(TAG, "JWT tokens sent to WearOS successfully - URI: ${result.uri}")
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to send tokens to WearOS", e)
+        }
+    }
+
+    private suspend fun removeTokenFromWearOS(context: Context) {
+        try {
+            Log.d(TAG, "Removing tokens from WearOS...")
+            val dataClient = Wearable.getDataClient(context)
+            val nodeClient = Wearable.getNodeClient(context)
+
+            // 연결된 노드 확인
+            val nodes = nodeClient.connectedNodes.await()
+            Log.d(TAG, "Connected nodes for token removal: ${nodes.size}")
+
+            val putDataMapRequest = PutDataMapRequest.create(TOKEN_PATH).apply {
+                dataMap.putString(ACCESS_TOKEN_KEY, "")
+                dataMap.putString(REFRESH_TOKEN_KEY, "")
+                dataMap.putLong(TIMESTAMP_KEY, System.currentTimeMillis())
+            }
+
+            val putDataRequest: PutDataRequest = putDataMapRequest.asPutDataRequest()
+            putDataRequest.setUrgent()
+
+            val result = dataClient.putDataItem(putDataRequest).await()
+            Log.d(TAG, "Tokens removed from WearOS successfully - URI: ${result.uri}")
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to remove tokens from WearOS", e)
         }
     }
 

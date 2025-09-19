@@ -1,7 +1,7 @@
 package com.ms.wearos.di
 
 import com.ms.wearos.network.AuthInterceptor
-import com.ms.wearos.network.TokenAuthenticator
+import com.ms.wearos.network.api.WearApiService
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -33,13 +33,11 @@ object NetworkModule {
     @Singleton
     fun provideOkHttpClient(
         authInterceptor: AuthInterceptor,
-        tokenAuthenticator: TokenAuthenticator,
         loggingInterceptor: HttpLoggingInterceptor
     ): OkHttpClient {
         return OkHttpClient.Builder()
             .addInterceptor(loggingInterceptor)    // HTTP 로그
             .addInterceptor(authInterceptor)       // 토큰 자동 추가
-            .authenticator(tokenAuthenticator)     // 401시 토큰 갱신
             .connectTimeout(30, TimeUnit.SECONDS)  // 연결 타임아웃
             .readTimeout(30, TimeUnit.SECONDS)     // 읽기 타임아웃
             .writeTimeout(30, TimeUnit.SECONDS)    // 쓰기 타임아웃
@@ -57,7 +55,10 @@ object NetworkModule {
             .build()
     }
 
-    /**
-     * API
-     * **/
+    @Provides
+    @Singleton
+    fun provideWearApi(retrofit: Retrofit): WearApiService {
+        return retrofit.create(WearApiService::class.java)
+    }
+
 }
