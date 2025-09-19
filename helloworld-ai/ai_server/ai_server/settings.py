@@ -123,32 +123,25 @@ REST_FRAMEWORK = {
 # ---- drf-spectacular (Swagger/OpenAPI) --------------------------------------
 # settings.py
 SPECTACULAR_SETTINGS = {
-    "TITLE": "임산부 헬스케어 AI API",
+    "TITLE": "임산부 헬스케어 API",
     "VERSION": "v0.2.1",
+    # 전역 인증 비활성화 (상단 Authorize 버튼 제거)
+    "SECURITY": [],
 
-    # ① 보안 스킴 정의: X-App-Token 헤더
-    "SECURITY_SCHEMES": {
-        "AppToken": {
-            "type": "apiKey",
-            "in": "header",
-            "name": "X-App-Token",
-        }
-    },
+    # 만약 예전에 이렇게 선언해두었다면 제거:
+    # "COMPONENTS": {
+    #     "securitySchemes": {
+    #         "apiKeyAuth": {
+    #             "type": "apiKey",
+    #             "in": "header",
+    #             "name": "X-App-Token",
+    #         }
+    #     }
+    # },
 
-    # ② 전역 보안 요구사항: 모든 엔드포인트에 AppToken 적용(healthz 등은 개별로 끔)
-    "SECURITY": [{"AppToken": []}],
-
-    "SERVERS": [
-        {"url": "/ai", "description": "via gateway"},        # 게이트웨이로 노출될 때
-        {"url": "/",  "description": "in-cluster direct"},   # 클러스터 내부/서비스 직접 호출
-    ],
-
-
-    # (옵션) Swagger UI 보기 설정
-    "SORT_OPERATION_PARAMETERS": False,
+    # 선택: Swagger UI 설정은 그대로 두거나 필요 시 조정
     "SWAGGER_UI_SETTINGS": {
-        "deepLinking": True,
-        "displayRequestDuration": True,
-        "defaultModelExpandDepth": 2,
+        "persistAuthorization": False,  # 전역 인증 안 쓰므로 의미 없음
     },
 }
+

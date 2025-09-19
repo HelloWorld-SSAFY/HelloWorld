@@ -1,22 +1,19 @@
-# api/views.py
 import os
 import json
 import uuid
 from math import radians, cos, sin, asin, sqrt
 from datetime import datetime, timezone, timedelta, date
+from typing import List, Dict, Any, Optional
 
-from django.http import JsonResponse, HttpRequest
-from django.utils.decorators import method_decorator
-from django.views.decorators.csrf import csrf_exempt
-
-# DRF / Spectacular
+from django.http import HttpRequest
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import serializers
 from drf_spectacular.utils import (
     extend_schema,
-    OpenApiTypes,
     inline_serializer,
+    OpenApiParameter,
+    OpenApiTypes,
 )
 
 # 서비스 계층
@@ -25,7 +22,7 @@ from services.orm_stats_provider import OrmStatsProvider
 from services.policy_service import categories_for_trigger  # DB 우선 + 폴백
 from services.weather_gateway import get_weather_gateway    # env 모드에 따라 remote/fallback
 
-# --- 저장용 모델 (있을 때만 import; 없는 경우 주석 처리) -----------------------
+# --- 저장용 모델 ---------------------------------------------------------------
 from api.models import (
     Content,
     RecommendationSession,
@@ -33,17 +30,19 @@ from api.models import (
     ItemRec,
     Feedback as FeedbackModel,
     Outcome as OutcomeModel,
+    PlaceInside,
+    PlaceOutside,
+    PlaceExposure,
 )
+
+APP_TOKEN = os.getenv("APP_TOKEN", "").strip()
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 전역 싱글턴 (상태 유지)
 # ──────────────────────────────────────────────────────────────────────────────
 _config = AnomalyConfig()
 _provider = OrmStatsProvider()
-# FIX: AnomalyDetector 시그니처에 맞게 provider로 전달
 _detector = AnomalyDetector(config=_config, provider=_provider)
-
-APP_TOKEN = os.getenv("APP_TOKEN", "").strip()
 
 def _assert_app_token(request: HttpRequest):
     """X-App-Token 검사 (Healthz 제외 모든 엔드포인트에서 사용)."""
@@ -52,6 +51,14 @@ def _assert_app_token(request: HttpRequest):
         return Response({"ok": False, "error": "invalid app token"}, status=401)
     return None
 
+# ── 스웨거: 모든 API에 노출할 공통 헤더 파라미터 (Healthz 제외)
+APP_TOKEN_PARAM = OpenApiParameter(
+    name="X-App-Token",
+    type=OpenApiTypes.STR,
+    location=OpenApiParameter.HEADER,
+    required=True,
+    description="App token issued by server. Put the same value as server APP_TOKEN.",
+)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 공통 Serializer (문서/검증용)
@@ -63,17 +70,21 @@ class TelemetryIn(serializers.Serializer):
 
 class TelemetryOut(serializers.Serializer):
     ok = serializers.BooleanField()
-    session_id = serializers.CharField(required=False)
-    level = serializers.ChoiceField(choices=["normal","restrict","emergency"])
-    trigger = serializers.CharField(required=False)
-    categories = serializers.ListField(child=serializers.CharField(), required=False)
-    message = serializers.CharField(required=False)
+    anomaly = serializers.BooleanField()
+    risk_level = serializers.ChoiceField(choices=["low","medium","high","critical"])
+    mode = serializers.ChoiceField(choices=["normal","restrict","emergency"])
+    reasons = serializers.ListField(child=serializers.CharField(), required=False)
+    recommendation = serializers.DictField(required=False)
+    action = serializers.DictField(required=False)
+    safe_templates = serializers.ListField(child=serializers.DictField(), required=False)
 
 class FeedbackIn(serializers.Serializer):
+    user_ref = serializers.CharField()
     session_id = serializers.CharField()
-    external_id = serializers.CharField()  # e.g. "sp:trk:xxx" or "yt:vid:xxx"
-    action = serializers.ChoiceField(choices=["CLICK","COMPLETE","EFFECT"])
-    value = serializers.FloatField(required=False)
+    type = serializers.ChoiceField(choices=["ACCEPT","COMPLETE","EFFECT"])
+    external_id = serializers.CharField(required=False)  # 모델에 없으므로 저장은 안 함
+    dwell_ms = serializers.IntegerField(required=False)
+    watched_pct = serializers.FloatField(required=False)
 
 class FeedbackOut(serializers.Serializer):
     ok = serializers.BooleanField()
@@ -81,28 +92,35 @@ class FeedbackOut(serializers.Serializer):
 class StepsCheckIn(serializers.Serializer):
     user_ref = serializers.CharField()
     ts = serializers.DateTimeField()
-    steps_cum = serializers.IntegerField(min_value=0)
+    cum_steps = serializers.IntegerField(min_value=0)  # 스펙: "cum_steps"
 
 class StepsCheckOut(serializers.Serializer):
     ok = serializers.BooleanField()
-    session_id = serializers.CharField(required=False)
-    category = serializers.CharField(required=False)
-    items = serializers.ListField(child=serializers.DictField(), required=False)
+    anomaly = serializers.BooleanField(required=False)
+    mode = serializers.ChoiceField(choices=["normal","restrict"], required=False)
+    trigger = serializers.CharField(required=False)
+    reasons = serializers.ListField(child=serializers.CharField(), required=False)
+    recommendation = serializers.DictField(required=False)
 
 class PlacesIn(serializers.Serializer):
     user_ref = serializers.CharField()
+    session_id = serializers.CharField()
+    category = serializers.CharField()
     lat = serializers.FloatField()
     lng = serializers.FloatField()
+    max_distance_km = serializers.FloatField(required=False)
+    limit = serializers.IntegerField(required=False)
 
 class PlacesOut(serializers.Serializer):
     ok = serializers.BooleanField()
     session_id = serializers.CharField()
     category = serializers.CharField()
     items = serializers.ListField(child=serializers.DictField())
+    fallback_used = serializers.BooleanField()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 헬스 체크 (토큰 요구 X)  — Swagger 상단 Authorize에 안 걸리도록 auth=[]
+# 헬스 체크 (토큰 요구 X)
 # ──────────────────────────────────────────────────────────────────────────────
 class HealthzView(APIView):
     @extend_schema(
@@ -116,10 +134,35 @@ class HealthzView(APIView):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# 유틸: 카테고리 직렬화 (스펙: category/rank/(reason))
+# ──────────────────────────────────────────────────────────────────────────────
+def _serialize_categories(cats: List[Dict[str, Any]], reason: Optional[str] = None) -> List[Dict[str, Any]]:
+    cats_sorted = sorted(cats, key=lambda x: x.get("priority", 999))
+    out = []
+    for i, c in enumerate(cats_sorted, 1):
+        item = {"category": c["code"], "rank": i}
+        if reason:
+            item["reason"] = reason
+        out.append(item)
+    return out
+
+def _reason_from_trigger(trigger: Optional[str]) -> str:
+    m = {
+        "stress_up": "stress high",
+        "hr_high": "HR high",
+        "hr_low": "HR low",
+        "steps_low": "steps low vs avg",
+    }
+    t = (trigger or "").lower()
+    return m.get(t, t or "trigger")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # 텔레메트리 업로드 → 즉시 판단
 # ──────────────────────────────────────────────────────────────────────────────
 class TelemetryView(APIView):
     @extend_schema(
+        parameters=[APP_TOKEN_PARAM],
         request=TelemetryIn,
         responses={200: TelemetryOut},
         tags=["telemetry"],
@@ -127,7 +170,8 @@ class TelemetryView(APIView):
     )
     def post(self, request: HttpRequest):
         bad = _assert_app_token(request)
-        if bad: return bad
+        if bad:
+            return bad
 
         ser = TelemetryIn(data=request.data)
         ser.is_valid(raise_exception=True)
@@ -138,32 +182,51 @@ class TelemetryView(APIView):
             ts=payload["ts"],
             metrics=payload["metrics"],
         )
-        # result 예시: {"level":"normal"|"restrict"|"emergency", "trigger": "stress_up"|"hr_high"|..., "session_id": "..."}
-        out = {"ok": True, "level": result["level"]}
+        level = result.get("level", "normal")
+        trigger = result.get("trigger")
+        reasons = result.get("reasons", [])
 
-        if result["level"] == "restrict":
-            # 트리거에 따른 카테고리(정책 DB → 폴백)
-            cats = categories_for_trigger(result.get("trigger"))
-            out.update({
-                "session_id": result.get("session_id"),
-                "trigger": result.get("trigger"),
-                "categories": cats,
+        anomaly = level != "normal"
+        if level == "emergency":
+            risk_level = "critical"
+        elif level == "restrict":
+            risk_level = "high"
+        else:
+            risk_level = "low"
+
+        resp: Dict[str, Any] = {
+            "ok": True,
+            "anomaly": anomaly,
+            "risk_level": risk_level,
+            "mode": "emergency" if level == "emergency" else ("restrict" if level == "restrict" else "normal"),
+        }
+
+        if level == "restrict":
+            cats = categories_for_trigger(trigger)
+            resp.update({
+                "reasons": reasons,
+                "recommendation": {
+                    "session_id": result.get("session_id"),
+                    "categories": _serialize_categories(cats, reason=_reason_from_trigger(trigger)),
+                },
             })
-        elif result["level"] == "emergency":
-            out.update({
-                "session_id": result.get("session_id"),
-                "trigger": result.get("trigger"),
-                "message": "Emergency condition detected",
+        elif level == "emergency":
+            action = result.get("action") or {"type": "EMERGENCY_CONTACT", "cooldown_min": 60}
+            resp.update({
+                "reasons": reasons or ["emergency condition"],
+                "action": action,
+                "safe_templates": result.get("safe_templates", []),
             })
 
-        return Response(out)
+        return Response(resp)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 피드백 기록 (CLICK/COMPLETE/EFFECT)
+# 피드백 기록 (ACCEPT/COMPLETE/EFFECT)
 # ──────────────────────────────────────────────────────────────────────────────
 class FeedbackView(APIView):
     @extend_schema(
+        parameters=[APP_TOKEN_PARAM],
         request=FeedbackIn,
         responses={200: FeedbackOut},
         tags=["feedback"],
@@ -171,33 +234,51 @@ class FeedbackView(APIView):
     )
     def post(self, request: HttpRequest):
         bad = _assert_app_token(request)
-        if bad: return bad
+        if bad:
+            return bad
 
         ser = FeedbackIn(data=request.data)
         ser.is_valid(raise_exception=True)
         d = ser.validated_data
 
-        # 저장 규칙: EFFECT는 Outcome에도 기록
-        fb = FeedbackModel.objects.create(
-            session_id=d["session_id"],
-            external_id=d["external_id"],
-            action=d["action"],
-            value=d.get("value"),
+        # 세션 FK 조회
+        try:
+            sess_uuid = uuid.UUID(d["session_id"])
+        except Exception:
+            return Response({"ok": False, "error": "invalid session_id"}, status=400)
+
+        session = RecommendationSession.objects.filter(id=sess_uuid).first()
+        if session is None:
+            return Response({"ok": False, "error": "session not found"}, status=404)
+
+        # value는 dwell_ms or watched_pct 중 하나를 저장(있으면)
+        value = d.get("dwell_ms") if d.get("dwell_ms") is not None else d.get("watched_pct")
+
+        FeedbackModel.objects.create(
+            user_ref=d["user_ref"],
+            session=session,
+            type=d["type"],
+            value=value,
+            dwell_ms=d.get("dwell_ms"),
+            watched_pct=d.get("watched_pct"),
         )
-        if d["action"] == "EFFECT":
+
+        if d["type"] == "EFFECT" and value is not None:
             OutcomeModel.objects.create(
-                session_id=d["session_id"],
-                external_id=d["external_id"],
-                effect_value=d.get("value"),
+                session=session,
+                outcome_type="self_report",
+                effect=float(value),
             )
+
         return Response({"ok": True})
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 걸음수 저활동 판단 → steps_low 세션 발급 (v0.2.1 규격)
+# 걸음수 저활동 판단 → steps_low 세션 발급
 # ──────────────────────────────────────────────────────────────────────────────
 class StepsCheckView(APIView):
     @extend_schema(
+        parameters=[APP_TOKEN_PARAM],
         request=StepsCheckIn,
         responses={200: StepsCheckOut},
         tags=["steps"],
@@ -205,26 +286,43 @@ class StepsCheckView(APIView):
     )
     def post(self, request: HttpRequest):
         bad = _assert_app_token(request)
-        if bad: return bad
+        if bad:
+            return bad
 
         ser = StepsCheckIn(data=request.data)
         ser.is_valid(raise_exception=True)
         d = ser.validated_data
 
-        # 실제 기준은 서버 정책/DB 사용. 여기선 최소 동작(예: 2,000 미만이면 저활동)
-        steps = d["steps_cum"]
-        if steps < 2000:
-            sid = str(uuid.uuid4())
-            RecommendationSession.objects.create(
-                session_id=sid, user_ref=d["user_ref"], category="steps_low"
-            )
-            return Response({
-                "ok": True,
+        cum_steps = d["cum_steps"]
+        # NOTE: 임시 로직(데모). 실제는 기준선/버킷 기반 Z-score 판단으로 교체.
+        if cum_steps >= 2000:
+            return Response({"ok": True, "anomaly": False, "mode": "normal"})
+
+        # 저활동 → restrict 세션 발급
+        cats = categories_for_trigger("steps_low")
+        ctx = {
+            "categories": _serialize_categories(cats, reason=_reason_from_trigger("steps_low")),
+        }
+        session = RecommendationSession.objects.create(
+            user_ref=d["user_ref"],
+            trigger="steps_low",
+            mode="restrict",
+            context=ctx,
+        )
+        sid = str(session.id)
+
+        resp = {
+            "ok": True,
+            "anomaly": True,
+            "mode": "restrict",
+            "trigger": "steps_low",
+            "reasons": [f"cum_steps<{2000} or z<=-1.0"],
+            "recommendation": {
                 "session_id": sid,
-                "category": "steps_low",
-                "items": [{"type": "WALK"}, {"type": "OUTING"}],
-            })
-        return Response({"ok": True})  # No-op
+                "categories": ctx["categories"],
+            },
+        }
+        return Response(resp)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -238,8 +336,10 @@ def _haversine_km(lat1, lon1, lat2, lon2):
     c = 2*asin(min(1, sqrt(a)))
     return r * c
 
+
 class PlacesView(APIView):
     @extend_schema(
+        parameters=[APP_TOKEN_PARAM],
         request=PlacesIn,
         responses={200: PlacesOut},
         tags=["places"],
@@ -247,55 +347,126 @@ class PlacesView(APIView):
     )
     def post(self, request: HttpRequest):
         bad = _assert_app_token(request)
-        if bad: return bad
+        if bad:
+            return bad
 
         ser = PlacesIn(data=request.data)
         ser.is_valid(raise_exception=True)
         d = ser.validated_data
 
-        gw = get_weather_gateway()
-        weather_kind, gate = gw.gate(lat=d["lat"], lng=d["lng"])  # ("clear", "OUTDOOR") 등
+        max_km = float(d.get("max_distance_km") or 3.0)
+        limit = int(d.get("limit") or 3)
+        max_km = max(0.5, min(10.0, max_km))
+        limit = max(1, min(5, limit))
 
-        # 샘플: Content 테이블에서 place 후보 로드(실제 스키마에 맞게 조정)
-        places = list(Content.objects.filter(kind="PLACE").values(
-            "id", "title", "lat", "lng", "address", "place_category", "weather_gate"
-        ))
+        # 1) 날씨 게이트 (함수/인스턴스 모두 대응, 실패 시 폴백)
+        weather_fallback = False
+        try:
+            gw = get_weather_gateway()
+            if callable(gw):
+                weather_kind, gate = gw(lat=d["lat"], lng=d["lng"])
+            else:
+                weather_kind, gate = gw.gate(lat=d["lat"], lng=d["lng"])
+        except Exception:
+            weather_kind, gate = "unknown", None
+            weather_fallback = True
 
-        # 게이트 필터 + 거리 계산/정렬
-        items = []
-        for p in places:
-            if gate and p.get("weather_gate") and p["weather_gate"] != gate:
+        # 2) 게이트별 테이블 선택 (OUTDOOR → Outside / INDOOR → Inside / else 둘 다)
+        if gate == "OUTDOOR":
+            qs_out = PlaceOutside.objects.filter(is_active=True)
+            qs_in = PlaceInside.objects.none()
+        elif gate == "INDOOR":
+            qs_out = PlaceOutside.objects.none()
+            qs_in = PlaceInside.objects.filter(is_active=True)
+        else:
+            qs_out = PlaceOutside.objects.filter(is_active=True)
+            qs_in = PlaceInside.objects.filter(is_active=True)
+
+        # 3) 필요한 필드만 조회
+        outs = list(qs_out.values("id", "name", "lat", "lon", "address"))
+        ins  = list(qs_in.values("id", "name", "lat", "lon", "address"))
+
+        # 4) 거리계산 + 합치기 + 정렬
+        items: List[Dict[str, Any]] = []
+
+        for p in outs:
+            if p.get("lat") is None or p.get("lon") is None:
                 continue
-            dist = _haversine_km(d["lat"], d["lng"], p["lat"], p["lng"])
+            dist = _haversine_km(d["lat"], d["lng"], float(p["lat"]), float(p["lon"]))
+            if dist > max_km:
+                continue
             items.append({
+                "place_type": "outside",
                 "content_id": p["id"],
-                "title": p["title"],
-                "lat": p["lat"],
-                "lng": p["lng"],
+                "title": p.get("name") or f"Outside {p['id']}",
+                "lat": float(p["lat"]),
+                "lng": float(p["lon"]),
                 "distance_km": round(dist, 2),
-                "rank": 0,  # 아래에서 채움
+                "rank": 0,
                 "reason": "distance",
-                "weather_gate": p.get("weather_gate") or "UNKNOWN",
-                "address": p.get("address") or "",
-                "place_category": p.get("place_category") or "",
+                "weather_gate": "OUTDOOR",
+                "address": p.get("address", ""),
             })
+
+        for p in ins:
+            if p.get("lat") is None or p.get("lon") is None:
+                continue
+            dist = _haversine_km(d["lat"], d["lng"], float(p["lat"]), float(p["lon"]))
+            if dist > max_km:
+                continue
+            items.append({
+                "place_type": "inside",
+                "content_id": p["id"],
+                "title": p.get("name") or f"Inside {p['id']}",
+                "lat": float(p["lat"]),
+                "lng": float(p["lon"]),
+                "distance_km": round(dist, 2),
+                "rank": 0,
+                "reason": "distance",
+                "weather_gate": "INDOOR",
+                "address": p.get("address", ""),
+            })
+
         items.sort(key=lambda x: x["distance_km"])
-        for i, it in enumerate(items, start=1):
+        for i, it in enumerate(items[:], start=1):
             it["rank"] = i
 
-        sid = str(uuid.uuid4())
-        RecommendationSession.objects.create(
-            session_id=sid, user_ref=d["user_ref"], category="OUTING"
-        )
-        # 노출 기록(옵션)
-        ExposureCandidate.objects.bulk_create([
-            ExposureCandidate(session_id=sid, content_id=it["content_id"], rank=it["rank"])
-            for it in items[:20]
-        ])
+        # 5) 세션 확정: 요청 session_id가 있으면 그걸 쓰고, 없으면 새로 생성
+        sid = d.get("session_id")
+        session = None
+        if sid:
+            try:
+                sess_uuid = uuid.UUID(sid)
+                session = RecommendationSession.objects.filter(id=sess_uuid).first()
+            except Exception:
+                session = None
 
-        return Response({
+        if session is None:
+            session = RecommendationSession.objects.create(
+                user_ref=d["user_ref"],
+                trigger=d.get("category", "OUTING"),
+                mode="restrict",
+                context={
+                    "weather_kind": weather_kind,
+                    "gate": gate,
+                    "max_distance_km": max_km,
+                    "limit": limit,
+                },
+            )
+            sid = str(session.id)
+
+        # 6) 노출 기록 (PlaceExposure)
+        if items:
+            PlaceExposure.objects.bulk_create([
+                PlaceExposure(user_ref=d["user_ref"], place_type=it["place_type"], place_id=it["content_id"])
+                for it in items[:limit]
+            ], ignore_conflicts=True)
+
+        resp = {
             "ok": True,
             "session_id": sid,
-            "category": "OUTING",
-            "items": items[:20],
-        })
+            "category": d.get("category", "OUTING"),
+            "items": items[:limit],
+            "fallback_used": weather_fallback or (not items),
+        }
+        return Response(resp)

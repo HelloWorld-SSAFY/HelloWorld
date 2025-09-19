@@ -1,4 +1,3 @@
-# services/policy_service.py
 from __future__ import annotations
 from typing import List, Dict, Any, Optional
 from datetime import datetime
@@ -30,7 +29,7 @@ _DEFAULTS: dict[str, list[dict[str, Any]]] = {
     "steps_low": [
         {"code": "OUTING",     "title": "나들이",   "priority": 1, "requires_location": True},
         {"code": "WALKING",    "title": "걷기",     "priority": 2, "requires_location": False},
-        {"code": "STRETCHING", "title": "스트레칭", "priority": 3, "requires_location": False},
+        # {"code": "STRETCHING", "title": "스트레칭", "priority": 3, "requires_location": False},
     ],
 }
 
@@ -103,11 +102,12 @@ def _from_db(trigger: str) -> List[Dict[str, Any]]:
         "tod_bucket": getattr(r, "tod_bucket", None),
     } for r in qs]
 
-def categories_for_trigger(trigger: str, gestational_week: Optional[int]) -> List[Dict[str, Any]]:
+def categories_for_trigger(trigger: str, gestational_week: Optional[int] = None) -> List[Dict[str, Any]]:
     """
     1) DB 우선 조회
     2) 없으면 기본값 폴백(_DEFAULTS)
     3) 임신주차/시간대 필터 적용
+       - gestational_week는 기본값 None (API에서 안 넘길 때 하위호환)
     """
     trig = _normalize_trigger(trigger)
     rows = _from_db(trig)
