@@ -14,10 +14,10 @@ from django.views import View  # (남겨둠: 내부 재사용용)
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
-from rest_framework import serializers  # ← 추가
+from rest_framework import serializers
 from drf_spectacular.utils import (
     extend_schema, OpenApiResponse, OpenApiTypes, OpenApiExample,
-    inline_serializer, OpenApiParameter,                      # ← 추가
+    inline_serializer,
 )
 
 from services.anomaly import AnomalyDetector, AnomalyConfig, KST
@@ -55,15 +55,6 @@ def _auth_ok(request: HttpRequest) -> bool:
     if not APP_TOKEN:
         return True
     return request.headers.get("X-App-Token", "").strip() == APP_TOKEN
-
-# ── Swagger 공통 헤더 파라미터 ───────────────────────────────────────────────
-APP_TOKEN_HEADER = OpenApiParameter(
-    name="X-App-Token",
-    type=OpenApiTypes.STR,
-    location=OpenApiParameter.HEADER,
-    required=False,
-    description="앱 인증 토큰(환경에 따라 생략 가능)"
-)
 
 # ── 유틸 ─────────────────────────────────────────────────────────────────────
 def _json(request: HttpRequest):
@@ -180,7 +171,7 @@ def _infer_trigger_code(reasons, metrics):
     tags=["health"],
     summary="헬스체크",
     description="Liveness/Readiness probe.",
-    parameters=[APP_TOKEN_HEADER],
+    auth=[],  # 전역 인증 표시에서 제외 (공개)
     responses={200: OpenApiResponse(response=OpenApiTypes.OBJECT, description="OK")},
 )
 @api_view(["GET"])
@@ -209,7 +200,6 @@ def telemetry(request: HttpRequest):
             ts_utc = _iso_to_utc(ts_str)
         else:
             ts_utc = datetime.now(timezone.utc)
-            ts_str = ts_utc.isoformat()
 
         metrics = body.get("metrics") or {}
         if "hr" in body and body["hr"] is not None:
@@ -373,7 +363,6 @@ def steps_check(request: HttpRequest):
         "- 중복 방지: 최근 14일 동일 후보 노출 제외(PlaceExposure 있을 때)\n"
         "- 테스트용 `weather_kind`로 날씨 강제 가능"
     ),
-    parameters=[APP_TOKEN_HEADER],
     request=inline_serializer(
         name="PlacesReq",
         fields={
@@ -435,6 +424,64 @@ def steps_check(request: HttpRequest):
         404: OpenApiResponse(description="INVALID_SESSION"),
         409: OpenApiResponse(description="SESSION_CLOSED"),
     },
+    examples=[
+        OpenApiExample(
+            "request",
+            value={
+                "user_ref": "u123",
+                "session_id": "9c5a2c77-aaaa-bbbb-cccc-1234567890ab",
+                "category": "OUTING",
+                "lat": 37.5665,
+                "lng": 126.9780,
+                "limit": 3,
+                "max_distance_km": 3.0
+            },
+            request_only=True,
+        ),
+        OpenApiExample(
+            "response_ok",
+            value={
+                "ok": True,
+                "session_id": "9c5a2c77-aaaa-bbbb-cccc-1234567890ab",
+                "category": "OUTING",
+                "items": [
+                    {
+                        "content_id": 12,
+                        "title": "양재천 산책로",
+                        "lat": 37.470,
+                        "lng": 127.036,
+                        "distance_km": 0.88,
+                        "rank": 1,
+                        "reason": "distance",
+                        "weather_gate": "OK",
+                        "address": "서울 서초구 양재천로",
+                        "address_road": "서울 서초구 양재천로",
+                        "address_jibun": None,
+                        "place_category": "park"
+                    }
+                ],
+                "fallback_used": False,
+                "weather": {"kind": "clear", "outdoor_ok": True}
+            },
+            response_only=True,
+        ),
+        OpenApiExample(
+            "response_fallback",
+            value={
+                "ok": True,
+                "session_id": "9c5a2c77-aaaa-bbbb-cccc-1234567890ab",
+                "category": "OUTING",
+                "items": [],
+                "fallback_used": True,
+                "safe_templates": [
+                    {"category":"WALK","title":"실내 워킹 10분"},
+                    {"category":"STRETCHING","title":"전신 스트레칭 5분"}
+                ],
+                "weather": {"kind": "rain", "outdoor_ok": False}
+            },
+            response_only=True,
+        ),
+    ],
 )
 @api_view(["POST"])
 def places(request: HttpRequest):
@@ -446,7 +493,6 @@ def places(request: HttpRequest):
     - 중복 제거: 최근 14일 내 동일 place_type/place_id 노출 제외 (PlaceExposure 없으면 폴백)
     - 테스트용 weather override: body.weather_kind = clear|clouds|rain|snow|thunder|dust
     """
-    # DRF 요청객체를 기존 함수 로직이 그대로 사용 가능
     if not _auth_ok(request._request):
         return Response({"detail": "invalid app token"}, status=401)
 
@@ -669,7 +715,6 @@ class TelemetryView(APIView):
             "- emergency일 때 즉시 액션 템플릿 반환(세션/카테고리 없음)\n"
             "- `metrics` 또는 상위 필드 `hr`, `stress` 사용 가능"
         ),
-        parameters=[APP_TOKEN_HEADER],
         request=inline_serializer(
             name="TelemetryReq",
             fields={
@@ -688,8 +733,14 @@ class TelemetryView(APIView):
                 description="normal / restrict / emergency 모두 200으로 응답",
                 examples=[
                     OpenApiExample(
+                        "request",
+                        value={"user_ref":"u1","metrics":{"hr":152.0},"ts":"2025-01-01T10:00:00+09:00"},
+                        request_only=True,
+                    ),
+                    OpenApiExample(
                         "normal",
                         value={"ok": True, "anomaly": False, "risk_level": "low", "mode": "normal"},
+                        response_only=True,
                     ),
                     OpenApiExample(
                         "restrict",
@@ -704,6 +755,7 @@ class TelemetryView(APIView):
                                 ]
                             }
                         },
+                        response_only=True,
                     ),
                     OpenApiExample(
                         "emergency",
@@ -716,6 +768,7 @@ class TelemetryView(APIView):
                                 {"category": "BREATHING", "title": "안전 호흡 5분"}
                             ]
                         },
+                        response_only=True,
                     ),
                 ],
             ),
@@ -740,7 +793,6 @@ class FeedbackView(APIView):
             "- steps_low 세션은 학습/로그 비반영(No-Op)\n"
             "- EFFECT: hr/stress before/after 값을 Outcome으로 기록"
         ),
-        parameters=[APP_TOKEN_HEADER],
         request=inline_serializer(
             name="FeedbackReq",
             fields={
@@ -762,7 +814,14 @@ class FeedbackView(APIView):
             200: OpenApiResponse(
                 response=OpenApiTypes.OBJECT,
                 description="ok",
-                examples=[OpenApiExample("ok", value={"ok": True})],
+                examples=[
+                    OpenApiExample(
+                        "request_click",
+                        value={"user_ref":"u1","type":"CLICK","session_id":"2c3e...","content_id":101},
+                        request_only=True,
+                    ),
+                    OpenApiExample("ok", value={"ok": True}, response_only=True),
+                ],
             ),
             400: OpenApiResponse(description="missing_fields"),
             401: OpenApiResponse(description="invalid app token"),
@@ -785,7 +844,6 @@ class StepsCheckView(APIView):
             "- 기준: 동시간대 평균(mu) 대비 부족분이 threshold(기본 500) 이상이면 저활동\n"
             "- 동일 일자·버킷 재호출 시 기존 session 재사용"
         ),
-        parameters=[APP_TOKEN_HEADER],
         request=inline_serializer(
             name="StepsCheckReq",
             fields={
@@ -797,10 +855,15 @@ class StepsCheckView(APIView):
         responses={
             200: OpenApiResponse(
                 response=OpenApiTypes.OBJECT,
-                description="normal 또는 no_baseline / restrict도 200으로 응답",
+                description="normal / no_baseline / restrict 모두 200으로 응답",
                 examples=[
-                    OpenApiExample("normal", value={"ok": True, "anomaly": False, "mode": "normal"}),
-                    OpenApiExample("no_baseline", value={"ok": True, "anomaly": False, "mode": "normal", "note": "no_baseline"}),
+                    OpenApiExample(
+                        "request",
+                        value={"user_ref":"u1","cum_steps":1200,"ts":"2025-01-01T12:00:00+09:00"},
+                        request_only=True,
+                    ),
+                    OpenApiExample("normal", value={"ok": True, "anomaly": False, "mode": "normal"}, response_only=True),
+                    OpenApiExample("no_baseline", value={"ok": True, "anomaly": False, "mode": "normal", "note": "no_baseline"}, response_only=True),
                     OpenApiExample(
                         "restrict",
                         value={
@@ -820,6 +883,7 @@ class StepsCheckView(APIView):
                                 ]
                             }
                         },
+                        response_only=True,
                     ),
                 ],
             ),
