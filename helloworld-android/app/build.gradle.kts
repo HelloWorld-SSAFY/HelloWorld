@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.kapt)
     alias(libs.plugins.hilt.android)
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -119,6 +120,12 @@ dependencies {
 
     // Google Play Services - Wearable
     implementation("com.google.android.gms:play-services-wearable:18.1.0")
+
+    // Firebase
+    implementation(platform("com.google.firebase:firebase-bom:33.3.0"))
+    implementation("com.google.firebase:firebase-analytics-ktx")
+    implementation("com.google.firebase:firebase-messaging-ktx")
+    implementation("com.google.accompanist:accompanist-permissions:0.36.0")
 
     // 기타 필요한 의존성들
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")

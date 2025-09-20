@@ -1,5 +1,6 @@
 package com.ms.helloworld
 
+import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -9,18 +10,29 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.lifecycle.lifecycleScope
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
 import com.ms.helloworld.navigation.MainNavigation
+import com.ms.helloworld.navigation.Screen
+import com.ms.helloworld.notification.NotificationChannels
+import com.ms.helloworld.notification.NotificationPermissionRequester
+import com.ms.helloworld.repository.FcmRepository
 import com.ms.helloworld.ui.theme.HelloWorldTheme
 import com.ms.helloworld.util.HealthConnectManager
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.Duration
+import javax.inject.Inject
 
 private const val TAG = "싸피_MainActivity"
 
@@ -29,6 +41,15 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var healthConnectManager: HealthConnectManager
     private var isDataFetchingActive = false
+
+    @Inject
+    lateinit var fcmRepository: FcmRepository
+
+    companion object {
+        val deepLinkIntents = kotlinx.coroutines.flow.MutableSharedFlow<Intent>(
+            extraBufferCapacity = 1
+        )
+    }
 
     private val permissionLauncher =
         registerForActivityResult<Set<String>, Set<String>>(
@@ -45,13 +66,32 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Log.d(TAG, "앱 실행됨")
+
         healthConnectManager = HealthConnectManager(this)
+
+        // 알림 채널 생성
+        NotificationChannels.createDefaultChannel(this)
+
+        // 최초 Intent 처리 → 스트림으로 방출
+        intent?.let { emitDeepLinkIntent(it) }
+
+        // FCM 토큰 확인 (디버그용)
+        com.google.firebase.messaging.FirebaseMessaging.getInstance().token.addOnSuccessListener {
+            Log.i("FCM", "현재 토큰: $it")
+        }
 
         // 앱 시작시 권한 확인 및 요청
         checkAndRequestPermissions()
 
         setContent {
+            // 알림 권한 요청
+            NotificationPermissionRequester(
+                autoRequest = true,
+                onGranted = {
+                    fcmRepository.registerTokenAsync(platform = "ANDROID")
+                }
+            )
+
             HelloWorldTheme {
                 Surface(
                     modifier = Modifier
@@ -59,10 +99,82 @@ class MainActivity : ComponentActivity() {
                         .windowInsetsPadding(WindowInsets.systemBars)
                 ) {
                     val navController = rememberNavController()
+
+                    // 앱 시작 시 딥링크 처리
+                    LaunchedEffect(Unit) {
+                        intent?.let { handleInitialDeepLink(it, navController) }
+                    }
+
                     MainNavigation(navController = navController)
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        emitDeepLinkIntent(intent) // 포그라운드 클릭 시 여기로 옴
+    }
+
+    private fun emitDeepLinkIntent(intent: Intent) {
+        Log.d("DeepLink", "emit intent: action=${intent.action}, extras=${intent.extras}")
+        // 실제 딥링크 정보가 없으면 패스
+        val hasInfo = intent.hasExtra("deeplink_type") && intent.hasExtra("coupleId")
+        if (hasInfo) {
+            // 최신 값 push (버퍼가 있으면 drop 되지 않음)
+            MainActivity.deepLinkIntents.tryEmit(intent)
+        }
+    }
+
+    // 앱이 완전히 종료된 상태에서 알림을 눌렀을 때의 처리
+    private fun handleInitialDeepLink(intent: Intent, navController: NavHostController) {
+        val deeplinkType = intent.getStringExtra("deeplink_type")
+        val coupleId = intent.getStringExtra("coupleId")
+
+        Log.d("DeepLink", "초기 딥링크 처리 - type=$deeplinkType, coupleId=$coupleId")
+
+        if (coupleId.isNullOrEmpty()) return
+
+        // 타입별 화면으로 이동
+        when (deeplinkType) {
+            "calendar" -> {
+                navController.currentBackStackEntry?.savedStateHandle?.set("coupleId", coupleId)
+                navController.navigate(Screen.CalendarScreen.route) {
+                    launchSingleTop = true
+                }
+            }
+            "health_heart_rate" -> {
+                navController.currentBackStackEntry?.savedStateHandle?.set("coupleId", coupleId)
+                navController.currentBackStackEntry?.savedStateHandle?.set("healthType", "heart_rate")
+                navController.navigate(Screen.WearableRecommendedScreen.route) {
+                    launchSingleTop = true
+                }
+            }
+            "health_stress" -> {
+                navController.currentBackStackEntry?.savedStateHandle?.set("coupleId", coupleId)
+                navController.currentBackStackEntry?.savedStateHandle?.set("healthType", "stress")
+                navController.navigate(Screen.WearableRecommendedScreen.route) {
+                    launchSingleTop = true
+                }
+            }
+            "health_activity" -> {
+                navController.currentBackStackEntry?.savedStateHandle?.set("coupleId", coupleId)
+                navController.currentBackStackEntry?.savedStateHandle?.set("healthType", "activity")
+                navController.navigate(Screen.WearableRecommendedScreen.route) {
+                    launchSingleTop = true
+                }
+            }
+            "main" -> {
+                navController.navigate(Screen.HomeScreen.route) {
+                    launchSingleTop = true
+                }
+            }
+        }
+
+        // 처리 후 Intent 정리
+        intent.removeExtra("deeplink_type")
+        intent.removeExtra("coupleId")
     }
 
     private fun checkAndRequestPermissions() {
