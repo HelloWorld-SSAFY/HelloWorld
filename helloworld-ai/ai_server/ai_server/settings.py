@@ -74,24 +74,50 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'ai_server.wsgi.application'
 
-# ---- DB (환경에 따라 SQLite ↔ Postgres 자동 전환) ---------------------------
-# pip install dj-database-url psycopg[binary]
-import dj_database_url
+# ---- DB (Postgres via env; optional DB_URL) --------------------------------
+import os
+import dj_database_url  # pip install dj-database-url
+# psycopg2-binary 또는 psycopg[binary] 중 하나 설치 필요
 
-# 기본: 로컬 개발용 SQLite
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
-    }
-}
+def _add_pg_options(db: dict) -> dict:
+    """sslmode / search_path / connect_timeout 주입"""
+    opts = db.setdefault("OPTIONS", {})
+    sslmode = os.getenv("DB_SSLMODE")        # e.g. prefer / require / disable
+    if sslmode:
+        opts["sslmode"] = sslmode
+    search_path = os.getenv("DB_SEARCH_PATH")  # e.g. "public"
+    if search_path:
+        opts["options"] = f"-c search_path={search_path}"
+    opts.setdefault("connect_timeout", 5)
+    return db
 
-DB_URL = os.getenv("DB_URL")  # 예: postgres://user:pass@host:5432/db?sslmode=require
+DB_URL = os.getenv("DB_URL")  # e.g. postgres://user:pass@host:5432/db?sslmode=prefer
+
 if DB_URL:
-    DATABASES["default"] = dj_database_url.parse(DB_URL, conn_max_age=600)
-    # 안정성 옵션 보강
-    DATABASES["default"].setdefault("OPTIONS", {})
-    DATABASES["default"]["OPTIONS"].setdefault("connect_timeout", 5)
+    # 방식 A: DSN 문자열 우선
+    DATABASES = {
+        "default": _add_pg_options(
+            dj_database_url.parse(DB_URL, conn_max_age=600)
+        )
+    }
+else:
+    # 방식 B: 개별 ENV 조합 (ConfigMap/Secret)
+    DATABASES = {
+        "default": _add_pg_options({
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.getenv("DB_NAME"),
+            "USER": os.getenv("DB_USER"),
+            "PASSWORD": os.getenv("DB_PASSWORD"),
+            "HOST": os.getenv("DB_HOST", "localhost"),
+            "PORT": int(os.getenv("DB_PORT", "5432")),
+            "CONN_MAX_AGE": 600,
+        })
+    }
+
+# 운영 보호: SQLite로 떨어지는 사고 방지
+if not DEBUG:
+    assert DATABASES["default"]["ENGINE"].endswith("postgresql"), "PostgreSQL required in production"
+
 
 # ---- 국제화 ------------------------------------------------------------------
 LANGUAGE_CODE = "ko-kr"
