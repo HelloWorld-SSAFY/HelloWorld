@@ -10,25 +10,35 @@ import com.ms.helloworld.dto.response.AvatarUrlResponse
 import retrofit2.http.*
 
 interface UserApi {
-
+    /**
+     유저 등록
+     **/
     @POST("user/api/users/register")
     suspend fun registerUser(
         @Body request: MemberRegisterRequest
     ): MemberRegisterResponse
-
+    /**
+    유저 등록
+     **/
     @PATCH("user/api/users/me")
     suspend fun updateProfile(
         @Body request: MemberUpdateRequest
     ): MemberRegisterResponse
-
+    /**
+    유저 등록
+     **/
     @PATCH("user/api/users/me/couple")
     suspend fun updateCoupleInfo(
         @Body request: CoupleUpdateRequest
     ): MemberRegisterResponse
-
+    /**
+    유저 등록
+     **/
     @GET("user/api/users/info")
     suspend fun getUserInfo(): MemberProfileResponse
-
+    /**
+    유저 등록
+     **/
     @PUT("user/api/users/profile-image")
     suspend fun updateProfileImage(
         @Body request: AvatarUrlRequest

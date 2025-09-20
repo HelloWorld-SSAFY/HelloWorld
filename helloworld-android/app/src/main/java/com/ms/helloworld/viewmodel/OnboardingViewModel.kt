@@ -244,6 +244,55 @@ class OnboardingViewModel @Inject constructor(
         }
     }
 
+    suspend fun saveCoupleInfo(): Boolean {
+        val currentState = _state.value
+
+        // 엄마인 경우에만 couple 정보 저장
+        if (currentState.selectedGender != "엄마") {
+            return true // 아빠는 couple 정보 저장하지 않음
+        }
+
+        return try {
+            _state.value = _state.value.copy(isLoading = true, errorMessage = null)
+
+            // Couple 정보 저장 (생리일자, 출산경험, 임신주차, 예정일)
+            val coupleUpdateRequest = CoupleUpdateRequest(
+                pregnancyWeek = if (currentState.calculatedPregnancyWeek > 0) currentState.calculatedPregnancyWeek else null,
+                due_date = if (currentState.dueDate.isNotBlank()) currentState.dueDate else null,
+                menstrual_date = if (currentState.menstrualDate.isNotBlank()) currentState.menstrualDate else null,
+                is_childbirth = currentState.isChildbirth
+            )
+
+            println("💾 커플 정보 저장:")
+            println("  - pregnancyWeek: ${coupleUpdateRequest.pregnancyWeek}")
+            println("  - due_date: ${coupleUpdateRequest.due_date}")
+            println("  - menstrual_date: ${coupleUpdateRequest.menstrual_date}")
+            println("  - is_childbirth: ${coupleUpdateRequest.is_childbirth}")
+
+            val result = momProfileRepository.updateCoupleInfo(coupleUpdateRequest)
+            if (result != null) {
+                _state.value = _state.value.copy(
+                    isLoading = false,
+                    errorMessage = null
+                )
+                println("✅ 커플 정보 저장 성공")
+                true
+            } else {
+                _state.value = _state.value.copy(
+                    isLoading = false,
+                    errorMessage = "커플 정보 저장에 실패했습니다."
+                )
+                false
+            }
+        } catch (e: Exception) {
+            _state.value = _state.value.copy(
+                isLoading = false,
+                errorMessage = e.message ?: "네트워크 오류가 발생했습니다."
+            )
+            false
+        }
+    }
+
     fun completeOnboarding() {
         val currentState = _state.value
 
@@ -253,38 +302,13 @@ class OnboardingViewModel @Inject constructor(
 
                 when (currentState.selectedGender) {
                     "엄마" -> {
-                        // 엄마: 임신 정보 업데이트 (기본 정보는 이미 저장됨)
-                        println("👩 엄마 임신 정보 업데이트")
-
-                        // Member 정보 업데이트 (생리일, 출산경험) - updateProfile API 사용
-                        val memberUpdateRequest = MemberUpdateRequest(
-                            nickname = null, // 닉네임은 이미 저장되었으므로 null
-                            age = null, // 나이도 이미 저장되었으므로 null
-                            menstrual_date = if (currentState.menstrualDate.isNotBlank()) currentState.menstrualDate else null
+                        // 엄마: 커플 정보가 이미 saveCoupleInfo()에서 저장되었으므로 완료 처리만
+                        println("👩 엄마 온보딩 완료")
+                        _state.value = _state.value.copy(
+                            isLoading = false,
+                            submitSuccess = true
                         )
-
-                        val memberResult = momProfileRepository.updateProfile(memberUpdateRequest)
-
-                        // Couple 정보 업데이트 (임신주차, 예정일) - updateCoupleInfo API 사용
-                        val coupleUpdateRequest = CoupleUpdateRequest(
-                            pregnancyWeek = if (currentState.calculatedPregnancyWeek > 0) currentState.calculatedPregnancyWeek else null,
-                            due_date = if (currentState.dueDate.isNotBlank()) currentState.dueDate else null
-                        )
-
-                        val coupleResult = momProfileRepository.updateCoupleInfo(coupleUpdateRequest)
-
-                        if (memberResult != null && coupleResult != null) {
-                            _state.value = _state.value.copy(
-                                isLoading = false,
-                                submitSuccess = true
-                            )
-                            println("✅ 엄마 정보 업데이트 완료")
-                        } else {
-                            _state.value = _state.value.copy(
-                                isLoading = false,
-                                errorMessage = "임신 정보 저장에 실패했습니다."
-                            )
-                        }
+                        println("✅ 엄마 온보딩 완료")
                     }
                     "아빠" -> {
                         // 아빠: 초대코드 검증만 확인 (기본 정보는 이미 저장됨)

@@ -244,6 +244,15 @@ fun OnboardingScreens(
                                     animationSpec = tween(durationMillis = 500)
                                 )
                             }
+                        } else if (currentScreen.screenType == ScreenType.MOM_INFO_FORM) {
+                            // 엄마 정보 화면에서 다음: Couple 정보 저장
+                            val success = viewModel.saveCoupleInfo()
+                            if (success) {
+                                pagerState.animateScrollToPage(
+                                    pagerState.currentPage + 1,
+                                    animationSpec = tween(durationMillis = 500)
+                                )
+                            }
                         } else {
                             // 일반 다음 페이지 이동
                             pagerState.animateScrollToPage(

@@ -37,14 +37,16 @@ fun ProfileEditDialog(
     currentDueDate: LocalDate?,
     currentAge: Int?,
     currentMenstrualDate: LocalDate?,
+    currentIsChildbirth: Boolean?,
     currentGender: String?, // "FEMALE" or "MALE"
     onDismiss: () -> Unit,
-    onSave: (nickname: String, age: Int?, menstrualDate: LocalDate?, dueDate: LocalDate?) -> Unit
+    onSave: (nickname: String, age: Int?, menstrualDate: LocalDate?, dueDate: LocalDate?, isChildbirth: Boolean?) -> Unit
 ) {
     var nickname by remember { mutableStateOf(currentNickname) }
     var age by remember { mutableStateOf(currentAge?.toString() ?: "") }
     var menstrualDate by remember { mutableStateOf(currentMenstrualDate ?: LocalDate.now()) }
     var menstrualCycle by remember { mutableStateOf("28") } // 기본 28일 주기
+    var isChildbirth by remember { mutableStateOf(currentIsChildbirth) }
     var showDatePicker by remember { mutableStateOf(false) }
 
     // 생리일자와 주기로 출산예정일 자동 계산

@@ -19,10 +19,11 @@ interface CoupleApi {
     @POST("user/api/couples/join")
     suspend fun joinCouple(@Body request: CoupleInviteRequest): CoupleInviteCodeResponse
 
-
     /**
      * 커플 연결 해제
      */
     @DELETE("user/api/couples/divorce")
     suspend fun disconnectCouple(): MemberRegisterResponse
+
+
 }

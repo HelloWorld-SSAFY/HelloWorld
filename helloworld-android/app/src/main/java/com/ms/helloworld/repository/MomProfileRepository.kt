@@ -78,10 +78,6 @@ class MomProfileRepository @Inject constructor(
             Log.d(TAG, "Request nickname: ${request.nickname}")
             Log.d(TAG, "Request gender: ${request.gender}")
             Log.d(TAG, "Request age: ${request.age}")
-            Log.d(TAG, "Request menstrual_date: ${request.menstrual_date}")
-            Log.d(TAG, "Request is_childbirth: ${request.is_childbirth}")
-            Log.d(TAG, "Request pregnancyWeek: ${request.pregnancyWeek}")
-            Log.d(TAG, "Request due_date: ${request.due_date}")
 
             val response = userApi.registerUser(request)
             Log.d(TAG, "✅ 사용자 등록 API 응답 성공: $response")
@@ -180,12 +176,10 @@ class MomProfileRepository @Inject constructor(
             Log.d(TAG, "Couple data incomplete, calculating from member data")
             Log.d(TAG, "Member nickname: ${member.nickname}")
             Log.d(TAG, "Member gender: ${member.gender}")
-            Log.d(TAG, "Member menstrualDate: ${member.menstrualDate}")
-
             val nickname = member.nickname ?: "엄마"
 
-            // 생리일자 기준으로 예정일과 임신 주차 계산
-            val (calculatedDueDate, calculatedWeek) = calculatePregnancyInfo(member.menstrualDate)
+            // couple 테이블의 생리일자 정보를 사용하여 계산
+            val (calculatedDueDate, calculatedWeek) = calculatePregnancyInfo(couple?.menstrualDate)
 
             val momProfile = MomProfile(
                 nickname = nickname,

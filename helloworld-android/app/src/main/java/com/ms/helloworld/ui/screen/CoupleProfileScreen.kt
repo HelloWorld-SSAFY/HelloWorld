@@ -324,16 +324,19 @@ fun CoupleProfileScreen(
     // 프로필 수정 다이얼로그
     if (showProfileEditDialog) {
         val memberProfile = state.memberProfile
+        val coupleProfile = state.coupleProfile
+
         ProfileEditDialog(
             currentNickname = state.momProfile?.nickname ?: "",
             currentDueDate = state.momProfile?.dueDate,
             currentAge = memberProfile?.age,
-            currentMenstrualDate = memberProfile?.menstrualDate?.let { LocalDate.parse(it) },
+            currentMenstrualDate = coupleProfile?.menstrualDate?.let { LocalDate.parse(it) },
+            currentIsChildbirth = coupleProfile?.isChildbirth,
             currentGender = memberProfile?.gender,
             onDismiss = { showProfileEditDialog = false },
-            onSave = { nickname, age, menstrualDate, dueDate ->
-                // 먼저 프로필 업데이트
-                viewModel.updateProfile(nickname, age, menstrualDate, dueDate)
+            onSave = { nickname, age, menstrualDate, dueDate, isChildbirth ->
+                // 프로필 업데이트
+                viewModel.updateProfile(nickname, age, menstrualDate, dueDate, isChildbirth)
                 showProfileEditDialog = false
             }
         )

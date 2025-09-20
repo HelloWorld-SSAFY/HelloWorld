@@ -7,6 +7,7 @@ import com.ms.helloworld.dto.request.MemberUpdateRequest
 import com.ms.helloworld.dto.response.MomProfile
 import com.ms.helloworld.dto.response.MemberProfile
 import com.ms.helloworld.dto.response.CoupleInviteCodeResponse
+import com.ms.helloworld.dto.response.CoupleProfile
 import com.ms.helloworld.repository.MomProfileRepository
 import com.ms.helloworld.repository.CoupleRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -22,6 +23,7 @@ data class CoupleProfileState(
     val errorMessage: String? = null,
     val momProfile: MomProfile? = null,
     val memberProfile: MemberProfile? = null,
+    val coupleProfile: CoupleProfile? = null,
     val inviteCode: String? = null,
     val inviteCodeResponse: CoupleInviteCodeResponse? = null,
     val isPartnerConnected: Boolean = false
@@ -61,6 +63,7 @@ class CoupleProfileViewModel @Inject constructor(
                         isLoading = false,
                         momProfile = momProfile,
                         memberProfile = userInfoResponse.member,
+                        coupleProfile = userInfoResponse.couple,
                         isPartnerConnected = isPartnerConnected
                     )
 
@@ -88,43 +91,49 @@ class CoupleProfileViewModel @Inject constructor(
         loadCoupleProfile()
     }
 
-    fun updateProfile(nickname: String, age: Int?, menstrualDate: LocalDate?, dueDate: LocalDate?) {
+    fun updateProfile(nickname: String, age: Int?, menstrualDate: LocalDate?, dueDate: LocalDate?, isChildbirth: Boolean?) {
         viewModelScope.launch {
             try {
-                println("🔄 프로필 업데이트 시작: nickname=$nickname, age=$age, menstrualDate=$menstrualDate, dueDate=$dueDate")
+                println("🔄 프로필 업데이트 시작: nickname=$nickname, age=$age, menstrualDate=$menstrualDate, dueDate=$dueDate, isChildbirth=$isChildbirth")
                 _state.value = _state.value.copy(isLoading = true, errorMessage = null)
 
-                // 1. 멤버 정보 업데이트 (닉네임, 나이, 생리일자)
+                // 1. 멤버 정보 업데이트 (닉네임, 나이)
                 val memberUpdateRequest = MemberUpdateRequest(
                     nickname = nickname,
-                    age = age,
-                    menstrual_date = menstrualDate?.toString()
+                    age = age
                 )
                 println("📤 멤버 업데이트 요청: $memberUpdateRequest")
                 val memberUpdateResult = momProfileRepository.updateProfile(memberUpdateRequest)
                 println("📥 멤버 업데이트 응답: $memberUpdateResult")
 
-                // 2. 커플 정보 업데이트 (출산예정일이 있는 경우에만)
+                // 2. 커플 정보 업데이트 (출산예정일, 생리일자, 출산경험 등)
                 var coupleUpdateResult: Any? = true // 기본값은 성공으로 설정
 
-                if (dueDate != null) {
-                    // 출산예정일로부터 현재 임신주차 계산
-                    val today = LocalDate.now()
-                    val daysDifference = java.time.temporal.ChronoUnit.DAYS.between(today, dueDate)
-                    val totalPregnancyDays = 280 // 40주 * 7일
-                    val currentPregnancyDays = totalPregnancyDays - daysDifference
-                    val calculatedWeek = ((currentPregnancyDays / 7).toInt() + 1).coerceIn(1, 42)
+                // 커플 정보가 하나라도 있으면 업데이트 수행
+                if (dueDate != null || menstrualDate != null || isChildbirth != null) {
+                    var calculatedWeek: Int? = null
+
+                    if (dueDate != null) {
+                        // 출산예정일로부터 현재 임신주차 계산
+                        val today = LocalDate.now()
+                        val daysDifference = java.time.temporal.ChronoUnit.DAYS.between(today, dueDate)
+                        val totalPregnancyDays = 280 // 40주 * 7일
+                        val currentPregnancyDays = totalPregnancyDays - daysDifference
+                        calculatedWeek = ((currentPregnancyDays / 7).toInt() + 1).coerceIn(1, 42)
+                        println("📊 계산된 임신주차: ${calculatedWeek}주 (오늘: $today, 예정일: $dueDate, 차이: ${daysDifference}일)")
+                    }
 
                     val coupleUpdateRequest = CoupleUpdateRequest(
                         pregnancyWeek = calculatedWeek,
-                        due_date = dueDate.toString()
+                        due_date = dueDate?.toString(),
+                        menstrual_date = menstrualDate?.toString(),
+                        is_childbirth = isChildbirth
                     )
-                    println("📊 계산된 임신주차: ${calculatedWeek}주 (오늘: $today, 예정일: $dueDate, 차이: ${daysDifference}일)")
                     println("📤 커플 업데이트 요청: $coupleUpdateRequest")
                     coupleUpdateResult = momProfileRepository.updateCoupleInfo(coupleUpdateRequest)
                     println("📥 커플 업데이트 응답: $coupleUpdateResult")
                 } else {
-                    println("📝 출산예정일이 없어서 커플 정보 업데이트 건너뜀")
+                    println("📝 커플 정보 업데이트할 항목이 없어서 건너뜀")
                 }
 
                 if (memberUpdateResult != null && coupleUpdateResult != null) {
