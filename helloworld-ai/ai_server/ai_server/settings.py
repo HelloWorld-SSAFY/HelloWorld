@@ -125,29 +125,29 @@ REST_FRAMEWORK = {
 SPECTACULAR_SETTINGS = {
     "TITLE": "임산부 헬스케어 API",
     "VERSION": "v0.2.1",
-    # 전역 인증 비활성화 (상단 Authorize 버튼 제거)
+
+    # ✅ 네가 지정한 전역 보안/서버 — 그대로 유지
     "SECURITY": [{"AppToken": []}],
-
     "SERVERS": [
-        {"url": "/ai", "description": "via gateway"},        # 게이트웨이로 노출될 때
-        {"url": "/",  "description": "in-cluster direct"},   # 클러스터 내부/서비스 직접 호출
+        {"url": "/ai", "description": "via gateway"},
+        {"url": "/",  "description": "in-cluster direct"},
     ],
- 
 
-    # 만약 예전에 이렇게 선언해두었다면 제거:
-    # "COMPONENTS": {
-    #     "securitySchemes": {
-    #         "apiKeyAuth": {
-    #             "type": "apiKey",
-    #             "in": "header",
-    #             "name": "X-App-Token",
-    #         }
-    #     }
-    # },
+    # ✅ securitySchemes에 AppToken 정의(Authorize 버튼이 X-App-Token을 인식)
+    "COMPONENTS": {
+        "securitySchemes": {
+            "AppToken": {
+                "type": "apiKey",
+                "in": "header",
+                "name": "X-App-Token",
+            }
+        }
+    },
+
+    # 보기 설정(원래 값 유지 + 필요 최소치만)
     "SORT_OPERATION_PARAMETERS": False,
-    # 선택: Swagger UI 설정은 그대로 두거나 필요 시 조정
     "SWAGGER_UI_SETTINGS": {
-        "persistAuthorization": False,  # 전역 인증 안 쓰므로 의미 없음
+        "persistAuthorization": False,  # 전역 인증 저장 안 함
     },
 }
 
