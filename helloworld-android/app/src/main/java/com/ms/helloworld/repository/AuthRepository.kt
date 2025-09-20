@@ -11,7 +11,8 @@ import javax.inject.Singleton
 private const val TAG = "싸피_AuthRepository"
 @Singleton
 class AuthRepository @Inject constructor(
-    private val authApi: AuthApi
+    private val authApi: AuthApi,
+    private val fcmRepository: FcmRepository
 ) {
     suspend fun socialLogin(request: GoogleLoginRequest): LoginResponse? {
         return try {
@@ -31,6 +32,12 @@ class AuthRepository @Inject constructor(
             Log.d(TAG, "API response received: $response")
             Log.d(TAG, "Response accessToken: ${response?.accessToken}")
             Log.d(TAG, "Response refreshToken: ${response?.refreshToken}")
+
+            // 로그인 성공 시 FCM 토큰 등록
+            response?.let {
+                Log.d(TAG, "로그인 성공 - FCM 토큰 등록 시작")
+                fcmRepository.registerTokenAsync(platform = "ANDROID")
+            }
 
             response
         } catch (e: Exception) {

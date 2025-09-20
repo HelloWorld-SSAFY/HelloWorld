@@ -7,11 +7,11 @@ plugins {
 }
 
 android {
-    namespace = "com.ms.helloworld"
+    namespace = "com.ms.wearos"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.ms.helloworld"
+        applicationId = "com.ms.wearos"
         minSdk = 30
         targetSdk = 35
         versionCode = 1

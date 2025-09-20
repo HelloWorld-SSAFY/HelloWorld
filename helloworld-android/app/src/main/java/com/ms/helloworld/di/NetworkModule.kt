@@ -4,6 +4,7 @@ import com.ms.helloworld.network.AuthInterceptor
 import com.ms.helloworld.network.TokenAuthenticator
 import com.ms.helloworld.network.api.AuthApi
 import com.ms.helloworld.network.api.CalendarApi
+import com.ms.helloworld.network.api.FcmApi
 import com.ms.helloworld.network.api.UserApi
 import dagger.Module
 import dagger.Provides
@@ -79,5 +80,11 @@ object NetworkModule {
     @Singleton
     fun provideUserApi(retrofit: Retrofit): UserApi {
         return retrofit.create(UserApi::class.java)
+    }
+
+    @Provides
+    @Singleton
+    fun provideFcmApi(retrofit: Retrofit): FcmApi {
+        return retrofit.create(FcmApi::class.java)
     }
 }
