@@ -70,112 +70,122 @@ spec:
   }
 
   stages {
+    stage('Register checks') {
+      steps {
+        script {
+          gitlabBuilds(builds: [
+            '1) checkout',
+            '2) kube-debug',
+            '3) detect-changed',
+            '4) build&push',
+            '5) ensure-ns',
+            '6) deploy-services',
+            '7) deploy-ingress',
+            '8) overall'
+          ])
+        }
+      }
+    }
+
     stage('Checkout') {
       steps {
-        checkout scm
-        container('kubectl') {
-          sh '''
-            set -e
-            git --version
-            git config --global --add safe.directory "$WORKSPACE" || true
-            git rev-parse --short HEAD
-          '''
+        gitlabCommitStatus(name: '1) checkout') {
+          checkout scm
+          container('kubectl') {
+            sh '''
+              set -e
+              git --version
+              git config --global --add safe.directory "$WORKSPACE" || true
+              git rev-parse --short HEAD
+            '''
+          }
         }
       }
     }
 
     stage('Kube debug') {
       steps {
-        container('kubectl') {
-          sh '''
-            which sh || true
-            ls -ld /home/jenkins/agent || true
-            kubectl version --client --short || true
-            kubectl auth can-i get ns || true
-          '''
+        gitlabCommitStatus(name: '2) kube-debug') {
+          container('kubectl') {
+            sh '''
+              which sh || true
+              ls -ld /home/jenkins/agent || true
+              kubectl version --client --short || true
+              kubectl auth can-i get ns || true
+            '''
+          }
         }
       }
     }
-
 
     stage('Detect changed (code/k8s/ingress)') {
       steps {
-        script {
-          container('kubectl') {
-            sh '''
-              set -e
-              # 기준: 최근 성공 커밋(없으면 최초 커밋)
-              G='git -c safe.directory="$WORKSPACE"'
-              base=${GIT_PREVIOUS_SUCCESSFUL_COMMIT:-$($G rev-list --max-parents=0 HEAD)}
-              changed_files=$($G diff --name-only "$base"...HEAD || true)
-  
-              # 1) 서비스 코드 변경: helloworld-server/<svc>/...
-              svc_from_code=$(printf "%s\n" "$changed_files" \
-                | grep -E '^helloworld-server/[^/]+/' \
-                | awk -F/ '{print $2}' \
-                | grep -vE '^(k8s)$' \
-                | sort -u || true)
-  
-              # 2) k8s 매니페스트 변경: helloworld-server/k8s/apps/<svc>/**.yaml
-              svc_from_k8s=$(printf "%s\n" "$changed_files" \
-                | grep -E '^helloworld-server/k8s/apps/[^/]+/.*\\.ya?ml$' \
-                | awk -F/ '{print $4}' \
-                | sort -u || true)
-  
-              # 3) ingress 변경 감지
-              ingress_changed=$(printf "%s\n" "$changed_files" \
-                | grep -E '^helloworld-server/k8s/ingress/.*\\.ya?ml$' || true)
-  
-              mkdir -p helloworld-server
-              echo "$svc_from_code" | tr '\\n' ' ' > helloworld-server/changed_code.txt
-              echo "$svc_from_k8s"  | tr '\\n' ' ' > helloworld-server/changed_k8s.txt
-              if [ -n "$ingress_changed" ]; then echo "true" > helloworld-server/ingress_changed; else : > helloworld-server/ingress_changed; fi
-  
-              echo "Code-changed services: $(cat helloworld-server/changed_code.txt)"
-              echo "K8s-changed services : $(cat helloworld-server/changed_k8s.txt)"
-              echo "Ingress changed      : $(cat helloworld-server/ingress_changed | tr -d '\\n' | sed -e 's/^$/false/')"
-            '''
+        gitlabCommitStatus(name: '3) detect-changed') {
+          script {
+            container('kubectl') {
+              sh '''
+                set -e
+                G='git -c safe.directory="$WORKSPACE"'
+                base=${GIT_PREVIOUS_SUCCESSFUL_COMMIT:-$($G rev-list --max-parents=0 HEAD)}
+                changed_files=$($G diff --name-only "$base"...HEAD || true)
+
+                svc_from_code=$(printf "%s\n" "$changed_files" \
+                  | grep -E '^helloworld-server/[^/]+/' \
+                  | awk -F/ '{print $2}' \
+                  | grep -vE '^(k8s)$' \
+                  | sort -u || true)
+
+                svc_from_k8s=$(printf "%s\n" "$changed_files" \
+                  | grep -E '^helloworld-server/k8s/apps/[^/]+/.*\\.ya?ml$' \
+                  | awk -F/ '{print $4}' \
+                  | sort -u || true)
+
+                ingress_changed=$(printf "%s\n" "$changed_files" \
+                  | grep -E '^helloworld-server/k8s/ingress/.*\\.ya?ml$' || true)
+
+                mkdir -p helloworld-server
+                echo "$svc_from_code" | tr '\n' ' ' > helloworld-server/changed_code.txt
+                echo "$svc_from_k8s"  | tr '\n' ' ' > helloworld-server/changed_k8s.txt
+                if [ -n "$ingress_changed" ]; then echo "true" > helloworld-server/ingress_changed; else : > helloworld-server/ingress_changed; fi
+
+                echo "Code-changed services: $(cat helloworld-server/changed_code.txt)"
+                echo "K8s-changed services : $(cat helloworld-server/changed_k8s.txt)"
+                echo "Ingress changed      : $(cat helloworld-server/ingress_changed | tr -d '\n' | sed -e 's/^$/false/')"
+              '''
+            }
+            env.CHANGED_CODE    = sh(script: "cat helloworld-server/changed_code.txt 2>/dev/null", returnStdout: true).trim()
+            env.CHANGED_K8S     = sh(script: "cat helloworld-server/changed_k8s.txt  2>/dev/null", returnStdout: true).trim()
+            env.INGRESS_CHANGED = sh(script: "cat helloworld-server/ingress_changed 2>/dev/null", returnStdout: true).trim()
+
+            def buildSet  = (env.CHANGED_CODE ?: "").trim()
+            def merged    = (env.CHANGED_CODE + " " + env.CHANGED_K8S).trim()
+            def deploySet = merged ? merged.tokenize().unique().join(' ') : ''
+
+            env.BUILD_SERVICES  = buildSet
+            env.DEPLOY_SERVICES = deploySet
+
+            echo "BUILD_SERVICES : ${env.BUILD_SERVICES ?: '<none>'}"
+            echo "DEPLOY_SERVICES: ${env.DEPLOY_SERVICES ?: '<none>'}"
           }
-          env.CHANGED_CODE    = sh(script: "cat helloworld-server/changed_code.txt 2>/dev/null", returnStdout: true).trim()
-          env.CHANGED_K8S     = sh(script: "cat helloworld-server/changed_k8s.txt  2>/dev/null", returnStdout: true).trim()
-          env.INGRESS_CHANGED = sh(script: "cat helloworld-server/ingress_changed 2>/dev/null", returnStdout: true).trim()
-
-          // 빌드는 "코드 변경"만, 배포는 "코드 ∪ k8s"
-          def buildSet = (env.CHANGED_CODE ?: "").trim()
-          def merged   = (env.CHANGED_CODE + " " + env.CHANGED_K8S).trim()
-          def deploySet = merged ? merged.tokenize().unique().join(' ') : ''
-
-          env.BUILD_SERVICES  = buildSet
-          env.DEPLOY_SERVICES = deploySet
-
-          echo "BUILD_SERVICES : ${env.BUILD_SERVICES ?: '<none>'}"
-          echo "DEPLOY_SERVICES: ${env.DEPLOY_SERVICES ?: '<none>'}"
         }
       }
     }
 
-    // 도커 데몬/소켓 없이 Kaniko로 이미지 빌드+푸시
     stage('Docker build & push (Kaniko)') {
       when { expression { return (env.BUILD_SERVICES ?: "").trim() } }
       steps {
-        container('kaniko') {
-          withCredentials([usernamePassword(credentialsId: env.DH_CREDS, usernameVariable: 'DH_USER', passwordVariable: 'DH_TOKEN')]) {
-            sh '''
+        gitlabCommitStatus(name: '4) build&push') {
+          container('kaniko') {
+            withCredentials([usernamePassword(credentialsId: env.DH_CREDS, usernameVariable: 'DH_USER', passwordVariable: 'DH_TOKEN')]) {
+              sh '''
 set -eux
-
-# 1) Docker auth JSON (정확한 따옴표/형식)
 rm -f /kaniko/.docker/config.json
 mkdir -p /kaniko/.docker
 auth="$(printf "%s:%s" "$DH_USER" "$DH_TOKEN" | base64 | tr -d '\n')"
-
 cat >/kaniko/.docker/config.json <<EOF
 {"auths":{"https://index.docker.io/v1/":{"auth":"$auth"}}}
 EOF
 
-# 확인
-cat /kaniko/.docker/config.json
-
-# 2) 빌드/푸시
 SHA="${GIT_COMMIT:0:7}"
 echo "[kaniko] BUILD_SERVICES=${BUILD_SERVICES}  SHA=${SHA}"
 
@@ -197,32 +207,31 @@ for svc in ${BUILD_SERVICES}; do
     --verbosity=info
 done
 '''
+            }
           }
         }
       }
     }
 
-
-
-
-    // 임시 에이전트 SA는 네임스페이스 생성 권한이 없을 수 있어요.
-    //    ns.yaml 적용이 꼭 필요하면 ClusterRole이 필요합니다. 기본은 스킵/존재 확인만 권장.
     stage('Ensure namespace (optional)') {
       steps {
-        container('kubectl') {
-          sh '''
-            set -e
-            kubectl get ns ${K8S_NS} >/dev/null 2>&1 || echo "NOTE: namespace ${K8S_NS} not found (skip creating in this pipeline)"
-          '''
+        gitlabCommitStatus(name: '5) ensure-ns') {
+          container('kubectl') {
+            sh '''
+              set -e
+              kubectl get ns ${K8S_NS} >/dev/null 2>&1 || echo "NOTE: namespace ${K8S_NS} not found (skip creating in this pipeline)"
+            '''
+          }
         }
       }
     }
 
     stage('Deploy to k3s (services)') {
-        when { expression { return (env.DEPLOY_SERVICES ?: "").trim() } }
-        steps {
-            container('kubectl') {
-                sh '''
+      when { expression { return (env.DEPLOY_SERVICES ?: "").trim() } }
+      steps {
+        gitlabCommitStatus(name: '6) deploy-services') {
+          container('kubectl') {
+            sh '''
 bash -euo pipefail -c '
 SHA="${GIT_COMMIT:0:7}"
 ns="${K8S_NS}"
@@ -231,7 +240,6 @@ for svc in ${DEPLOY_SERVICES}; do
   man_dir="helloworld-server/k8s/apps/${svc}"
   img="${REGISTRY}/${IMAGE_REPO}:${svc}-${SHA}"
 
-  # 1) 매니페스트 적용(디렉터리면 -f로 한번에)
   if [ -d "$man_dir" ]; then
     echo "==> apply ${man_dir}"
     kubectl -n "${ns}" apply -f "${man_dir}"
@@ -240,17 +248,15 @@ for svc in ${DEPLOY_SERVICES}; do
     continue
   fi
 
-  # 2) 워크로드 타입 판별 (StatefulSet 우선, 없으면 Deployment)
   if kubectl -n "${ns}" get statefulset "${svc}" >/dev/null 2>&1; then
     kind="statefulset"
-  elif kubectl -n "${ns}" get deploy "${svc}" >/dev/null 2>&1; then
+  elif kubectl -n "${ns}" get deploy "${svc}" >/devNull 2>&1; then
     kind="deploy"
   else
     echo "warn: no Deployment/StatefulSet named ${svc} (skip rolling)"
     continue
   fi
 
-  # 3) 코드 변경된 서비스만 이미지 롤링
   if echo " ${CHANGED_CODE} " | grep -q " ${svc} "; then
     echo "==> Rolling (code-changed) ${svc} -> ${img}"
     if [ "${kind}" = "statefulset" ]; then
@@ -266,34 +272,42 @@ for svc in ${DEPLOY_SERVICES}; do
 done
 '
 '''
-            }
+          }
         }
+      }
     }
-
-
-
-
 
     stage('Deploy to k3s (ingress)') {
       when { expression { return (env.INGRESS_CHANGED ?: "").trim() } }
       steps {
-        container('kubectl') {
-          sh '''
-            set -e
-            if [ -d "helloworld-server/k8s/ingress" ]; then
-              echo "==> Ingress changed: applying helloworld-server/k8s/ingress"
-              kubectl -n ${K8S_NS} apply -f helloworld-server/k8s/ingress
-            else
-              echo "skip: ingress dir not found"
-            fi
-          '''
+        gitlabCommitStatus(name: '7) deploy-ingress') {
+          container('kubectl') {
+            sh '''
+              set -e
+              if [ -d "helloworld-server/k8s/ingress" ]; then
+                echo "==> Ingress changed: applying helloworld-server/k8s/ingress"
+                kubectl -n ${K8S_NS} apply -f helloworld-server/k8s/ingress
+              else
+                echo "skip: ingress dir not found"
+              fi
+            '''
+          }
         }
       }
     }
   }
 
   post {
-    failure { script { currentBuild.description = "Failed" } }
-    success { script { currentBuild.description = "OK" } }
+    success {
+      updateGitlabCommitStatus name: '8) overall', state: 'success'
+      script { currentBuild.description = "OK" }
+    }
+    failure {
+      updateGitlabCommitStatus name: '8) overall', state: 'failed'
+      script { currentBuild.description = "Failed" }
+    }
+    aborted {
+      updateGitlabCommitStatus name: '8) overall', state: 'canceled'
+    }
   }
 }
