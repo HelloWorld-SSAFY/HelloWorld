@@ -4,14 +4,15 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.kapt)
     alias(libs.plugins.hilt.android)
+    id("com.google.gms.google-services")
 }
 
 android {
-    namespace = "com.ms.wearos"
+    namespace = "com.ms.helloworld"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.ms.wearos"
+        applicationId = "com.ms.helloworld"
         minSdk = 30
         targetSdk = 35
         versionCode = 1
@@ -122,6 +123,12 @@ dependencies {
 
     // Guava
     implementation("com.google.guava:guava:31.1-android")
+
+    // Firebase
+    implementation(platform("com.google.firebase:firebase-bom:33.3.0"))
+    implementation("com.google.firebase:firebase-analytics-ktx")
+    implementation("com.google.firebase:firebase-messaging-ktx")
+    implementation("com.google.accompanist:accompanist-permissions:0.36.0")
 
     // Testing
     androidTestImplementation(platform(libs.androidx.compose.bom))

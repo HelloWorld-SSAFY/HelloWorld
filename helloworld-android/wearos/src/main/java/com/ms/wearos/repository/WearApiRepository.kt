@@ -26,7 +26,7 @@ class WearApiRepository @Inject constructor(
         return try {
             Log.d(TAG, "건강 데이터 전송: 심박수=${healthDataRequest.heartrate}, 스트레스=${healthDataRequest.stress}, 날짜=$healthDataRequest.date")
 
-            apiService.sendHealthData(healthDataRequest)
+            apiService.sendHealthData(1,healthDataRequest)
         } catch (e: Exception) {
             Log.e(TAG, "건강 데이터 API 오류", e)
             throw e

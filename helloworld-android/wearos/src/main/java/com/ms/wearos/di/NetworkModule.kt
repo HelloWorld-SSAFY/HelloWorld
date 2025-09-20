@@ -2,6 +2,7 @@ package com.ms.wearos.di
 
 import com.ms.wearos.network.AuthInterceptor
 import com.ms.wearos.network.api.AuthApiService
+import com.ms.wearos.network.api.FcmApi
 import com.ms.wearos.network.api.WearApiService
 import dagger.Module
 import dagger.Provides
@@ -66,6 +67,12 @@ object NetworkModule {
     @Singleton
     fun provideAuthApiService(retrofit: Retrofit): AuthApiService {
         return retrofit.create(AuthApiService::class.java)
+    }
+
+    @Provides
+    @Singleton
+    fun provideFcmApi(retrofit: Retrofit): FcmApi {
+        return retrofit.create(FcmApi::class.java)
     }
 
 }
