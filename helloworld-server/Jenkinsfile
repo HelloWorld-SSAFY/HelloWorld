@@ -71,26 +71,6 @@ spec:
     DH_CREDS   = "dockerhub-ci"
   }
 
-  stages {
-    stage('Register checks') {
-      steps {
-        script {
-          gitlabBuilds(builds: [
-            '1) checkout',
-            '2) kube-debug',
-            '3) detect-changed',
-            '4) build&push',
-            '5) ensure-ns',
-            '6) deploy-services',
-            '7) deploy-ingress',
-            '8) overall'
-          ]){
-            echo 'registered pending checks'
-          }
-        }
-      }
-    }
-
     stage('Checkout') {
       steps {
         gitlabCommitStatus(name: '1) checkout') {
