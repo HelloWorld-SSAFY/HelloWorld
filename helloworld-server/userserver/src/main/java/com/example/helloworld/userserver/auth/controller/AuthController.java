@@ -25,7 +25,7 @@ import org.springframework.web.bind.annotation.*;
 
 @Tag(name = "Auth", description = "인증/인가 API")
 @RestController
-@RequestMapping("/api/auth")
+@RequestMapping("api/auth")
 @RequiredArgsConstructor(access = AccessLevel.PROTECTED)
 public class AuthController {
 

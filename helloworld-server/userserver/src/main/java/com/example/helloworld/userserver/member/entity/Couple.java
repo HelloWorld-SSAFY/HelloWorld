@@ -6,6 +6,7 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.sql.Timestamp;
+import java.time.LocalDate;
 
 @Entity
 @Table(name = "couples")
@@ -34,6 +35,12 @@ public class Couple {
     @Column(name = "due_date")
     private Timestamp dueDate;
 
+    @Column(name="menstrual_date")
+    private LocalDate menstrualDate;
+
+    @Column(name="is_childbirth", nullable=false)
+    private boolean isChildbirth;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Timestamp createdAt;
@@ -42,9 +49,12 @@ public class Couple {
     @Column(name = "updated_at", nullable = false)
     private Timestamp updatedAt;
 
-    public void updateSharing(Integer week, Timestamp due) {
+    public void updateSharing(Integer week, Timestamp due,                          java.time.LocalDate menstrualDate,
+                              Boolean isChildbirth) {
         this.pregnancyWeek = week;
         this.dueDate = due;
+        this.menstrualDate = menstrualDate;
+        this.isChildbirth = Boolean.TRUE.equals(isChildbirth);
     }
 
     public void setUserB(Member userB) { this.userB = userB; }

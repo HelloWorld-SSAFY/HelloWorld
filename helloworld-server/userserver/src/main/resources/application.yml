@@ -12,3 +12,78 @@ spring:
     config:
       uri: http://configserver-svc:8888
       enabled: true
+
+
+#server:
+#  port: 8080
+#  forward-headers-strategy: framework
+#  servlet:
+#    context-path: /user
+#spring:
+#  application:
+#    name: "user-server"
+#  #  config:
+#  #    import: "configserver:"
+#  cloud:
+#    config:
+#      enabled: false
+#      #      uri: http://config-server:8888
+#      #uri: http://i13d106.p.ssafy.io:8888
+#  datasource:
+#    url: ${SPRING_DATASOURCE_URL}
+#    username: ${SPRING_DATASOURCE_USERNAME}
+#    password: ${SPRING_DATASOURCE_PASSWORD}
+#    driver-class-name: org.postgresql.Driver
+#  jpa:
+#    hibernate:
+#      ddl-auto: update
+#    properties:
+#      hibernate:
+#        format_sql: true
+#  security:
+#    oauth2:
+#      client:
+#        registration:
+#          google:
+#            client-id: ${GOOGLE_CLIENT_ID}
+#            client-secret: ${GOOGLE_CLIENT_SECRET}
+#            # 배포 도메인으로 교체 (게이트웨이 경유)
+#            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
+#            scope: [ email, profile, openid ]
+#app:
+#  invite-code:
+#    ttl-minutes: 1440   # 기본 24h
+#    code-length: 8
+#    revoke-previous: true  # 새로 발급 시 기존 미사용 코드 무효화
+#jwt:
+#  access:
+#    secret: ${ACCESS_SECRET}
+#    expire: ${ACCESS_EXPIRE}
+#  refresh:
+#    secret: ${REFRESH_SECRET}
+#    expire: ${REFRESH_EXPIRE}
+#management:
+#  endpoint:
+#    health:
+#      probes:
+#        enabled: true
+#  endpoints:
+#    web:
+#      exposure:
+#        include: health,info
+#  health:
+#    probes:
+#      enabled: true
+#    livenessstate:
+#      enabled: true
+#    readinessstate:
+#      enabled: true
+#springdoc:
+#  api-docs:
+#    path: /v3/api-docs
+#  swagger-ui:
+#    path: /swagger-ui
+#
+#eureka:
+#  client:
+#    enabled: false

@@ -38,12 +38,6 @@ public class Member {
     @Column(name="age")
     private Integer age;
 
-    @Column(name="menstrual_date")
-    private LocalDate menstrualDate;
-
-    @Column(name="is_childbirth", nullable=false)
-    private boolean isChildbirth;
-
     @CreationTimestamp
     @Column(name="created_at", nullable=false, updatable=false)
     private Timestamp createdAt;
@@ -53,11 +47,9 @@ public class Member {
     private Timestamp updatedAt;
 
     public void applyRegistration(String nickname, Gender gender,
-                                  LocalDate menstrualDate, Boolean isChildbirth, Integer age) {
+                                   Integer age) {
         this.nickname = nickname;
         this.gender = gender;
-        this.menstrualDate = menstrualDate;
-        this.isChildbirth = Boolean.TRUE.equals(isChildbirth);
         this.age = age;
     }
 
