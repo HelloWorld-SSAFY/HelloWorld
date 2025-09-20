@@ -71,6 +71,7 @@ spec:
     DH_CREDS   = "dockerhub-ci"
   }
 
+  stages {
     stage('Checkout') {
       steps {
         gitlabCommitStatus(name: '1) checkout') {
