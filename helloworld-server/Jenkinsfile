@@ -82,7 +82,9 @@ spec:
             '6) deploy-services',
             '7) deploy-ingress',
             '8) overall'
-          ])
+          ]){
+            echo 'registered pending checks'
+          }
         }
       }
     }
