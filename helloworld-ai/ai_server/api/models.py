@@ -1,4 +1,3 @@
-# api/models.py
 from __future__ import annotations
 import uuid
 from django.db import models
@@ -25,11 +24,13 @@ FEEDBACK_TYPE_CHOICES = (
 # 장소 추천 지원을 위해 type/lat/lng/tags/safety_flags 추가
 # ─────────────────────────────────────────────────────────────────────
 class Content(models.Model):
-    provider = models.CharField(max_length=50)             # 예: "sp" (spotify 등)
-    external_id = models.CharField(max_length=200)         # 공급자 측 식별자
-    category = models.CharField(max_length=50)             # BREATHING / MEDITATION / OUTING 등
+    provider = models.CharField(max_length=50, blank=True, default="")      # 예: "YOUTUBE" / "SPOTIFY" / "INAPP"
+    external_id = models.CharField(max_length=200, blank=True, default="")  # 공급자 측 식별자(yt:..., sp:...)
+    category = models.CharField(max_length=50)                               # BREATHING / MEDITATION / OUTING 등
     title = models.CharField(max_length=200, blank=True, default="")
     url = models.URLField(max_length=500, blank=True, default="")
+    # 썸네일(YouTube/Spotify 앨범커버 등)
+    thumbnail_url = models.URLField(max_length=500, blank=True, default="")
     is_active = models.BooleanField(default=True)
 
     # 장소형 컨텐츠용 필드
@@ -39,12 +40,16 @@ class Content(models.Model):
     tags = models.JSONField(null=True, blank=True)             # ["SHADE","STROLLER_OK"]
     safety_flags = models.JSONField(null=True, blank=True)     # ["RESTROOM_NEARBY"]
 
+    created_at = models.DateTimeField(auto_now_add=True)
+
     class Meta:
         db_table = "content"
         unique_together = (("provider", "external_id"),)
         indexes = [
             models.Index(fields=["type"]),
             models.Index(fields=["lat", "lng"]),
+            models.Index(fields=["category"]),
+            models.Index(fields=["is_active"]),
         ]
 
     def __str__(self) -> str:
@@ -59,7 +64,7 @@ class RecommendationSession(models.Model):
     user_ref = models.CharField(max_length=64, db_index=True)                    # 외부 사용자 식별자
     trigger = models.CharField(max_length=50, blank=True, default="")            # 어떤 트리거로 시작했는지(옵션)
     mode = models.CharField(max_length=10, choices=MODE_CHOICES, default="normal")
-    context = models.JSONField(default=dict, blank=True)                         # 버킷/룰버전/사유 등
+    context = models.JSONField(default=dict, blank=True)                         # 버킷/룰버전/사유/유저컨텍스트 등
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -67,10 +72,24 @@ class RecommendationSession(models.Model):
         indexes = [
             models.Index(fields=["user_ref", "created_at"]),
             models.Index(fields=["mode", "created_at"]),
+            models.Index(fields=["trigger", "created_at"]),
         ]
 
     def __str__(self) -> str:
         return f"session:{self.id} user:{self.user_ref} mode:{self.mode}"
+
+    # views.py에서 사용하는 헬퍼(프로젝트마다 존재 유무 달라 try/except로 호출)
+    def set_context(self, ctx: dict, save: bool = False):
+        self.context = ctx or {}
+        if save:
+            self.save(update_fields=["context"])
+
+    def update_context(self, patch: dict, save: bool = False):
+        base = self.context or {}
+        base.update(patch or {})
+        self.context = base
+        if save:
+            self.save(update_fields=["context"])
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -81,7 +100,7 @@ class ExposureCandidate(models.Model):
     content = models.ForeignKey(Content, on_delete=models.CASCADE)
     pre_score = models.FloatField(null=True, blank=True)
     chosen_flag = models.BooleanField(default=False)
-    x_item_vec = models.JSONField(default=dict, blank=True)            # 임베딩/피처 등
+    x_item_vec = models.JSONField(default=dict, blank=True)            # 임베딩/피처 등 (thumb_url 포함 가능)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -89,16 +108,23 @@ class ExposureCandidate(models.Model):
         indexes = [
             models.Index(fields=["session"]),
             models.Index(fields=["content"]),
+            models.Index(fields=["created_at"]),
         ]
 
 
 # ─────────────────────────────────────────────────────────────────────
 # 최종 추천 N개 (랭크/점수/사유)
+#  - recommender.py 호환을 위해 user_ref / external_id는 선택, rank는 옵션
 # ─────────────────────────────────────────────────────────────────────
 class ItemRec(models.Model):
     session = models.ForeignKey(RecommendationSession, on_delete=models.CASCADE, related_name="items")
     content = models.ForeignKey(Content, on_delete=models.CASCADE)
-    rank = models.IntegerField()                               # 노출 순번(1부터)
+
+    # 호환 필드
+    user_ref = models.CharField(max_length=64, blank=True, default="")          # 추천 당시 유저(옵션)
+    external_id = models.CharField(max_length=200, blank=True, default="")      # 추적용 (예: "sp:trk:..", 옵션)
+    rank = models.IntegerField(null=True, blank=True)                            # 없으면 저장 시 자동 채움
+
     score = models.FloatField(null=True, blank=True)
     reason = models.CharField(max_length=200, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
@@ -107,8 +133,16 @@ class ItemRec(models.Model):
         db_table = "item_rec"
         indexes = [
             models.Index(fields=["session", "rank"]),
+            models.Index(fields=["session", "created_at"]),
         ]
         unique_together = (("session", "content"),)
+
+    def save(self, *args, **kwargs):
+        # rank 미지정 시 세션 내 다음 순번 자동 부여
+        if self.rank is None and self.session_id:
+            last = ItemRec.objects.filter(session_id=self.session_id).order_by("-rank").first()
+            self.rank = (last.rank or 0) + 1 if last and last.rank else 1
+        super().save(*args, **kwargs)
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -141,7 +175,7 @@ class Outcome(models.Model):
     item_rec = models.ForeignKey(ItemRec, on_delete=models.SET_NULL, null=True, blank=True)
     content = models.ForeignKey(Content, on_delete=models.SET_NULL, null=True, blank=True)
 
-    outcome_type = models.CharField(max_length=50)             # 예: "hr_drop"
+    outcome_type = models.CharField(max_length=50)             # 예: "hr_drop" / "self_report"
     before = models.FloatField(null=True, blank=True)
     after = models.FloatField(null=True, blank=True)
     delta = models.FloatField(null=True, blank=True)
@@ -157,32 +191,93 @@ class Outcome(models.Model):
 
 
 # ─────────────────────────────────────────────────────────────────────
+# 개인화 통계(전역/유저) — Thompson Sampling / CTS 가중치에 사용
+# ─────────────────────────────────────────────────────────────────────
+class ContentStat(models.Model):
+    content = models.OneToOneField(Content, on_delete=models.CASCADE, related_name="stat")
+    accepts = models.IntegerField(default=0)
+    completes = models.IntegerField(default=0)
+    effects_sum = models.FloatField(default=0.0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "content_stat"
+        indexes = [models.Index(fields=["updated_at"])]
+
+    def __str__(self) -> str:
+        return f"ContentStat({self.content_id}) a={self.accepts} c={self.completes} e={self.effects_sum:.2f}"
+
+
+class UserContentStat(models.Model):
+    user_ref = models.CharField(max_length=64, db_index=True)
+    content = models.ForeignKey(Content, on_delete=models.CASCADE, related_name="user_stats")
+    accepts = models.IntegerField(default=0)
+    completes = models.IntegerField(default=0)
+    effects_sum = models.FloatField(default=0.0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "user_content_stat"
+        unique_together = (("user_ref", "content"),)
+        indexes = [
+            models.Index(fields=["user_ref", "updated_at"]),
+            models.Index(fields=["content"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"UserContentStat({self.user_ref}, {self.content_id})"
+
+
+# ─────────────────────────────────────────────────────────────────────
 # 트리거→카테고리 우선순위 정책
-# (주의: 필드명 priority / is_active 사용)
+# - 레거시 호환 필드(trigger_key/rank/enabled)까지 포함
 # ─────────────────────────────────────────────────────────────────────
 class TriggerCategoryPolicy(models.Model):
-    trigger = models.CharField(max_length=50)         # "stress_up" / "hr_low" / "hr_high" / "steps_low"
-    category = models.CharField(max_length=50)        # "BREATHING" / "MEDITATION" / "WALK" / "OUTING" ...
-    priority = models.IntegerField(default=1)         # 1이 최상위 노출
+    # 신(표준) 필드
+    trigger = models.CharField(max_length=50)           # "stress_up" / "hr_low" / "hr_high" / "steps_low"
+    category = models.CharField(max_length=50)          # "BREATHING" / "MEDITATION" / "WALK" / "OUTING" ...
+    priority = models.IntegerField(default=1)           # 1이 최상위 노출
     is_active = models.BooleanField(default=True)
 
     # 운영 편의 옵션
     min_gw = models.IntegerField(null=True, blank=True)     # 임신 주차 하한
     max_gw = models.IntegerField(null=True, blank=True)     # 임신 주차 상한
-    tod_bucket = models.CharField(                          # 시간대 버킷(선택)
-        max_length=20, null=True, blank=True
-    )  # "morning"/"day"/"evening"/"night"
+    tod_bucket = models.CharField(max_length=20, null=True, blank=True)  # "morning"/"day"/"evening"/"night"
     requires_location = models.BooleanField(default=False)  # 나들이 등 위치 필요 여부
-    title = models.CharField(max_length=100, blank=True, default="")  # 노출명(관리자용/클라표시용)
+    title = models.CharField(max_length=100, blank=True, default="")     # 노출명(관리자용/클라표시용)
+
+    # 레거시 호환(ORM 필터에서 사용하므로 실제 필드 필요)
+    trigger_key = models.CharField(max_length=50, blank=True, default="")  # = trigger
+    rank = models.IntegerField(default=1)                                   # = priority
+    enabled = models.BooleanField(default=True)                             # = is_active
 
     class Meta:
         db_table = "trigger_category_policy"
         unique_together = (("trigger", "category"),)
         indexes = [
             models.Index(fields=["trigger", "is_active", "priority"]),
+            models.Index(fields=["trigger_key", "enabled", "rank"]),
             models.Index(fields=["min_gw", "max_gw"]),
             models.Index(fields=["tod_bucket"]),
         ]
+
+    def save(self, *args, **kwargs):
+        # 필드 동기화(양방향)
+        # 표준 → 레거시
+        if self.trigger and not self.trigger_key:
+            self.trigger_key = self.trigger
+        if self.priority and (self.rank is None or self.rank == 0):
+            self.rank = self.priority
+        self.enabled = bool(self.is_active)
+
+        # 레거시 → 표준 (레거시만 들어온 경우)
+        if not self.trigger and self.trigger_key:
+            self.trigger = self.trigger_key
+        if (self.priority is None or self.priority == 0) and self.rank:
+            self.priority = self.rank
+        self.is_active = bool(self.enabled)
+
+        super().save(*args, **kwargs)
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -273,6 +368,7 @@ class UserStepsTodStatsDaily(models.Model):
             models.Index(fields=["bucket"]),
         ]
 
+
 class PlaceExposure(models.Model):
     user_ref = models.CharField(max_length=64, db_index=True)
     place_type = models.CharField(max_length=10)  # "inside" | "outside"
@@ -288,4 +384,3 @@ class PlaceExposure(models.Model):
 
     def __str__(self) -> str:
         return f"{self.user_ref}:{self.place_type}:{self.place_id}"
-    
