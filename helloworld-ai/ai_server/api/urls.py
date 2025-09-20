@@ -10,7 +10,8 @@ from .views import (
     TelemetryView,
     FeedbackView,
     StepsCheckView,
-    PlacesView,   # ✅ 클래스 기반
+    PlacesView,     # ✅ 클래스 기반
+    RecommendView,  # ✅ 추가
 )
 
 @extend_schema(
@@ -39,5 +40,6 @@ urlpatterns = [
     path("feedback",     FeedbackView.as_view(),    name="feedback"),
     path("steps-check",  StepsCheckView.as_view(),  name="steps-check"),
     path("places",       PlacesView.as_view(),      name="places"),
+    path("recommend",    RecommendView.as_view(),   name="recommend"),  # ✅ 추가
     path("healthz",      healthz,                   name="healthz"),
 ]

@@ -35,9 +35,17 @@ from api.models import (
     PlaceInside,
     PlaceOutside,
     PlaceExposure,
+    # 개인화 통계 (개인화/TS 학습용)
+    ContentStat,
+    UserContentStat,
 )
 
 APP_TOKEN = os.getenv("APP_TOKEN", "").strip()
+
+from services.youtube_ingest import ingest_youtube_to_session
+from services.spotify_ingest import ingest_spotify_to_session
+from services.recommender import recommend_on_session, RecInput
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 전역 싱글턴 (상태 유지)
@@ -52,6 +60,9 @@ def _assert_app_token(request: HttpRequest):
     if not APP_TOKEN or got != APP_TOKEN:
         return Response({"ok": False, "error": "invalid app token"}, status=401)
     return None
+
+def _now_kst() -> datetime:
+    return datetime.now(tz=KST)
 
 # ── 스웨거: 모든 API에 노출할 공통 헤더 파라미터 (Healthz 제외)
 APP_TOKEN_PARAM = OpenApiParameter(
@@ -94,6 +105,7 @@ class ContentItemSerializer(serializers.Serializer):
     content_id = serializers.IntegerField()
     title = serializers.CharField()
     url = serializers.URLField()
+    thumbnail = serializers.URLField(required=False, allow_blank=True)  # ✓ 썸네일 필드
     rank = serializers.IntegerField(min_value=1)
     score = serializers.FloatField(required=False)
     reason = serializers.CharField(required=False)
@@ -112,11 +124,17 @@ class PlaceItemSerializer(serializers.Serializer):
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 텔레메트리: 요청/응답 스키마 (응답은 폴리모픽)
+#  - 요구사항대로 user_ref/ts/metrics만 받음
 # ──────────────────────────────────────────────────────────────────────────────
 class TelemetryIn(serializers.Serializer):
     user_ref = serializers.CharField()
-    ts = serializers.DateTimeField(help_text="ISO8601(+오프셋), 예: 2025-09-08T13:45:10Z")
+    ts = serializers.DateTimeField(help_text="ISO8601(+오프셋), 예: 2025-09-08T13:45:10+09:00")
     metrics = MetricsSerializer(help_text="둘 중 하나 이상 필요(hr, stress)")
+
+class CooldownSerializer(serializers.Serializer):
+    active = serializers.BooleanField()
+    ends_at = serializers.DateTimeField()
+    secs_left = serializers.IntegerField(min_value=0)
 
 class TelemetryNormalResp(serializers.Serializer):
     ok = serializers.BooleanField(default=True)
@@ -131,6 +149,9 @@ class TelemetryRestrictResp(serializers.Serializer):
     mode = serializers.ChoiceField(choices=["restrict"])
     reasons = serializers.ListField(child=serializers.CharField())
     recommendation = RecommendationEnvelopeSerializer()
+    cooldown = CooldownSerializer(required=False)  # optional
+    new_session = serializers.BooleanField(required=False)
+    cooldown_min = serializers.IntegerField(required=False)    # 하위호환
 
 class TelemetryEmergencyResp(serializers.Serializer):
     ok = serializers.BooleanField(default=True)
@@ -141,6 +162,15 @@ class TelemetryEmergencyResp(serializers.Serializer):
     action = ActionSerializer()
     safe_templates = SafeTemplateSerializer(many=True)
 
+# 신규: cooldown 응답 스키마(세션 생성 안 함)
+class TelemetryCooldownResp(serializers.Serializer):
+    ok = serializers.BooleanField(default=True)
+    anomaly = serializers.BooleanField(default=True)
+    risk_level = serializers.ChoiceField(choices=["high", "critical"])
+    mode = serializers.ChoiceField(choices=["cooldown"])
+    source = serializers.ChoiceField(choices=["restrict", "emergency"])
+    cooldown = CooldownSerializer()
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Steps: 요청/응답 스키마 (응답은 폴리모픽)
 # ──────────────────────────────────────────────────────────────────────────────
@@ -148,6 +178,7 @@ class StepsCheckIn(serializers.Serializer):
     user_ref = serializers.CharField()
     ts = serializers.DateTimeField(help_text="KST 권장, 12:00/16:00/20:00 호출")
     cum_steps = serializers.IntegerField(min_value=0, help_text="동시간대 누적 걸음수")
+    ctx = serializers.JSONField(required=False, help_text="유저 컨텍스트(선택)")
 
 class StepsNormalResp(serializers.Serializer):
     ok = serializers.BooleanField(default=True)
@@ -169,9 +200,10 @@ class FeedbackIn(serializers.Serializer):
     user_ref = serializers.CharField()
     session_id = serializers.CharField()
     type = serializers.ChoiceField(choices=["ACCEPT","COMPLETE","EFFECT"])
-    external_id = serializers.CharField(required=False)  # 모델에 없으므로 저장은 안 함
+    external_id = serializers.CharField(required=False)
     dwell_ms = serializers.IntegerField(required=False)
     watched_pct = serializers.FloatField(required=False)
+    content_id = serializers.IntegerField(required=False)  # ✓ 어떤 컨텐츠에 대한 피드백인지 명시 가능
 
 class FeedbackOut(serializers.Serializer):
     ok = serializers.BooleanField()
@@ -187,6 +219,7 @@ class PlacesIn(serializers.Serializer):
     lng = serializers.FloatField()
     max_distance_km = serializers.FloatField(required=False, help_text="기본 3.0, 0.5~10.0")
     limit = serializers.IntegerField(required=False, help_text="기본 3, 1~5")
+    ctx = serializers.JSONField(required=False, help_text="유저 컨텍스트(선택)")
 
 class PlacesOut(serializers.Serializer):
     ok = serializers.BooleanField()
@@ -196,7 +229,7 @@ class PlacesOut(serializers.Serializer):
     fallback_used = serializers.BooleanField()
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 헬스 체크 (토큰 요구 X)
+# 헬스 체크 (토큰 요구 O) — 하위호환상 auth=[]로 토큰 없이 호출 허용
 # ──────────────────────────────────────────────────────────────────────────────
 class HealthzView(APIView):
     @extend_schema(
@@ -204,13 +237,7 @@ class HealthzView(APIView):
         responses={200: inline_serializer("Healthz", {"ok": serializers.BooleanField(), "version": serializers.CharField()})},
         tags=["health"],
         summary="Health check (no auth)",
-        examples=[
-            OpenApiExample(
-                "RESPONSE",
-                value={"ok": True, "version": "v0.2.1"},
-                response_only=True,
-            )
-        ],
+        examples=[OpenApiExample("RESPONSE", value={"ok": True, "version": "v0.2.1"}, response_only=True)],
         operation_id="getHealthz",
     )
     def get(self, request: HttpRequest):
@@ -240,6 +267,74 @@ def _reason_from_trigger(trigger: Optional[str]) -> str:
     return m.get(t, t or "trigger")
 
 # ──────────────────────────────────────────────────────────────────────────────
+# 세션 보장/컨텍스트 저장 유틸
+# ──────────────────────────────────────────────────────────────────────────────
+def _ensure_restrict_session(
+    *,
+    user_ref: str,
+    trigger: Optional[str],
+    cats: List[Dict[str, Any]],
+    detector_result: Dict[str, Any],
+    user_ctx: Optional[Dict[str, Any]] = None,
+) -> tuple[RecommendationSession, Dict[str, Any], bool]:
+    """
+    - detector_result에 session_id가 있으면 조회, 없으면 새로 생성
+    - context에 session_id / categories / trigger + (user_ctx) 저장
+    - recommend 응답용 envelope 반환
+    - return: (session, recommendation_envelope, new_session_flag)
+    """
+    cat_payload = _serialize_categories(cats, reason=_reason_from_trigger(trigger)) if cats else []
+
+    sess_uuid = None
+    sid_raw = detector_result.get("session_id")
+    if sid_raw:
+        try:
+            sess_uuid = uuid.UUID(str(sid_raw))
+        except Exception:
+            sess_uuid = None
+
+    session: Optional[RecommendationSession] = None
+    if sess_uuid:
+        session = RecommendationSession.objects.filter(id=sess_uuid).first()
+
+    new_session = False
+    if session is None:
+        session = RecommendationSession.objects.create(
+            user_ref=user_ref,
+            trigger=trigger or "",
+            mode="restrict",
+            context={},
+        )
+        new_session = True
+
+    ctx = {
+        "session_id": str(session.id),
+        "categories": cat_payload,
+        "trigger": trigger,
+    }
+    if user_ctx:
+        ctx["user_ctx"] = user_ctx
+
+    cd_min = detector_result.get("cooldown_min")
+    if cd_min is not None:
+        try:
+            ctx["cooldown_min"] = int(cd_min)
+        except Exception:
+            pass
+
+    try:
+        session.set_context(ctx, save=True)
+    except Exception:
+        try:
+            session.update_context(ctx, save=True)
+        except Exception:
+            session.context = ctx
+            session.save(update_fields=["context"])
+
+    recommendation = {"session_id": str(session.id), "categories": cat_payload}
+    return session, recommendation, new_session
+
+# ──────────────────────────────────────────────────────────────────────────────
 # 텔레메트리 업로드 → 즉시 판단
 # ──────────────────────────────────────────────────────────────────────────────
 class TelemetryView(APIView):
@@ -254,6 +349,7 @@ class TelemetryView(APIView):
                     "normal": TelemetryNormalResp,
                     "restrict": TelemetryRestrictResp,
                     "emergency": TelemetryEmergencyResp,
+                    "cooldown": TelemetryCooldownResp,  # 신규 모드 문서화
                 },
                 many=False,
             )
@@ -267,56 +363,6 @@ class TelemetryView(APIView):
             "- 응급 룰: |Z|≥5 또는 HR≥150/≤45 for 120s\n"
             "- restrict 시 trigger_category_policy로 카테고리 도출"
         ),
-        examples=[
-            OpenApiExample(
-                "REQUEST",
-                request_only=True,
-                value={
-                    "user_ref": "9e2f1c6c-9f5d-4c67-a41c-2e4d2a5b2d51",
-                    "ts": "2025-09-08T13:45:10Z",
-                    "metrics": {"hr": 102, "stress": 67}
-                }
-            ),
-            OpenApiExample(
-                "RESPONSE (이상 아님)",
-                response_only=True,
-                value={"ok": True, "anomaly": False, "risk_level": "low", "mode": "normal"}
-            ),
-            OpenApiExample(
-                "RESPONSE (이상 감지됨 → 카테고리 동봉)",
-                response_only=True,
-                value={
-                    "ok": True,
-                    "anomaly": True,
-                    "risk_level": "high",
-                    "mode": "restrict",
-                    "reasons": ["HR_Z>=2.5 for 3 bins", "stress_Z>=2.5 for 3 bins"],
-                    "recommendation": {
-                        "session_id": "123456",
-                        "categories": [
-                            {"category": "BREATHING", "rank": 1, "reason": "stress high"},
-                            {"category": "MEDITATION", "rank": 2}
-                        ]
-                    }
-                }
-            ),
-            OpenApiExample(
-                "RESPONSE (응급 감지됨 → 추천 생략/액션)",
-                response_only=True,
-                value={
-                    "ok": True,
-                    "anomaly": True,
-                    "risk_level": "critical",
-                    "mode": "emergency",
-                    "reasons": ["HR_inst>=150 for 120s", "HR_inst<=45 for 120s", "Z>=5"],
-                    "action": {"type": "EMERGENCY_CONTACT", "cooldown_min": 60},
-                    "safe_templates": [
-                        {"category": "BREATHING", "title": "안전 호흡 3분"},
-                        {"category": "BREATHING", "title": "안전 호흡 5분"}
-                    ]
-                }
-            ),
-        ],
         operation_id="postTelemetry",
     )
     def post(self, request: HttpRequest):
@@ -335,44 +381,95 @@ class TelemetryView(APIView):
         )
         level = result.get("level", "normal")
         trigger = result.get("trigger")
-        reasons = result.get("reasons", [])
+        reasons = result.get("reasons", []) or result.get("reason", [])
 
-        anomaly = level != "normal"
         if level == "emergency":
             risk_level = "critical"
         elif level == "restrict":
             risk_level = "high"
+        elif level == "cooldown":
+            risk_level = "critical" if (result.get("cooldown_source") == "emergency") else "high"
         else:
             risk_level = "low"
 
+        # 공통 베이스
         resp: Dict[str, Any] = {
             "ok": True,
-            "anomaly": anomaly,
+            "anomaly": level != "normal",
             "risk_level": risk_level,
-            "mode": "emergency" if level == "emergency" else ("restrict" if level == "restrict" else "normal"),
+            "mode": level,   # 그대로 노출 (cooldown 포함)
         }
 
         if level == "restrict":
-            cats = categories_for_trigger(trigger)
-            resp.update({
-                "reasons": reasons,
-                "recommendation": {
-                    "session_id": result.get("session_id"),
-                    "categories": _serialize_categories(cats, reason=_reason_from_trigger(trigger)),
-                },
-            })
+            # (1) 트리거 기반 카테고리
+            cats = categories_for_trigger(trigger) or []
+            if not cats:
+                met = payload.get("metrics", {}) or {}
+                fallback = []
+                if "stress" in met:
+                    fallback = [{"code": "BREATHING"}, {"code": "MEDITATION"}, {"code": "MUSIC"}]
+                elif "hr" in met:
+                    fallback = [{"code": "BREATHING"}, {"code": "YOGA"}]
+                cats = fallback
+
+            # (2) 세션 보장 (텔레메트리는 유저 컨텍스트 사용 안 함)
+            session, recommendation, new_session = _ensure_restrict_session(
+                user_ref=payload["user_ref"],
+                trigger=trigger,
+                cats=cats,
+                detector_result=result,
+                user_ctx=None,
+            )
+
+            # (3) 쿨다운 정보
+            cooldown_min = result.get("cooldown_min")
+            cooldown_ends_at = result.get("cooldown_until") or result.get("cooldown_ends_at")
+            if isinstance(cooldown_ends_at, str):
+                try:
+                    cooldown_ends_at = datetime.fromisoformat(cooldown_ends_at)
+                except Exception:
+                    cooldown_ends_at = None
+            if not cooldown_ends_at and cooldown_min is not None:
+                cooldown_ends_at = (payload["ts"].astimezone(KST) if payload["ts"].tzinfo else payload["ts"]).astimezone(KST) + timedelta(minutes=int(cooldown_min))
+
+            cooldown_obj = None
+            if cooldown_ends_at:
+                now = _now_kst()
+                secs_left = int(max(0, (cooldown_ends_at - now).total_seconds()))
+                cooldown_obj = {"active": secs_left > 0, "ends_at": cooldown_ends_at.isoformat(), "secs_left": secs_left}
+
+            # (4) 응답
+            resp.update({"reasons": reasons or [], "recommendation": recommendation, "new_session": new_session})
+            if cooldown_obj:
+                resp["cooldown"] = cooldown_obj
+            if result.get("cooldown_min") is not None:
+                resp["cooldown_min"] = int(result["cooldown_min"])
+
+        elif level == "cooldown":
+            # 세션 생성 금지, 쿨다운 정보만
+            ends = result.get("cooldown_until")
+            if isinstance(ends, str):
+                try:
+                    ends = datetime.fromisoformat(ends)
+                except Exception:
+                    ends = None
+            if ends:
+                now = _now_kst()
+                secs_left = int(max(0, (ends - now).total_seconds()))
+                resp.update({
+                    "source": result.get("cooldown_source") or "restrict",
+                    "cooldown": {"active": secs_left > 0, "ends_at": ends.isoformat(), "secs_left": secs_left},
+                })
+
         elif level == "emergency":
             action = result.get("action") or {"type": "EMERGENCY_CONTACT", "cooldown_min": 60}
-            resp.update({
-                "reasons": reasons or ["emergency condition"],
-                "action": action,
-                "safe_templates": result.get("safe_templates", []),
-            })
+            resp.update({"reasons": reasons or ["emergency condition"], "action": action, "safe_templates": result.get("safe_templates", [])})
 
+        # normal이면 resp 그대로
         return Response(resp)
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 피드백 기록 (ACCEPT/COMPLETE/EFFECT)
+# 피드백 기록 (ACCEPT/COMPLETE/EFFECT) + 통계 업데이트(개인화 학습)
 # ──────────────────────────────────────────────────────────────────────────────
 class FeedbackView(APIView):
     @extend_schema(
@@ -381,21 +478,6 @@ class FeedbackView(APIView):
         responses={200: FeedbackOut},
         tags=["feedback"],
         summary="Log feedback for a recommendation session",
-        examples=[
-            OpenApiExample(
-                "REQUEST (ACCEPT)",
-                request_only=True,
-                value={
-                    "user_ref": "9e2f1c6c-9f5d-4c67-a41c-2e4d2a5b2d51",
-                    "session_id": "123456",
-                    "type": "ACCEPT",
-                    "external_id": "sp:trk:123",
-                    "dwell_ms": 120000,
-                    "watched_pct": 0.9
-                }
-            ),
-            OpenApiExample("RESPONSE", response_only=True, value={"ok": True}),
-        ],
         operation_id="postFeedback",
     )
     def post(self, request: HttpRequest):
@@ -417,21 +499,60 @@ class FeedbackView(APIView):
         if session is None:
             return Response({"ok": False, "error": "session not found"}, status=404)
 
-        # value는 dwell_ms or watched_pct 중 하나를 저장(있으면)
+        # 타게팅: content_id 명시 우선, 없으면 세션 최근 ItemRec
+        content = None
+        item_rec = None
+
+        cid = d.get("content_id")
+        if cid:
+            content = Content.objects.filter(id=int(cid)).first()
+
+        if content is None:
+            item_rec = ItemRec.objects.filter(session=session).order_by("-created_at").first()
+            if item_rec:
+                content = item_rec.content
+
+        if item_rec is None and content is not None:
+            item_rec = ItemRec.objects.filter(session=session, content=content).order_by("-created_at").first()
+
+        # value: dwell_ms or watched_pct
         value = d.get("dwell_ms") if d.get("dwell_ms") is not None else d.get("watched_pct")
 
+        # 로그 저장
         FeedbackModel.objects.create(
             user_ref=d["user_ref"],
             session=session,
+            item_rec=item_rec,
+            content=content,
             type=d["type"],
             value=value,
             dwell_ms=d.get("dwell_ms"),
             watched_pct=d.get("watched_pct"),
         )
 
+        # 통계 업데이트(개인화 학습용)
+        try:
+            if content:
+                cs, _ = ContentStat.objects.get_or_create(content=content)
+                ucs, _ = UserContentStat.objects.get_or_create(user_ref=d["user_ref"], content=content)
+
+                if d["type"] == "ACCEPT":
+                    cs.accepts += 1; ucs.accepts += 1
+                elif d["type"] == "COMPLETE":
+                    cs.completes += 1; ucs.completes += 1
+                elif d["type"] == "EFFECT" and value is not None:
+                    cs.effects_sum += float(value or 0); ucs.effects_sum += float(value or 0)
+
+                cs.save(update_fields=["accepts","completes","effects_sum","updated_at"])
+                ucs.save(update_fields=["accepts","completes","effects_sum","updated_at"])
+        except Exception:
+            pass
+
+        # 보조 Outcome 저장(기존 유지)
         if d["type"] == "EFFECT" and value is not None:
             OutcomeModel.objects.create(
                 session=session,
+                content=content,
                 outcome_type="self_report",
                 effect=float(value),
             )
@@ -458,36 +579,6 @@ class StepsCheckView(APIView):
         },
         tags=["steps"],
         summary="Check cumulative steps at 12/16/20(KST) and issue steps_low session",
-        description=(
-            "매일 12:00 / 16:00 / 20:00(KST) 동시간대 누적 걸음수를 기준선과 비교해 저활동 여부를 판단합니다.\n"
-            "- 판단: Z <= -1.0 또는 p20 미만\n"
-            "- 중복 방지: 동일 일자·버킷에 열린 steps_low 세션 존재 시 재발급 없이 기존 반환\n"
-            "- 레이트리밋: 사용자·버킷당 1회"
-        ),
-        examples=[
-            OpenApiExample("REQUEST", request_only=True, value={
-                "user_ref": "u1",
-                "ts": "2025-09-17T12:00:00+09:00",
-                "cum_steps": 1840
-            }),
-            OpenApiExample("RESPONSE (정상)", response_only=True, value={
-                "ok": True, "anomaly": False, "mode": "normal"
-            }),
-            OpenApiExample("RESPONSE (저활동 → restrict 세션 발급)", response_only=True, value={
-                "ok": True,
-                "anomaly": True,
-                "mode": "restrict",
-                "trigger": "steps_low",
-                "reasons": ["cum_steps_z<=-1.0 (bucket=3)"],
-                "recommendation": {
-                    "session_id": "c5e1c8f6-....",
-                    "categories": [
-                        {"category": "WALK", "rank": 1, "reason": "steps low vs avg"},
-                        {"category": "OUTING", "rank": 2}
-                    ]
-                }
-            }),
-        ],
         operation_id="postStepsCheck",
     )
     def post(self, request: HttpRequest):
@@ -506,16 +597,29 @@ class StepsCheckView(APIView):
 
         # 저활동 → restrict 세션 발급
         cats = categories_for_trigger("steps_low")
-        ctx = {
-            "categories": _serialize_categories(cats, reason=_reason_from_trigger("steps_low")),
-        }
         session = RecommendationSession.objects.create(
             user_ref=d["user_ref"],
             trigger="steps_low",
             mode="restrict",
-            context=ctx,
+            context={},
         )
-        sid = str(session.id)
+        ctx = {
+            "session_id": str(session.id),
+            "categories": _serialize_categories(cats, reason=_reason_from_trigger("steps_low")),
+        }
+        # 유저 컨텍스트가 오면 같이 저장
+        if d.get("ctx"):
+            ctx["user_ctx"] = d["ctx"]
+
+        # context 저장
+        try:
+            session.set_context(ctx, save=True)
+        except Exception:
+            try:
+                session.update_context(ctx, save=True)
+            except Exception:
+                session.context = ctx
+                session.save(update_fields=["context"])
 
         resp = {
             "ok": True,
@@ -524,7 +628,7 @@ class StepsCheckView(APIView):
             "trigger": "steps_low",
             "reasons": [f"cum_steps<{2000} or z<=-1.0"],
             "recommendation": {
-                "session_id": sid,
+                "session_id": str(session.id),
                 "categories": ctx["categories"],
             },
         }
@@ -548,43 +652,6 @@ class PlacesView(APIView):
         responses={200: PlacesOut},
         tags=["places"],
         summary="Recommend outing places guarded by weather/air quality",
-        description=(
-            "위치 기반 후보를 거리순으로 정렬하고, 서버가 조회한 현재 날씨/공기질로 안전 게이트를 적용합니다.\n"
-            "- 거리 정렬(Haversine) 후 limit개(기본 3), max_distance_km(기본 3km)\n"
-            "- 최근 14일 노출 content_id는 제외(중복 방지)\n"
-            "- 강수/폭염/한파/미세먼지 ‘나쁨’ 시 야외 축소 또는 실내 대체"
-        ),
-        examples=[
-            OpenApiExample("REQUEST", request_only=True, value={
-                "user_ref": "u1",
-                "session_id": "c5e1c8f6-....",
-                "category": "OUTING",
-                "lat": 37.501,
-                "lng": 127.026,
-                "max_distance_km": 3.0,
-                "limit": 3
-            }),
-            OpenApiExample("RESPONSE", response_only=True, value={
-                "ok": True,
-                "session_id": "c5e1c8f6-....",
-                "category": "OUTING",
-                "items": [
-                    {
-                        "place_type": "outside",
-                        "content_id": 901,
-                        "title": "탄천 산책로 A구간",
-                        "lat": 37.503,
-                        "lng": 127.035,
-                        "distance_km": 0.98,
-                        "rank": 1,
-                        "reason": "distance",
-                        "weather_gate": "OUTDOOR",
-                        "address": "성남시 분당구 ..."
-                    }
-                ],
-                "fallback_used": False
-            }),
-        ],
         operation_id="postPlaces",
     )
     def post(self, request: HttpRequest):
@@ -673,7 +740,7 @@ class PlacesView(APIView):
         for i, it in enumerate(items[:], start=1):
             it["rank"] = i
 
-        # 5) 세션 확정: 요청 session_id가 있으면 그걸 쓰고, 없으면 새로 생성
+        # 5) 세션 확정
         sid = d.get("session_id")
         session = None
         if sid:
@@ -688,14 +755,36 @@ class PlacesView(APIView):
                 user_ref=d["user_ref"],
                 trigger=d.get("category", "OUTING"),
                 mode="restrict",
-                context={
-                    "weather_kind": weather_kind,
-                    "gate": gate,
-                    "max_distance_km": max_km,
-                    "limit": limit,
-                },
+                context={},
             )
             sid = str(session.id)
+
+        # context 저장(메타 + 유저 ctx 병합)
+        meta_ctx = {
+            "session_id": str(session.id),
+            "weather_kind": weather_kind,
+            "gate": gate,
+            "max_distance_km": max_km,
+            "limit": limit,
+        }
+        # 세션에 기존 user_ctx가 있으면 보존
+        try:
+            existing_user_ctx = (session.context or {}).get("user_ctx")
+        except Exception:
+            existing_user_ctx = None
+        if existing_user_ctx:
+            meta_ctx["user_ctx"] = existing_user_ctx
+        if d.get("ctx"):
+            meta_ctx["user_ctx"] = {**(meta_ctx.get("user_ctx") or {}), **d["ctx"]}
+
+        try:
+            session.update_context(meta_ctx, save=True)
+        except Exception:
+            try:
+                session.set_context(meta_ctx, save=True)
+            except Exception:
+                session.context = meta_ctx
+                session.save(update_fields=["context"])
 
         # 6) 노출 기록 (PlaceExposure)
         if items:
@@ -712,3 +801,179 @@ class PlacesView(APIView):
             "fallback_used": weather_fallback or (not items),
         }
         return Response(resp)
+
+# ==== /v1/recommend ====
+
+# 신규: 추천 컨텍스트 정식 스키마(하위호환으로 기존 gw/ctx도 허용)
+class RecommendPreferencesSerializer(serializers.Serializer):
+    lang = serializers.CharField(required=False)
+    duration_min = serializers.IntegerField(required=False, min_value=1, max_value=60)
+    duration_max = serializers.IntegerField(required=False, min_value=1, max_value=180)
+    music_provider = serializers.ChoiceField(required=False, choices=["spotify", "youtube"])
+    allow_voice_guidance = serializers.BooleanField(required=False)
+
+class RecommendContextIn(serializers.Serializer):
+    pregnancy_week = serializers.IntegerField(required=False, min_value=0, max_value=45)
+    trimester = serializers.IntegerField(required=False, min_value=1, max_value=3)
+    risk_flags = serializers.ListField(child=serializers.CharField(), required=False)
+    symptoms_today = serializers.ListField(child=serializers.CharField(), required=False)
+    preferences = RecommendPreferencesSerializer(required=False)
+    taboo_tags = serializers.ListField(child=serializers.CharField(), required=False)
+    locale = serializers.CharField(required=False)
+    tz = serializers.CharField(required=False)
+
+class RecommendIn(serializers.Serializer):
+    user_ref = serializers.CharField()
+    session_id = serializers.CharField()
+    category = serializers.CharField(help_text="MEDITATION | YOGA | MUSIC")
+    top_k = serializers.IntegerField(required=False, min_value=1, max_value=5, help_text="기본 3")
+    ts = serializers.DateTimeField(required=False)
+    q = serializers.CharField(required=False, help_text="MUSIC일 때 검색 키워드(옵션)")
+    # 정식 컨텍스트
+    context = RecommendContextIn(required=False)
+    # ↓ 하위호환 입력(점진 폐지 예정)
+    gw = serializers.IntegerField(required=False, min_value=0, max_value=45, help_text="임신 주차(legacy)")
+    ctx = serializers.JSONField(required=False, help_text="임의 컨텍스트(legacy)")
+
+class RecommendItemOut(serializers.Serializer):
+    content_id = serializers.IntegerField()
+    title = serializers.CharField()
+    url = serializers.URLField()
+    thumbnail = serializers.URLField(required=False, allow_blank=True)
+    rank = serializers.IntegerField(min_value=1)
+    score = serializers.FloatField(required=False, allow_null=True)
+    reason = serializers.CharField(required=False)
+
+class RecommendOut(serializers.Serializer):
+    ok = serializers.BooleanField()
+    session_id = serializers.CharField()
+    category = serializers.CharField()
+    items = RecommendItemOut(many=True)
+
+def _derive_trimester(week: Optional[int]) -> Optional[int]:
+    if week is None:
+        return None
+    if week <= 13: return 1
+    if week <= 27: return 2
+    return 3
+
+class RecommendView(APIView):
+    @extend_schema(
+        parameters=[APP_TOKEN_PARAM],
+        request=RecommendIn,
+        responses={200: RecommendOut},
+        tags=["recommend"],
+        summary="Category-based recommendation with ingest (YouTube/Spotify)",
+        operation_id="postRecommend",
+    )
+    def post(self, request: HttpRequest):
+        bad = _assert_app_token(request)
+        if bad:
+            return bad
+
+        ser = RecommendIn(data=request.data)
+        ser.is_valid(raise_exception=True)
+        d = ser.validated_data
+
+        # 세션 확인
+        try:
+            sess_uuid = uuid.UUID(d["session_id"])
+        except Exception:
+            return Response({"ok": False, "error": "invalid session_id"}, status=400)
+        session = RecommendationSession.objects.filter(id=sess_uuid).first()
+        if session is None:
+            return Response({"ok": False, "error": "session not found"}, status=404)
+
+        category = (d["category"] or "").upper().strip()
+        top_k = max(1, min(5, int(d.get("top_k") or 3)))
+
+        # 1) 카테고리별 인제스트 (Content/ExposureCandidate 적재)
+        try:
+            if category == "MEDITATION":
+                ingest_youtube_to_session(session_id=session.id, category="MEDITATION", max_total=max(30, top_k*8))
+            elif category == "YOGA":
+                ingest_youtube_to_session(session_id=session.id, category="YOGA", max_total=max(30, top_k*8))
+            elif category == "MUSIC":
+                q = d.get("q") or "태교 음악 relaxing instrumental"
+                ingest_spotify_to_session(session_id=session.id, max_total=max(30, top_k*10), query=q, market="KR")
+            else:
+                return Response({"ok": False, "error": f"unsupported category '{category}'"}, status=400)
+        except Exception:
+            # 인제스트 실패해도 기존 후보가 있으면 추천은 시도
+            pass
+
+        # 2) 추천(세션 기반) — 세션에 저장된 user_ctx + 요청 context/gw 병합
+        try:
+            base_ctx = {}
+            try:
+                base_ctx = (session.context or {}).get("user_ctx") or {}
+            except Exception:
+                base_ctx = {}
+
+            # 정식 context 우선, 없으면 legacy ctx/gw 사용
+            ctx_in = d.get("context") or {}
+            legacy_ctx = d.get("ctx") or {}
+            if d.get("gw") is not None:
+                legacy_ctx = {**legacy_ctx, "gw": int(d["gw"])}
+
+            # trimester 보정
+            if "trimester" not in ctx_in and ("pregnancy_week" in ctx_in or "gw" in ctx_in):
+                week = ctx_in.get("pregnancy_week", ctx_in.get("gw"))
+                ctx_in["trimester"] = _derive_trimester(week)
+
+            merged_ctx = {**base_ctx, **legacy_ctx, **ctx_in}
+            if d.get("ts"):
+                merged_ctx["ts"] = d["ts"].isoformat()
+
+            # (NOTE) 당분간 금기 필터는 서버에서 적용하지 않음
+            # 필요 시 merged_ctx["excluded_tags"] + context.apply_taboo=true 로 다시 켤 것.
+
+            rec_out = recommend_on_session(
+                session_id=session.id,
+                rec_in=RecInput(user_ref=d["user_ref"], category=category, context=merged_ctx),
+            )
+        except ValueError:
+            # 후보 없으면 200 + 빈 배열
+            return Response({"ok": True, "session_id": str(session.id), "category": category, "items": []})
+        except Exception:
+            return Response({"ok": False, "error": "recommendation failed"}, status=500)
+
+        # 3) 응답 items 구성: pick + 상위 후보들
+        items: List[Dict[str, Any]] = []
+        picked = rec_out.picked
+        items.append({
+            "content_id": picked["content_id"],
+            "title": picked["title"],
+            "url": picked["url"],
+            "thumbnail": picked.get("thumbnail") or "",
+            "rank": 1,
+            "score": None,
+            "reason": "ts+context",
+        })
+
+        # 후보에서 추가 (세션 내 후보 pre_score 높은 순)
+        try:
+            exps = ExposureCandidate.objects.filter(
+                session=session, content__category__iexact=category
+            ).select_related("content")
+            exps = sorted(exps, key=lambda e: (getattr(e, "pre_score", 0.0) or 0.0), reverse=True)
+            for e in exps:
+                if len(items) >= top_k:
+                    break
+                if e.content_id == picked["content_id"]:
+                    continue
+                c = e.content
+                thumb = getattr(c, "thumbnail_url", None) or ((e.x_item_vec or {}).get("thumb_url")) or ""
+                items.append({
+                    "content_id": c.id,
+                    "title": c.title,
+                    "url": c.url,
+                    "thumbnail": thumb,
+                    "rank": len(items)+1,
+                    "score": getattr(e, "pre_score", None),
+                    "reason": "candidate",
+                })
+        except Exception:
+            pass
+
+        return Response({"ok": True, "session_id": rec_out.session_id, "category": category, "items": items[:top_k]})

@@ -74,9 +74,26 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'ai_server.wsgi.application'
 
-# ---- DB (환경에 따라 SQLite ↔ Postgres 자동 전환) ---------------------------
-# pip install dj-database-url psycopg[binary]
-import dj_database_url
+# ---- DB (Postgres via env; optional DB_URL) --------------------------------
+# 요구사항: 로컬 기본은 SQLite, 단 .env에서 명시적으로 켤 때만 Postgres 사용
+import dj_database_url  # pip install dj-database-url
+# psycopg2-binary 또는 psycopg[binary] 중 하나 설치 필요
+
+def _add_pg_options(db: dict) -> dict:
+    """sslmode / search_path / connect_timeout 주입"""
+    opts = db.setdefault("OPTIONS", {})
+    sslmode = os.getenv("DB_SSLMODE")        # e.g. prefer / require / disable
+    if sslmode:
+        opts["sslmode"] = sslmode
+    search_path = os.getenv("DB_SEARCH_PATH")  # e.g. "public"
+    if search_path:
+        opts["options"] = f"-c search_path={search_path}"
+    opts.setdefault("connect_timeout", 5)
+    return db
+
+# 스위치: USE_DB_URL=true 일 때에만 Postgres로 전환 (없으면/false면 SQLite 유지)
+USE_DB_URL = (os.getenv("USE_DB_URL") or "").strip().lower() in ("1", "true", "yes", "on")
+DB_URL = (os.getenv("DB_URL") or "").strip()  # e.g. postgres://user:pass@host:5432/db?sslmode=prefer
 
 # 기본: 로컬 개발용 SQLite
 DATABASES = {
@@ -86,12 +103,39 @@ DATABASES = {
     }
 }
 
-DB_URL = os.getenv("DB_URL")  # 예: postgres://user:pass@host:5432/db?sslmode=require
-if DB_URL:
-    DATABASES["default"] = dj_database_url.parse(DB_URL, conn_max_age=600)
-    # 안정성 옵션 보강
-    DATABASES["default"].setdefault("OPTIONS", {})
-    DATABASES["default"]["OPTIONS"].setdefault("connect_timeout", 5)
+if USE_DB_URL:
+    if DB_URL:
+        # 방식 A: DSN 문자열 우선
+        # 로컬 호스트면 sslmode 누락 시 disable로 보정(Windows SSL 네고 이슈 회피)
+        if ("localhost" in DB_URL or "127.0.0.1" in DB_URL) and "sslmode=" not in DB_URL:
+            DB_URL = DB_URL + ("&" if "?" in DB_URL else "?") + "sslmode=disable"
+
+        DATABASES["default"] = _add_pg_options(
+            dj_database_url.parse(DB_URL, conn_max_age=600)
+        )
+    else:
+        # 방식 B: 개별 ENV 조합 (ConfigMap/Secret)
+        # 필수 값(DB_NAME/DB_USER/DB_PASSWORD 중 하나라도 없으면 SQLite 유지)
+        DB_NAME = os.getenv("DB_NAME")
+        DB_USER = os.getenv("DB_USER")
+        DB_PASSWORD = os.getenv("DB_PASSWORD")
+        DB_HOST = os.getenv("DB_HOST", "localhost")
+        DB_PORT = int(os.getenv("DB_PORT", "5432"))
+        if DB_NAME and DB_USER and DB_PASSWORD:
+            DATABASES["default"] = _add_pg_options({
+                "ENGINE": "django.db.backends.postgresql",
+                "NAME": DB_NAME,
+                "USER": DB_USER,
+                "PASSWORD": DB_PASSWORD,
+                "HOST": DB_HOST,
+                "PORT": DB_PORT,
+                "CONN_MAX_AGE": 600,
+            })
+        # else: 값이 불완전하면 안전하게 SQLite 유지
+
+# 운영 보호: SQLite로 떨어지는 사고 방지
+if not DEBUG:
+    assert DATABASES["default"]["ENGINE"].endswith("postgresql"), "PostgreSQL required in production"
 
 # ---- 국제화 ------------------------------------------------------------------
 LANGUAGE_CODE = "ko-kr"
@@ -121,19 +165,18 @@ REST_FRAMEWORK = {
 }
 
 # ---- drf-spectacular (Swagger/OpenAPI) --------------------------------------
-# settings.py
 SPECTACULAR_SETTINGS = {
     "TITLE": "임산부 헬스케어 API",
     "VERSION": "v0.2.1",
 
-    # ✅ 네가 지정한 전역 보안/서버 — 그대로 유지
+    # 전역 보안/서버 — 그대로 유지
     "SECURITY": [{"AppToken": []}],
     "SERVERS": [
         {"url": "/ai", "description": "via gateway"},
         {"url": "/",  "description": "in-cluster direct"},
     ],
 
-    # ✅ securitySchemes에 AppToken 정의(Authorize 버튼이 X-App-Token을 인식)
+    # securitySchemes에 AppToken 정의(Authorize 버튼이 X-App-Token을 인식)
     "COMPONENTS": {
         "securitySchemes": {
             "AppToken": {
@@ -150,4 +193,3 @@ SPECTACULAR_SETTINGS = {
         "persistAuthorization": False,  # 전역 인증 저장 안 함
     },
 }
-

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta, date
 from typing import Dict, Tuple, Protocol, Optional, runtime_checkable
 import uuid
+import math
 
 # ──────────────────────────────────────────────────────────────────────────────
 # KST / 버킷
@@ -29,7 +30,7 @@ class StatsProvider(Protocol):
         ...
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 설정(네 규칙 반영)
+# 설정
 # ──────────────────────────────────────────────────────────────────────────────
 @dataclass(frozen=True)
 class AnomalyConfig:
@@ -49,7 +50,7 @@ class AnomalyConfig:
 
     supported_metrics: Tuple[str, ...] = ("hr", "stress")
 
-    # 쿨다운
+    # 쿨다운(초)
     restrict_cooldown_sec: int = 180
     emergency_cooldown_sec: int = 3600
 
@@ -79,10 +80,15 @@ class AnomalyResult:
     ok: bool
     anomaly: bool
     risk_level: str         # "low" | "high" | "critical"
-    mode: str               # "normal" | "restrict" | "emergency"
+    mode: str               # "normal" | "restrict" | "emergency" | "cooldown"
     reasons: Tuple[str, ...]
     trigger: Optional[str] = None  # "hr_high" | "hr_low" | "stress_up"
     z: Optional[float] = None
+
+    # cooldown payload (있을 때만 세팅)
+    cooldown_min: Optional[int] = None
+    cooldown_source: Optional[str] = None  # "restrict" | "emergency"
+    cooldown_until: Optional[datetime] = None
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 탐지기
@@ -101,7 +107,6 @@ class AnomalyDetector:
         *,
         stats: Optional[StatsProvider] = None
     ):
-        # 레거시 대응: 첫 인자가 StatsProvider였던 형태 지원
         if isinstance(config, StatsProvider) and provider is None and stats is None:
             provider = config
             config = None
@@ -122,23 +127,33 @@ class AnomalyDetector:
         except Exception:
             return None
 
+    # ──────────────────────────────────────────────────────────────────
     # 외부: 평가 (UTC 기준)
+    # ──────────────────────────────────────────────────────────────────
     def evaluate(self, *, user_ref: str, ts_utc: datetime, metrics: Dict[str, float]) -> AnomalyResult:
         S = self._users.setdefault(user_ref, UserState())
 
-        # 0) emergency 쿨다운 우선
+        # 0) emergency 쿨다운 우선 → 별도 모드 "cooldown"
         if S.emergency_until and ts_utc <= S.emergency_until:
+            remain = max(0, int((S.emergency_until - ts_utc).total_seconds()))
+            cd_min = max(1, math.ceil(remain / 60)) if remain > 0 else 1
             return AnomalyResult(
-                ok=True, anomaly=True, risk_level="critical", mode="emergency",
+                ok=True, anomaly=True, risk_level="critical", mode="cooldown",
                 reasons=(f"emergency_cooldown_until={S.emergency_until.isoformat()}",),
-                trigger="hr_high"  # 응급은 카테고리 안 씀
+                cooldown_min=cd_min, cooldown_source="emergency", cooldown_until=S.emergency_until
             )
 
         present = [m for m in self.cfg.supported_metrics if m in metrics]
         if not present:
+            # metric이 없어도 restrict 쿨다운이면 cooldown으로
             if S.restrict_until and ts_utc <= S.restrict_until:
-                return AnomalyResult(True, True, "high", "restrict",
-                                     (f"restrict_cooldown_until={S.restrict_until.isoformat()}",))
+                remain = max(0, int((S.restrict_until - ts_utc).total_seconds()))
+                cd_min = max(1, math.ceil(remain / 60)) if remain > 0 else 1
+                return AnomalyResult(
+                    True, True, "high", "cooldown",
+                    (f"restrict_cooldown_until={S.restrict_until.isoformat()}",),
+                    cooldown_min=cd_min, cooldown_source="restrict", cooldown_until=S.restrict_until
+                )
             return AnomalyResult(True, False, "low", "normal", ("no_supported_metrics",))
 
         # 1) 버킷/날짜
@@ -163,7 +178,6 @@ class AnomalyDetector:
             except Exception:
                 pass
 
-            # 후보 플래그
             emg_hr_z = (hr_z is not None and abs(hr_z) >= self.cfg.z_emergency)
             res_hr_z_hi = (hr_z is not None and hr_z >= self.cfg.z_restrict)
             res_hr_z_lo = (hr_z is not None and hr_z <= -self.cfg.z_restrict)
@@ -200,29 +214,45 @@ class AnomalyDetector:
 
         # 5) EMERGENCY(우선): |Z|>=5 3틱
         if S.emg_hr_z_c >= self.cfg.consecutive_required:
-            # 리셋 + emergency 쿨다운
             S.emg_hr_z_c = S.emg_stress_z_c = 0
             S.res_hr_high_c = S.res_hr_low_c = S.res_stress_c = 0
             S.restrict_until = None
             S.emergency_until = ts_utc + timedelta(seconds=self.cfg.emergency_cooldown_sec)
             trig = "hr_high" if (hr_z is None or hr_z >= 0) else "hr_low"
-            return AnomalyResult(True, True, "critical", "emergency",
-                                 (f"|HR_Z|>={self.cfg.z_emergency:g} x{self.cfg.consecutive_required}",),
-                                 trigger=trig, z=hr_z)
+            res = AnomalyResult(
+                True, True, "critical", "emergency",
+                (f"|HR_Z|>={self.cfg.z_emergency:g} x{self.cfg.consecutive_required}",),
+                trigger=trig, z=hr_z
+            )
+            res.cooldown_min = max(1, math.ceil(self.cfg.emergency_cooldown_sec / 60))
+            res.cooldown_source = "emergency"
+            res.cooldown_until = S.emergency_until
+            return res
 
         if S.emg_stress_z_c >= self.cfg.consecutive_required:
             S.emg_hr_z_c = S.emg_stress_z_c = 0
             S.res_hr_high_c = S.res_hr_low_c = S.res_stress_c = 0
             S.restrict_until = None
             S.emergency_until = ts_utc + timedelta(seconds=self.cfg.emergency_cooldown_sec)
-            return AnomalyResult(True, True, "critical", "emergency",
-                                 (f"|STRESS_Z|>={self.cfg.z_emergency:g} x{self.cfg.consecutive_required}",),
-                                 trigger="stress_up", z=stress_z)
+            res = AnomalyResult(
+                True, True, "critical", "emergency",
+                (f"|STRESS_Z|>={self.cfg.z_emergency:g} x{self.cfg.consecutive_required}",),
+                trigger="stress_up", z=stress_z
+            )
+            res.cooldown_min = max(1, math.ceil(self.cfg.emergency_cooldown_sec / 60))
+            res.cooldown_source = "emergency"
+            res.cooldown_until = S.emergency_until
+            return res
 
-        # 6) RESTRICT 쿨다운 유지
+        # 6) RESTRICT 쿨다운 유지 → 별도 모드 "cooldown"
         if S.restrict_until and ts_utc <= S.restrict_until:
-            return AnomalyResult(True, True, "high", "restrict",
-                                 (f"restrict_cooldown_until={S.restrict_until.isoformat()}",))
+            remain = max(0, int((S.restrict_until - ts_utc).total_seconds()))
+            cd_min = max(1, math.ceil(remain / 60)) if remain > 0 else 1
+            return AnomalyResult(
+                True, True, "high", "cooldown",
+                (f"restrict_cooldown_until={S.restrict_until.isoformat()}",),
+                cooldown_min=cd_min, cooldown_source="restrict", cooldown_until=S.restrict_until
+            )
 
         # 7) RESTRICT: HR_HIGH > HR_LOW > STRESS
         if S.res_hr_high_c >= self.cfg.consecutive_required:
@@ -231,7 +261,11 @@ class AnomalyDetector:
             reason = ("HR_Z>={:.1f} x{}".format(self.cfg.z_restrict, self.cfg.consecutive_required)
                       if (hr_z is not None and hr_z >= self.cfg.z_restrict)
                       else "HR_inst>={} x{}".format(self.cfg.hr_inst_restrict_high, self.cfg.consecutive_required))
-            return AnomalyResult(True, True, "high", "restrict", (reason,), trigger="hr_high", z=hr_z)
+            res = AnomalyResult(True, True, "high", "restrict", (reason,), trigger="hr_high", z=hr_z)
+            res.cooldown_min = max(1, math.ceil(self.cfg.restrict_cooldown_sec / 60))
+            res.cooldown_source = "restrict"
+            res.cooldown_until = S.restrict_until
+            return res
 
         if S.res_hr_low_c >= self.cfg.consecutive_required:
             S.res_hr_high_c = S.res_hr_low_c = S.res_stress_c = 0
@@ -239,7 +273,11 @@ class AnomalyDetector:
             reason = ("HR_Z<={:.1f} x{}".format(-self.cfg.z_restrict, self.cfg.consecutive_required)
                       if (hr_z is not None and hr_z <= -self.cfg.z_restrict)
                       else "HR_inst<={} x{}".format(self.cfg.hr_inst_restrict_low, self.cfg.consecutive_required))
-            return AnomalyResult(True, True, "high", "restrict", (reason,), trigger="hr_low", z=hr_z)
+            res = AnomalyResult(True, True, "high", "restrict", (reason,), trigger="hr_low", z=hr_z)
+            res.cooldown_min = max(1, math.ceil(self.cfg.restrict_cooldown_sec / 60))
+            res.cooldown_source = "restrict"
+            res.cooldown_until = S.restrict_until
+            return res
 
         if S.res_stress_c >= self.cfg.consecutive_required:
             S.res_hr_high_c = S.res_hr_low_c = S.res_stress_c = 0
@@ -247,19 +285,20 @@ class AnomalyDetector:
             reason = ("|STRESS_Z|>={:.1f} x{}".format(self.cfg.z_restrict, self.cfg.consecutive_required)
                       if stress_z is not None
                       else "STRESS_abs>={:.2f} x{}".format(self.cfg.stress_abs_fallback, self.cfg.consecutive_required))
-        # (주의: 위 if에서 return 누락되면 정상모드로 떨어질 수 있음)
-            return AnomalyResult(True, True, "high", "restrict", (reason,), trigger="stress_up", z=stress_z)
+            res = AnomalyResult(True, True, "high", "restrict", (reason,), trigger="stress_up", z=stress_z)
+            res.cooldown_min = max(1, math.ceil(self.cfg.restrict_cooldown_sec / 60))
+            res.cooldown_source = "restrict"
+            res.cooldown_until = S.restrict_until
+            return res
 
         # 8) 이상 없음
         return AnomalyResult(True, False, "low", "normal", ())
 
     # ──────────────────────────────────────────────────────────────────────────
     # views.py 호환용: handle_telemetry
-    #   - 입력 ts가 KST든 UTC든 상관없이 tz-aware면 UTC로 변환, naive면 UTC 가정
-    #   - 반환: {"level": "normal|restrict|emergency", "trigger": "...", "session_id": "..."}
     # ──────────────────────────────────────────────────────────────────────────
     def handle_telemetry(self, *, user_ref: str, ts: datetime, metrics: Dict[str, float]) -> Dict[str, Optional[str]]:
-        # ts를 UTC로 정규화
+        # ts → UTC
         ts_utc = ts
         if ts_utc.tzinfo is None:
             ts_utc = ts_utc.replace(tzinfo=timezone.utc)
@@ -268,13 +307,21 @@ class AnomalyDetector:
 
         res = self.evaluate(user_ref=user_ref, ts_utc=ts_utc, metrics=metrics)
 
-        out = {
-            "level": res.mode,          # "normal" | "restrict" | "emergency"
+        out: Dict[str, Optional[str]] = {
+            "level": res.mode,          # "normal" | "restrict" | "emergency" | "cooldown"
             "trigger": res.trigger,     # None 가능
         }
 
-        # restrict / emergency에서 session_id 필요 → 여기서 생성(영속 저장은 상위에서)
+        # 세션 ID는 restrict/emergency에서만 발급(클라-서버 신규 세션 생성 트리거)
         if res.mode in ("restrict", "emergency"):
             out["session_id"] = str(uuid.uuid4())
+
+        # cooldown payload(있으면 항상 첨부)
+        if res.cooldown_min is not None:
+            out["cooldown_min"] = res.cooldown_min
+        if res.cooldown_source:
+            out["cooldown_source"] = res.cooldown_source
+        if res.cooldown_until is not None:
+            out["cooldown_until"] = res.cooldown_until.isoformat()
 
         return out
