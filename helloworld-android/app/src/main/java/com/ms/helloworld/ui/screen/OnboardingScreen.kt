@@ -66,7 +66,9 @@ enum class ScreenType {
     WITH_WEARABLE,
     WITH_FAMILY,
     WITH_NIGHT_SCENE,
-    USER_INFO_FORM
+    BASIC_INFO_FORM,
+    MOM_INFO_FORM,
+    DAD_INFO_FORM
 }
 
 private const val TAG = "싸피_OnboardingScreen"
@@ -75,7 +77,9 @@ fun OnboardingScreens(
     navController: NavHostController,
     viewModel: OnboardingViewModel = hiltViewModel()
 ) {
-    val screens = listOf(
+    val state by viewModel.state.collectAsState()
+
+    val baseScreens = listOf(
         OnboardingScreen(
             title = "반가워요!",
             subtitle = "회원님",
@@ -103,14 +107,37 @@ fun OnboardingScreens(
             screenType = ScreenType.WITH_NIGHT_SCENE
         ),
         OnboardingScreen(
-            title = "더 나은 맞춤 케어를 위해\n 몇 가지 정보를 입력주세요",
-            screenType = ScreenType.USER_INFO_FORM
+            title = "기본 정보를 입력해주세요",
+            screenType = ScreenType.BASIC_INFO_FORM
         )
     )
 
+    // 성별에 따라 추가 화면 동적 생성
+    val screens = remember(state.selectedGender, state.nickname, state.age) {
+        buildList {
+            addAll(baseScreens)
+
+            // 성별이 선택되었고, 기본 정보가 입력된 경우에만 추가 화면 표시
+            if (state.selectedGender.isNotBlank() &&
+                state.nickname.isNotBlank() &&
+                state.age.isNotBlank()) {
+
+                when (state.selectedGender) {
+                    "엄마" -> add(OnboardingScreen(
+                        title = "임신 관련 정보를 입력해주세요",
+                        screenType = ScreenType.MOM_INFO_FORM
+                    ))
+                    "아빠" -> add(OnboardingScreen(
+                        title = "초대 코드를 입력해주세요",
+                        screenType = ScreenType.DAD_INFO_FORM
+                    ))
+                }
+            }
+        }
+    }
+
     val pagerState = rememberPagerState(pageCount = { screens.size })
     val scope = rememberCoroutineScope()
-    val state by viewModel.state.collectAsState()
 
     // 애니메이션을 위한 알파 값
     val alpha by animateFloatAsState(
@@ -126,6 +153,11 @@ fun OnboardingScreens(
                 popUpTo(Screen.OnboardingScreens.route) { inclusive = true }
             }
         }
+    }
+
+    // 기본 정보 입력 완료 시 pager 상태 업데이트
+    LaunchedEffect(screens.size) {
+        // screens 크기가 변경되면 pagerState도 업데이트됨
     }
 
     // 에러 메시지 표시
@@ -171,27 +203,28 @@ fun OnboardingScreens(
 
             // 다음/시작하기 버튼
             val isLastPage = pagerState.currentPage == screens.size - 1
-            val isButtonEnabled = if (isLastPage) {
-                // 로딩 중이면 비활성화
-                !state.isLoading && when (state.selectedGender) {
-                    "엄마" -> {
-                        state.nickname.isNotBlank() &&
-                        state.age.isNotBlank() &&
-                        state.selectedGender.isNotBlank() &&
-                        state.isChildbirth != null &&
-                        state.menstrualDate.isNotBlank() &&
-                        state.menstrualCycle.isNotBlank()
-                    }
-                    "아빠" -> {
-                        state.nickname.isNotBlank() &&
-                        state.age.isNotBlank() &&
-                        state.selectedGender.isNotBlank() &&
-                        state.invitationCode.isNotBlank()
-                    }
-                    else -> false
+            val currentScreen = screens[pagerState.currentPage]
+
+            val isButtonEnabled = when {
+                state.isLoading -> false // 로딩 중이면 비활성화
+                currentScreen.screenType == ScreenType.BASIC_INFO_FORM -> {
+                    // 기본 정보 입력 화면: 성별, 태명, 나이가 모두 입력되어야 함
+                    state.selectedGender.isNotBlank() &&
+                    state.nickname.isNotBlank() &&
+                    state.age.isNotBlank()
                 }
-            } else {
-                true // 마지막 페이지가 아니면 항상 활성화
+                currentScreen.screenType == ScreenType.MOM_INFO_FORM -> {
+                    // 엄마 상세 정보 화면: 임신 관련 정보가 모두 입력되어야 함
+                    state.isChildbirth != null &&
+                    state.menstrualDate.isNotBlank() &&
+                    state.menstrualCycle.isNotBlank()
+                }
+                currentScreen.screenType == ScreenType.DAD_INFO_FORM -> {
+                    // 아빠 상세 정보 화면: 초대코드가 검증되어야 함
+                    state.invitationCode.isNotBlank() &&
+                    state.isInviteCodeValid
+                }
+                else -> true // 다른 화면들은 항상 활성화
             }
 
 
@@ -200,9 +233,19 @@ fun OnboardingScreens(
                 onClick = {
                     scope.launch {
                         if (isLastPage) {
-                            // 회원 정보 업데이트 API 호출
-                            viewModel.submitUserInfo()
+                            // 마지막 페이지: 최종 완료 처리
+                            viewModel.completeOnboarding()
+                        } else if (currentScreen.screenType == ScreenType.BASIC_INFO_FORM) {
+                            // Basic 화면에서 다음: Member 정보 저장
+                            val success = viewModel.saveBasicInfo()
+                            if (success) {
+                                pagerState.animateScrollToPage(
+                                    pagerState.currentPage + 1,
+                                    animationSpec = tween(durationMillis = 500)
+                                )
+                            }
                         } else {
+                            // 일반 다음 페이지 이동
                             pagerState.animateScrollToPage(
                                 pagerState.currentPage + 1,
                                 animationSpec = tween(durationMillis = 500)
@@ -223,7 +266,8 @@ fun OnboardingScreens(
             ) {
                 Text(
                     text = when {
-                        isLastPage && state.isLoading -> "처리 중..."
+                        state.isLoading -> "처리 중..."
+                        currentScreen.screenType == ScreenType.BASIC_INFO_FORM -> "다음"
                         isLastPage -> "시작하기"
                         else -> "다음"
                     },
@@ -251,13 +295,17 @@ fun OnboardingPage(
     ) {
         Text(
             text = screen.title,
-            fontSize = if (screen.screenType == ScreenType.USER_INFO_FORM) 20.sp else 22.sp,
+            fontSize = if (screen.screenType == ScreenType.BASIC_INFO_FORM ||
+                           screen.screenType == ScreenType.MOM_INFO_FORM ||
+                           screen.screenType == ScreenType.DAD_INFO_FORM) 20.sp else 22.sp,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
             modifier = Modifier
                 .padding(
                     bottom = 8.dp,
-                    top = if (screen.screenType == ScreenType.USER_INFO_FORM) 16.dp else 0.dp
+                    top = if (screen.screenType == ScreenType.BASIC_INFO_FORM ||
+                            screen.screenType == ScreenType.MOM_INFO_FORM ||
+                            screen.screenType == ScreenType.DAD_INFO_FORM) 16.dp else 0.dp
                 )
         )
 
@@ -286,41 +334,56 @@ fun OnboardingPage(
             ScreenType.WITH_WEARABLE -> WearableContent()
             ScreenType.WITH_FAMILY -> FamilyContent()
             ScreenType.WITH_NIGHT_SCENE -> NightSceneContent()
-            ScreenType.USER_INFO_FORM -> {
+            ScreenType.BASIC_INFO_FORM -> {
                 if (viewModel != null) {
-                    Log.d(TAG, "OnboardingPage: ")
-                    UserInfoFormContent(
+                    BasicInfoFormContent(
                         viewModel = viewModel,
                         state = onboardingState,
                         modifier = Modifier.padding(bottom = 100.dp)
                     )
                 }
             }
-
+            ScreenType.MOM_INFO_FORM -> {
+                if (viewModel != null) {
+                    MomInfoFormContent(
+                        viewModel = viewModel,
+                        state = onboardingState,
+                        modifier = Modifier.padding(bottom = 100.dp)
+                    )
+                }
+            }
+            ScreenType.DAD_INFO_FORM -> {
+                if (viewModel != null) {
+                    DadInfoFormContent(
+                        viewModel = viewModel,
+                        state = onboardingState,
+                        modifier = Modifier.padding(bottom = 100.dp)
+                    )
+                }
+            }
             else -> Spacer(modifier = Modifier.height(100.dp))
         }
     }
 }
 
 @Composable
-fun UserInfoFormContent(
+fun BasicInfoFormContent(
     viewModel: OnboardingViewModel,
     state: OnboardingState,
     modifier: Modifier = Modifier
 ) {
-
     LazyColumn(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            // 성별 - 첫 번째로 변경
+            // 성별
             Column {
                 Text(
                     text = "성별",
-                    fontSize = 14.sp,
+                    fontSize = 16.sp,
                     fontWeight = FontWeight.Medium,
                     modifier = Modifier.padding(bottom = 12.dp)
                 )
@@ -341,14 +404,14 @@ fun UserInfoFormContent(
             }
         }
 
-        // 성별 선택 후에만 나머지 필드들 표시 (애니메이션 적용)
+        // 성별 선택 후에만 나머지 필드들 표시
         item {
             AnimatedVisibility(
                 visible = state.selectedGender.isNotBlank(),
                 enter = fadeIn(animationSpec = tween(300)) + expandVertically(animationSpec = tween(300)),
                 exit = fadeOut(animationSpec = tween(300)) + shrinkVertically(animationSpec = tween(300))
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     // 태명
                     FormFieldUpdated(
                         label = "태명",
@@ -373,114 +436,165 @@ fun UserInfoFormContent(
                 }
             }
         }
+    }
+}
 
-        // 엄마만 보이는 필드들 (애니메이션 적용)
+@Composable
+fun MomInfoFormContent(
+    viewModel: OnboardingViewModel,
+    state: OnboardingState,
+    modifier: Modifier = Modifier
+) {
+    LazyColumn(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item {
+            // 출산 경험 여부
+            Column {
+                Text(
+                    text = "출산 경험 여부",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    SelectionButton(
+                        text = "있어요",
+                        isSelected = state.isChildbirth == true,
+                        onClick = { viewModel.updateChildbirthStatus(true) }
+                    )
+                    SelectionButton(
+                        text = "없어요",
+                        isSelected = state.isChildbirth == false,
+                        onClick = { viewModel.updateChildbirthStatus(false) }
+                    )
+                }
+            }
+        }
+
+        item {
+            // 마지막 생리일
+            FormFieldUpdated(
+                label = "마지막 생리일",
+                value = state.menstrualDate,
+                onValueChange = { viewModel.updateMenstrualDate(it) },
+                isDateField = true
+            )
+        }
+
+        item {
+            // 생리 주기
+            FormFieldUpdated(
+                label = "생리 주기(일)",
+                value = state.menstrualCycle,
+                onValueChange = { viewModel.updateMenstrualCycle(it) }
+            )
+        }
+
+        // 계산된 임신 주차 표시
         item {
             AnimatedVisibility(
-                visible = state.selectedGender == "엄마",
-                enter = fadeIn(animationSpec = tween(300)) + expandVertically(animationSpec = tween(300)),
-                exit = fadeOut(animationSpec = tween(300)) + shrinkVertically(animationSpec = tween(300))
+                visible = state.calculatedPregnancyWeek > 0,
+                enter = fadeIn(animationSpec = tween(300)),
+                exit = fadeOut(animationSpec = tween(300))
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // 출산 경험 여부
-                    Column {
-                        Text(
-                            text = "출산 경험 여부",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.padding(bottom = 12.dp)
-                        )
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            SelectionButton(
-                                text = "있어요",
-                                isSelected = state.isChildbirth == true,
-                                onClick = { viewModel.updateChildbirthStatus(true) }
-                            )
-                            SelectionButton(
-                                text = "없어요",
-                                isSelected = state.isChildbirth == false,
-                                onClick = { viewModel.updateChildbirthStatus(false) }
-                            )
-                        }
-                    }
-
-                    // 마지막 생리일
-                    FormFieldUpdated(
-                        label = "마지막 생리일",
-                        value = state.menstrualDate,
-                        onValueChange = { viewModel.updateMenstrualDate(it) },
-                        isDateField = true
+                Column {
+                    Text(
+                        text = "계산된 임신 주차",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(bottom = 8.dp)
                     )
 
-                    // 생리 주기
-                    FormFieldUpdated(
-                        label = "생리 주기(일)",
-                        value = state.menstrualCycle,
-                        onValueChange = { viewModel.updateMenstrualCycle(it) }
-                    )
-
-                    // 계산된 임신 주차 표시
-                    AnimatedVisibility(
-                        visible = state.calculatedPregnancyWeek > 0,
-                        enter = fadeIn(animationSpec = tween(300)),
-                        exit = fadeOut(animationSpec = tween(300))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .background(
+                                Color(0xFFF5F5F5),
+                                RoundedCornerShape(8.dp)
+                            )
+                            .border(
+                                1.dp,
+                                Color(0xFFE0E0E0),
+                                RoundedCornerShape(8.dp)
+                            )
+                            .padding(horizontal = 16.dp),
+                        contentAlignment = Alignment.CenterStart
                     ) {
-                        Column {
-                            Text(
-                                text = "계산된 임신 주차",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Medium,
-                                modifier = Modifier.padding(bottom = 8.dp)
-                            )
+                        Text(
+                            text = "${state.calculatedPregnancyWeek}주",
+                            fontSize = 14.sp,
+                            color = MainColor,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
 
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(48.dp)
-                                    .background(
-                                        Color(0xFFF5F5F5),
-                                        RoundedCornerShape(8.dp)
-                                    )
-                                    .border(
-                                        1.dp,
-                                        Color(0xFFE0E0E0),
-                                        RoundedCornerShape(8.dp)
-                                    )
-                                    .padding(horizontal = 16.dp),
-                                contentAlignment = Alignment.CenterStart
-                            ) {
-                                Text(
-                                    text = "${state.calculatedPregnancyWeek}주",
-                                    fontSize = 14.sp,
-                                    color = MainColor,
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
-                        }
+@Composable
+fun DadInfoFormContent(
+    viewModel: OnboardingViewModel,
+    state: OnboardingState,
+    modifier: Modifier = Modifier
+) {
+    LazyColumn(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item {
+            // 초대 코드
+            FormFieldUpdated(
+                label = "초대 코드",
+                value = state.invitationCode,
+                onValueChange = { viewModel.updateInvitationCode(it) }
+            )
+        }
+
+        // 검증 버튼
+        item {
+            if (state.invitationCode.isNotBlank()) {
+                Button(
+                    onClick = { viewModel.validateInviteCode() },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !state.isValidatingInviteCode && !state.isInviteCodeValid,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (state.isInviteCodeValid) Color(0xFF4CAF50) else MainColor,
+                        disabledContainerColor = Color(0xFFE0E0E0)
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    when {
+                        state.isValidatingInviteCode -> Text("검증 중...", color = Color.White)
+                        state.isInviteCodeValid -> Text("✓ 검증 완료", color = Color.White)
+                        else -> Text("초대 코드 검증", color = Color.White)
                     }
                 }
             }
         }
 
-        // 아빠만 보이는 필드들 (애니메이션 적용)
+        // 에러 메시지
         item {
-            AnimatedVisibility(
-                visible = state.selectedGender == "아빠",
-                enter = fadeIn(animationSpec = tween(300)) + expandVertically(animationSpec = tween(300)),
-                exit = fadeOut(animationSpec = tween(300)) + shrinkVertically(animationSpec = tween(300))
-            ) {
-                // 초대 코드
-                FormFieldUpdated(
-                    label = "초대 코드",
-                    value = state.invitationCode,
-                    onValueChange = { viewModel.updateInvitationCode(it) }
+            state.inviteCodeError?.let { error ->
+                Text(
+                    text = error,
+                    color = Color(0xFFE53E3E),
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(top = 4.dp)
                 )
             }
         }
     }
-
 }
 
 @Composable

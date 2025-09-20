@@ -4,9 +4,10 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.navigation.navDeepLink
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.ms.helloworld.viewmodel.HomeViewModel
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -17,13 +18,11 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
-import com.ms.helloworld.MainActivity
 import com.ms.helloworld.ui.screen.CalendarScreen
 import com.ms.helloworld.ui.screen.CoupleProfileScreen
 import com.ms.helloworld.ui.screen.DiaryScreen
 import com.ms.helloworld.ui.screen.DiaryDetailScreen
 import com.ms.helloworld.ui.screen.DiaryRegisterScreen
-import com.ms.helloworld.ui.screen.DiaryRegisterScreenPreview
 import com.ms.helloworld.ui.screen.HomeScreen
 import com.ms.helloworld.ui.screen.LoginScreen
 import com.ms.helloworld.ui.screen.OnboardingScreens
@@ -40,6 +39,9 @@ fun MainNavigation(
 ) {
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = currentBackStackEntry?.destination?.route
+
+    // HomeViewModel을 가져와서 refresh 기능 사용
+    val homeViewModel: HomeViewModel = hiltViewModel()
 
     // 바텀 네비게이션을 표시할 화면들
     val screensWithBottomNav = BottomNavItem.items.map { it.route }
@@ -67,6 +69,12 @@ fun MainNavigation(
                                 restoreState = true
                             }
                         }
+
+                        // 출산일기 탭 클릭 시 HomeViewModel 강제 refresh
+                        if (route == BottomNavItem.Diary.route) {
+                            println("🔄 MainNavigation - 출산일기 탭 클릭, HomeViewModel 강제 refresh")
+                            homeViewModel.forceRefreshProfile()
+                        }
                     }
                 )
             }
@@ -91,7 +99,7 @@ fun MainNavigation(
             }
 
             composable(Screen.DiaryScreen.route) {
-                DiaryScreen(navController)
+                DiaryScreen(navController, homeViewModel = homeViewModel)
             }
 
             composable(
@@ -175,10 +183,15 @@ fun MainNavigation(
                 val diaryType = backStackEntry.arguments?.getString("diaryType") ?: "birth"
                 val day = backStackEntry.arguments?.getInt("day") ?: 1
 
+                val homeViewModel: HomeViewModel = hiltViewModel()
+                val momProfile by homeViewModel.momProfile.collectAsState()
+
                 DiaryBoardScreen(
                     navController = navController,
                     diaryType = diaryType,
-                    day = day
+                    day = day,
+                    pregnancyWeek = momProfile.pregnancyWeek,
+                    pregnancyDay = momProfile.currentDay
                 )
             }
 

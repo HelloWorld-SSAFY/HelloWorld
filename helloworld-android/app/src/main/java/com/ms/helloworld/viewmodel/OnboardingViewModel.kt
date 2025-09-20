@@ -3,7 +3,10 @@ package com.ms.helloworld.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ms.helloworld.dto.request.MemberRegisterRequest
+import com.ms.helloworld.dto.request.MemberUpdateRequest
+import com.ms.helloworld.dto.request.CoupleUpdateRequest
 import com.ms.helloworld.repository.MomProfileRepository
+import com.ms.helloworld.repository.CoupleRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -24,6 +27,9 @@ data class OnboardingState(
     val calculatedPregnancyWeek: Int = 0, // 계산된 임신 주차
     val dueDate: String = "", // yyyy-MM-dd format
     val invitationCode: String = "", // 아빠용 초대 코드
+    val isInviteCodeValid: Boolean = false, // 초대 코드 검증 상태
+    val isValidatingInviteCode: Boolean = false, // 초대 코드 검증 중
+    val inviteCodeError: String? = null, // 초대 코드 에러 메시지
     val isFormValid: Boolean = false,
     val isLoading: Boolean = false,
     val submitSuccess: Boolean = false,
@@ -32,7 +38,8 @@ data class OnboardingState(
 
 @HiltViewModel
 class OnboardingViewModel @Inject constructor(
-    private val momProfileRepository: MomProfileRepository
+    private val momProfileRepository: MomProfileRepository,
+    private val coupleRepository: CoupleRepository
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(OnboardingState())
@@ -114,8 +121,66 @@ class OnboardingViewModel @Inject constructor(
     }
 
     fun updateInvitationCode(code: String) {
-        _state.value = _state.value.copy(invitationCode = code)
+        _state.value = _state.value.copy(
+            invitationCode = code,
+            isInviteCodeValid = false, // 코드 변경시 검증 상태 초기화
+            inviteCodeError = null
+        )
         validateForm()
+    }
+
+    fun validateInviteCode() {
+        if (_state.value.invitationCode.isBlank()) return
+
+        viewModelScope.launch {
+            try {
+                // 현재 사용자 정보 확인
+                println("🔍 OnboardingViewModel - 초대 코드 검증 전 사용자 정보 확인")
+                try {
+                    val userInfo = momProfileRepository.getUserInfo()
+                    println("👤 현재 사용자 정보:")
+                    println("  - ID: ${userInfo.member.id}")
+                    println("  - 성별: ${userInfo.member.gender}")
+                    println("  - 닉네임: ${userInfo.member.nickname}")
+                    println("  - 현재 커플 상태: ${if (userInfo.couple != null) "커플 있음" else "커플 없음"}")
+                    if (userInfo.couple != null) {
+                        println("  - 커플 ID: ${userInfo.couple?.id}")
+                        println("  - userAId: ${userInfo.couple?.userAId}")
+                        println("  - userBId: ${userInfo.couple?.userBId}")
+                    }
+                } catch (e: Exception) {
+                    println("❌ 사용자 정보 조회 실패: ${e.message}")
+                }
+
+                _state.value = _state.value.copy(
+                    isValidatingInviteCode = true,
+                    inviteCodeError = null
+                )
+
+                val result = coupleRepository.acceptInvite(_state.value.invitationCode)
+                if (result.isSuccess) {
+                    _state.value = _state.value.copy(
+                        isValidatingInviteCode = false,
+                        isInviteCodeValid = true,
+                        inviteCodeError = null
+                    )
+                    println("✅ 초대 코드 검증 성공")
+                } else {
+                    _state.value = _state.value.copy(
+                        isValidatingInviteCode = false,
+                        isInviteCodeValid = false,
+                        inviteCodeError = "유효하지 않은 초대 코드입니다."
+                    )
+                }
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(
+                    isValidatingInviteCode = false,
+                    isInviteCodeValid = false,
+                    inviteCodeError = e.message ?: "초대 코드 검증 중 오류가 발생했습니다."
+                )
+            }
+            validateForm()
+        }
     }
 
     private fun validateForm() {
@@ -128,70 +193,122 @@ class OnboardingViewModel @Inject constructor(
         _state.value = currentState.copy(isFormValid = isValid)
     }
 
-    fun submitUserInfo() {
+    suspend fun saveBasicInfo(): Boolean {
         val currentState = _state.value
 
-        // 성별별 유효성 검사
-        val isValid = when (currentState.selectedGender) {
-            "엄마" -> {
-                currentState.nickname.isNotBlank() &&
-                currentState.age.isNotBlank() &&
-                currentState.selectedGender.isNotBlank() &&
-                currentState.isChildbirth != null &&
-                currentState.menstrualDate.isNotBlank() &&
-                currentState.menstrualCycle.isNotBlank()
-            }
-            "아빠" -> {
-                currentState.nickname.isNotBlank() &&
-                currentState.age.isNotBlank() &&
-                currentState.selectedGender.isNotBlank() &&
-                currentState.invitationCode.isNotBlank()
-            }
-            else -> false
+        // 기본 정보 유효성 검사
+        if (currentState.nickname.isBlank() ||
+            currentState.age.isBlank() ||
+            currentState.selectedGender.isBlank()) {
+            return false
         }
 
-        if (!isValid) return
+        return try {
+            _state.value = _state.value.copy(isLoading = true, errorMessage = null)
+
+            val combinedNickname = "${currentState.nickname} ${currentState.selectedGender}"
+            val gender = if (currentState.selectedGender == "엄마") "female" else "male"
+
+            val request = MemberRegisterRequest(
+                nickname = combinedNickname,
+                gender = gender,
+                age = currentState.age.toInt()
+            )
+
+            println("💾 기본 정보 저장:")
+            println("  - nickname: ${request.nickname}")
+            println("  - gender: ${request.gender}")
+            println("  - age: ${request.age}")
+
+            val result = momProfileRepository.registerUser(request)
+            if (result != null) {
+                _state.value = _state.value.copy(
+                    isLoading = false,
+                    errorMessage = null
+                )
+                println("✅ 기본 정보 저장 성공")
+                true
+            } else {
+                _state.value = _state.value.copy(
+                    isLoading = false,
+                    errorMessage = "기본 정보 저장에 실패했습니다."
+                )
+                false
+            }
+        } catch (e: Exception) {
+            _state.value = _state.value.copy(
+                isLoading = false,
+                errorMessage = e.message ?: "네트워크 오류가 발생했습니다."
+            )
+            false
+        }
+    }
+
+    fun completeOnboarding() {
+        val currentState = _state.value
 
         viewModelScope.launch {
             try {
                 _state.value = _state.value.copy(isLoading = true, errorMessage = null)
 
-                val combinedNickname = when (_state.value.selectedGender) {
-                    "엄마", "아빠" -> "${_state.value.nickname} ${_state.value.selectedGender}"
-                    else -> _state.value.nickname
-                }
+                when (currentState.selectedGender) {
+                    "엄마" -> {
+                        // 엄마: 임신 정보 업데이트 (기본 정보는 이미 저장됨)
+                        println("👩 엄마 임신 정보 업데이트")
 
-                val request = MemberRegisterRequest(
-                    nickname = combinedNickname,
-                    gender = when (_state.value.selectedGender) {
-                        "엄마" -> "female"
-                        "아빠" -> "male"
-                        else -> _state.value.selectedGender
-                    },
-                    age = _state.value.age.toInt(),
-                    menstrual_date = if (_state.value.selectedGender == "엄마" && _state.value.menstrualDate.isNotBlank())
-                        _state.value.menstrualDate else null,
-                    is_childbirth = if (_state.value.selectedGender == "엄마") _state.value.isChildbirth else null,
-                    pregnancyWeek = if (_state.value.selectedGender == "엄마" && _state.value.calculatedPregnancyWeek > 0)
-                        _state.value.calculatedPregnancyWeek else null,
-                    due_date = if (_state.value.selectedGender == "엄마" && _state.value.dueDate.isNotBlank())
-                        _state.value.dueDate else null,
-                    invitationCode = if (_state.value.selectedGender == "아빠" && _state.value.invitationCode.isNotBlank())
-                        _state.value.invitationCode else null
-                )
+                        // Member 정보 업데이트 (생리일, 출산경험) - updateProfile API 사용
+                        val memberUpdateRequest = MemberUpdateRequest(
+                            nickname = null, // 닉네임은 이미 저장되었으므로 null
+                            age = null, // 나이도 이미 저장되었으므로 null
+                            menstrual_date = if (currentState.menstrualDate.isNotBlank()) currentState.menstrualDate else null
+                        )
 
-                val result = momProfileRepository.registerUser(request)
+                        val memberResult = momProfileRepository.updateProfile(memberUpdateRequest)
 
-                if (result != null) {
-                    _state.value = _state.value.copy(
-                        isLoading = false,
-                        submitSuccess = true
-                    )
-                } else {
-                    _state.value = _state.value.copy(
-                        isLoading = false,
-                        errorMessage = "등록에 실패했습니다."
-                    )
+                        // Couple 정보 업데이트 (임신주차, 예정일) - updateCoupleInfo API 사용
+                        val coupleUpdateRequest = CoupleUpdateRequest(
+                            pregnancyWeek = if (currentState.calculatedPregnancyWeek > 0) currentState.calculatedPregnancyWeek else null,
+                            due_date = if (currentState.dueDate.isNotBlank()) currentState.dueDate else null
+                        )
+
+                        val coupleResult = momProfileRepository.updateCoupleInfo(coupleUpdateRequest)
+
+                        if (memberResult != null && coupleResult != null) {
+                            _state.value = _state.value.copy(
+                                isLoading = false,
+                                submitSuccess = true
+                            )
+                            println("✅ 엄마 정보 업데이트 완료")
+                        } else {
+                            _state.value = _state.value.copy(
+                                isLoading = false,
+                                errorMessage = "임신 정보 저장에 실패했습니다."
+                            )
+                        }
+                    }
+                    "아빠" -> {
+                        // 아빠: 초대코드 검증만 확인 (기본 정보는 이미 저장됨)
+                        println("👨 아빠 온보딩 완료 - 초대코드로 couple 연결 완료")
+
+                        if (currentState.isInviteCodeValid) {
+                            _state.value = _state.value.copy(
+                                isLoading = false,
+                                submitSuccess = true
+                            )
+                            println("✅ 아빠 온보딩 완료")
+                        } else {
+                            _state.value = _state.value.copy(
+                                isLoading = false,
+                                errorMessage = "초대코드 검증이 완료되지 않았습니다."
+                            )
+                        }
+                    }
+                    else -> {
+                        _state.value = _state.value.copy(
+                            isLoading = false,
+                            errorMessage = "잘못된 성별 정보입니다."
+                        )
+                    }
                 }
             } catch (e: Exception) {
                 _state.value = _state.value.copy(

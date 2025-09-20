@@ -9,6 +9,7 @@ data class DiaryResponse(
     @SerializedName("author_role") val authorRole: String, // "FATHER" or "MOTHER"
     @SerializedName("diary_title") val diaryTitle: String?,
     @SerializedName("diary_content") val diaryContent: String?,
+    @SerializedName("target_date") val targetDate: String, // "yyyy-MM-dd" format
     @SerializedName("created_at") val createdAt: String,
     @SerializedName("updated_at") val updatedAt: String
 )

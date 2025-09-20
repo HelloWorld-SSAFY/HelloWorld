@@ -6,7 +6,8 @@ import kotlin.math.abs
 data class MomProfile(
     val nickname: String,
     val pregnancyWeek: Int,
-    val dueDate: LocalDate
+    val dueDate: LocalDate,
+    val lastMenstruationDate: LocalDate? = null
 ) {
     val currentDay: Int
         get() = (pregnancyWeek - 1) * 7 + 1

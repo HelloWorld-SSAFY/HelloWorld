@@ -22,6 +22,12 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import com.ms.helloworld.navigation.Screen
 import com.ms.helloworld.ui.components.CustomTopAppBar
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.ms.helloworld.viewmodel.HomeViewModel
+import com.ms.helloworld.viewmodel.DiaryViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.DisposableEffect
+import androidx.lifecycle.compose.LocalLifecycleOwner
 
 // 데이터 클래스들
 data class DiaryEntry(
@@ -44,41 +50,161 @@ fun DiaryDetailScreen(
     initialDay: Int = 1
 ) {
     val backgroundColor = Color(0xFFF5F5F5)
-    var currentDay by remember { mutableStateOf(initialDay) }
 
-    // 샘플 데이터 (실제로는 Repository나 ViewModel에서 가져올 데이터)
-    val diaryData = remember {
-        mutableStateMapOf<Int, DailyDiary>(
-            1 to DailyDiary(
-                day = 1,
-                birthDiary = DiaryEntry(
-                    title = "첫 날 기록",
-                    content = "오늘은 정말 특별한 날이었어요. 아기의 움직임을 더 자주 느낄 수 있었고, 남편과 함께 아기 용품을 준비하는 시간이 행복했습니다.",
-                    date = "2024-01-01"
-                ),
-                observationDiary = null
-            ),
-            2 to DailyDiary(
-                day = 2,
-                birthDiary = null,
-                observationDiary = DiaryEntry(
-                    title = "몸의 변화",
-                    content = "오늘은 입덧이 조금 있었지만 전반적으로 컨디션이 좋았어요. 체중도 적정 수준을 유지하고 있고, 수면의 질도 개선되고 있는 것 같습니다.",
-                    date = "2024-01-02"
-                )
-            )
+    // HomeViewModel에서 임신 주차 정보 가져오기
+    val homeViewModel: HomeViewModel = hiltViewModel()
+    val momProfile by homeViewModel.momProfile.collectAsState()
+    val userGender by homeViewModel.userGender.collectAsState()
+
+    // 디버깅을 위한 로그
+    LaunchedEffect(userGender) {
+        println("🚻 DiaryDetailScreen - 사용자 성별: $userGender")
+        println("🚻 DiaryDetailScreen - 출산일기 버튼 표시: ${userGender?.lowercase() == "female"}")
+        println("🚻 DiaryDetailScreen - 관찰일기 버튼 표시: ${userGender?.lowercase() == "male"}")
+    }
+
+    // DiaryViewModel에서 일별 일기 데이터 가져오기
+    val diaryViewModel: DiaryViewModel = hiltViewModel()
+    val diaryState by diaryViewModel.state.collectAsStateWithLifecycle()
+
+    // 현재 주차의 총 일수 (1주 = 7일)
+    val totalDaysInWeek = 7
+
+    // 현재 주차의 시작일과 끝일 계산
+    val weekStartDay = (momProfile.pregnancyWeek - 1) * 7 + 1
+    val weekEndDay = momProfile.pregnancyWeek * 7
+
+    // 현재 선택된 날 (주차 내에서의 상대적 위치)
+    var currentDayInWeek by remember { mutableStateOf(initialDay.coerceIn(1, totalDaysInWeek)) }
+
+    // 실제 임신 일수 계산 (전체 임신 기간에서의 절대적 위치)
+    val actualDayNumber = weekStartDay + currentDayInWeek - 1
+
+    // TODO: SharedPreferences나 DataStore에서 실제 사용자 정보 가져오기
+    val getCoupleId = { 1L } // 임시로 하드코딩
+    val getLmpDate = { "2025-02-02" } // 임시로 하드코딩 (스웨거와 동일)
+
+    // 일별 일기 데이터 로드
+    LaunchedEffect(actualDayNumber) {
+        // day API 호출: calendar/diary/day
+        println("📆 DiaryDetailScreen - 일별 일기 로드")
+        println("  - actualDayNumber: ${actualDayNumber}일차")
+        println("  - pregnancyWeek: ${momProfile.pregnancyWeek}주차")
+        println("  - currentDayInWeek: $currentDayInWeek")
+        println("  - coupleId: ${getCoupleId()}")
+        println("  - lmpDate: ${getLmpDate()}")
+
+        // 임시 테스트: 작은 day 값으로 테스트
+        val testDay = if (actualDayNumber > 100) {
+            (actualDayNumber % 280) + 1 // 임신 기간 내로 조정
+        } else {
+            actualDayNumber
+        }
+
+        println("📝 임시 테스트 - 원본 day: $actualDayNumber, 조정된 day: $testDay")
+
+        diaryViewModel.loadDiariesByDay(
+            coupleId = getCoupleId(),
+            day = testDay,
+            lmpDate = getLmpDate()
         )
     }
 
-    val currentDiary = diaryData[currentDay] ?: DailyDiary(currentDay, null, null)
+    // 화면이 다시 나타날 때 새로고침 (일기 등록 후 돌아올 때)
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                println("🔄 DiaryDetailScreen - 화면 복귀, 일기 새로고침")
+
+                // 디버깅용: 전체 일기 조회
+                diaryViewModel.loadAllDiariesForDebug()
+
+                // 일별 일기 조회
+                diaryViewModel.loadDiariesByDay(
+                    coupleId = getCoupleId(),
+                    day = actualDayNumber,
+                    lmpDate = getLmpDate()
+                )
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    // API에서 로드된 일기 데이터 사용
+    val apiDiaries = diaryState.diaries
+
+    // API 데이터를 DailyDiary 형식으로 변환
+    val currentDiary = if (apiDiaries.isNotEmpty()) {
+        val birthDiary = apiDiaries.find { it.authorRole == "FEMALE" }?.let { diary ->
+            DiaryEntry(
+                title = diary.diaryTitle ?: "",
+                content = diary.diaryContent ?: "",
+                date = diary.targetDate
+            )
+        }
+        val observationDiary = apiDiaries.find { it.authorRole == "MALE" }?.let { diary ->
+            DiaryEntry(
+                title = diary.diaryTitle ?: "",
+                content = diary.diaryContent ?: "",
+                date = diary.targetDate
+            )
+        }
+        DailyDiary(
+            day = actualDayNumber,
+            birthDiary = birthDiary,
+            observationDiary = observationDiary
+        )
+    } else {
+        DailyDiary(actualDayNumber, null, null)
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
     ) {
-        CustomTopAppBar(
-            title = "diary",
-            navController = navController
+        // 커스텀 TopAppBar with 임신 주차 정보
+        TopAppBar(
+            title = {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(end = 48.dp), // navigationIcon 크기만큼 오른쪽 패딩 추가
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (momProfile.pregnancyWeek > 0) {
+                        Text(
+                            text = "${momProfile.pregnancyWeek}주차",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Medium,
+                            textAlign = TextAlign.Center
+                        )
+                    } else {
+                        Text(
+                            text = "출산일기",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Medium,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            },
+            navigationIcon = {
+                IconButton(onClick = { navController.popBackStack() }) {
+                    Icon(
+                        imageVector = Icons.Default.ArrowBack,
+                        contentDescription = "뒤로가기"
+                    )
+                }
+            },
+            colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = Color.White,
+                titleContentColor = Color.Black,
+                navigationIconContentColor = Color.Black
+            )
         )
         Column(
             modifier = Modifier
@@ -89,12 +215,14 @@ fun DiaryDetailScreen(
         ) {
             // 일자 네비게이션
             DayNavigationHeader(
-                currentDay = currentDay,
+                currentDay = actualDayNumber,
+                currentDayInWeek = currentDayInWeek,
+                totalDaysInWeek = totalDaysInWeek,
                 onPreviousDay = {
-                    if (currentDay > 1) currentDay--
+                    if (currentDayInWeek > 1) currentDayInWeek--
                 },
                 onNextDay = {
-                    if (currentDay < 7) currentDay++
+                    if (currentDayInWeek < totalDaysInWeek) currentDayInWeek++
                 }
             )
 
@@ -103,12 +231,13 @@ fun DiaryDetailScreen(
                 title = "출산일기",
                 diary = currentDiary.birthDiary,
                 borderColor = Color(0xFFF49699),
+                canAddOrEdit = userGender?.lowercase() == "female" || userGender == null, // 여성만 출산일기 작성/수정 가능 (로딩 중에는 모두 표시)
                 onAddClick = {
                     // 출산일기 작성 화면으로 이동
                     navController.navigate(
                         Screen.DiaryRegisterScreen.createRoute(
                             diaryType = "birth",
-                            day = currentDay,
+                            day = actualDayNumber,
                             isEdit = false
                         )
                     )
@@ -118,7 +247,7 @@ fun DiaryDetailScreen(
                     navController.navigate(
                         Screen.DiaryRegisterScreen.createRoute(
                             diaryType = "birth",
-                            day = currentDay,
+                            day = actualDayNumber,
                             isEdit = true
                         )
                     )
@@ -128,7 +257,7 @@ fun DiaryDetailScreen(
                     navController.navigate(
                         Screen.DiaryBoardScreen.createRoute(
                             diaryType = "birth",
-                            day = currentDay
+                            day = actualDayNumber
                         )
                     )
                 }
@@ -139,12 +268,13 @@ fun DiaryDetailScreen(
                 title = "관찰일기",
                 diary = currentDiary.observationDiary,
                 borderColor = Color(0xFF88A9F8),
+                canAddOrEdit = userGender?.lowercase() == "male" || userGender == null, // 남성만 관찰일기 작성/수정 가능 (로딩 중에는 모두 표시)
                 onAddClick = {
                     // 관찰일기 작성 화면으로 이동
                     navController.navigate(
                         Screen.DiaryRegisterScreen.createRoute(
                             diaryType = "observation",
-                            day = currentDay,
+                            day = actualDayNumber,
                             isEdit = false
                         )
                     )
@@ -154,7 +284,7 @@ fun DiaryDetailScreen(
                     navController.navigate(
                         Screen.DiaryRegisterScreen.createRoute(
                             diaryType = "observation",
-                            day = currentDay,
+                            day = actualDayNumber,
                             isEdit = true
                         )
                     )
@@ -164,7 +294,7 @@ fun DiaryDetailScreen(
                     navController.navigate(
                         Screen.DiaryBoardScreen.createRoute(
                             diaryType = "observation",
-                            day = currentDay
+                            day = actualDayNumber
                         )
                     )
                 }
@@ -176,6 +306,8 @@ fun DiaryDetailScreen(
 @Composable
 fun DayNavigationHeader(
     currentDay: Int,
+    currentDayInWeek: Int,
+    totalDaysInWeek: Int,
     onPreviousDay: () -> Unit,
     onNextDay: () -> Unit
 ) {
@@ -186,33 +318,43 @@ fun DayNavigationHeader(
     ) {
         IconButton(
             onClick = onPreviousDay,
-            enabled = currentDay > 1
+            enabled = currentDayInWeek > 1
         ) {
             Icon(
                 Icons.Default.KeyboardArrowLeft,
                 contentDescription = "이전 날",
                 modifier = Modifier.size(28.dp),
-                tint = if (currentDay > 1) Color.Black else Color.Gray
+                tint = if (currentDayInWeek > 1) Color.Black else Color.Gray
             )
         }
 
-        Text(
-            text = "${currentDay}일차",
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Medium,
-            color = Color.Black,
-            textAlign = TextAlign.Center
-        )
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "${currentDay}일차",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color.Black,
+                textAlign = TextAlign.Center
+            )
+            Text(
+                text = "(${currentDayInWeek}/7일)",
+                fontSize = 12.sp,
+                color = Color.Gray,
+                textAlign = TextAlign.Center
+            )
+        }
 
         IconButton(
             onClick = onNextDay,
-            enabled = currentDay < 7
+            enabled = currentDayInWeek < totalDaysInWeek
         ) {
             Icon(
                 Icons.Default.KeyboardArrowRight,
                 contentDescription = "다음 날",
                 modifier = Modifier.size(28.dp),
-                tint = if (currentDay < 7) Color.Black else Color.Gray
+                tint = if (currentDayInWeek < totalDaysInWeek) Color.Black else Color.Gray
             )
         }
     }
@@ -223,6 +365,7 @@ fun DiarySection(
     title: String,
     diary: DiaryEntry?,
     borderColor: Color,
+    canAddOrEdit: Boolean = true,
     onAddClick: () -> Unit,
     onEditClick: () -> Unit,
     onContentClick: () -> Unit
@@ -258,16 +401,21 @@ fun DiarySection(
                     color = borderColor
                 )
 
-                IconButton(
-                    onClick = if (diary != null) onEditClick else onAddClick,
-                    modifier = Modifier.size(24.dp)
-                ) {
-                    Icon(
-                        if (diary != null) Icons.Default.Edit else Icons.Default.Add,
-                        contentDescription = if (diary != null) "수정" else "추가",
-                        modifier = Modifier.size(20.dp),
-                        tint = borderColor
-                    )
+                if (canAddOrEdit) {
+                    IconButton(
+                        onClick = if (diary != null) onEditClick else onAddClick,
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            if (diary != null) Icons.Default.Edit else Icons.Default.Add,
+                            contentDescription = if (diary != null) "수정" else "추가",
+                            modifier = Modifier.size(20.dp),
+                            tint = borderColor
+                        )
+                    }
+                } else {
+                    // 권한이 없을 때는 빈 공간으로 대체
+                    Spacer(modifier = Modifier.size(24.dp))
                 }
             }
 

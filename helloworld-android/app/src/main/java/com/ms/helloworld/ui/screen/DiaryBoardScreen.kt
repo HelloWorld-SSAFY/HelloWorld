@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -52,10 +53,15 @@ data class DiaryBoardData(
 fun DiaryBoardScreen(
     navController: NavHostController,
     diaryType: String, // "birth" 또는 "observation"
-    day: Int
+    day: Int,
+    pregnancyWeek: Int = 0,
+    pregnancyDay: Int = 0
 ) {
     val backgroundColor = Color(0xFFF5F5F5)
     val title = if (diaryType == "birth") "출산일기" else "관찰일기"
+
+    // 디버깅용 로그
+    println("🐛 DiaryBoardScreen - pregnancyWeek: $pregnancyWeek, pregnancyDay: $pregnancyDay")
 
     // 샘플 데이터
     val diaryData = remember {
@@ -74,16 +80,20 @@ fun DiaryBoardScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { 
+                title = {
                     Box(
                         modifier = Modifier.fillMaxWidth(),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = title,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Medium
-                        )
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = title,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
                     }
                 },
                 navigationIcon = {

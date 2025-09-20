@@ -45,8 +45,24 @@ interface DiaryApi {
     ): DiaryListResponse
 
     // 특정 날짜의 일기 조회
-    @GET("calendar/diary/date")
+    @GET("calendar/diary/day")
     suspend fun getDiariesByDate(
         @Query("date") date: String // "yyyy-MM-dd" format
+    ): DiaryListResponse
+
+    // 커플 ID와 주차별 일기 조회 (calendar/diary/week)
+    @GET("calendar/diary/week")
+    suspend fun getDiariesByWeek(
+        @Query("coupleId") coupleId: Long,
+        @Query("week") week: Int,
+        @Query("lmpDate") lmpDate: String
+    ): DiaryListResponse
+
+    // 커플 ID와 일별 일기 조회 (calendar/diary/day)
+    @GET("calendar/diary/day")
+    suspend fun getDiariesByDay(
+        @Query("coupleId") coupleId: Long,
+        @Query("day") day: Int,
+        @Query("lmpDate") lmpDate: String
     ): DiaryListResponse
 }

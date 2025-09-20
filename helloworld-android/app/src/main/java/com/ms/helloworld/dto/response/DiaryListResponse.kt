@@ -3,7 +3,7 @@ package com.ms.helloworld.dto.response
 import com.google.gson.annotations.SerializedName
 
 data class DiaryListResponse(
-    @SerializedName("content") val content: List<DiaryResponse>,
+    @SerializedName("content") val content: List<DiaryResponse>?,
     @SerializedName("pageable") val pageable: PageableInfo?,
     @SerializedName("totalElements") val totalElements: Int,
     @SerializedName("totalPages") val totalPages: Int,

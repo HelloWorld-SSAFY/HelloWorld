@@ -60,19 +60,29 @@ enum class DiaryState {
 fun DiaryScreen(
     navController: NavHostController,
     viewModel: DiaryViewModel = hiltViewModel(),
-    homeViewModel: HomeViewModel = hiltViewModel()
+    homeViewModel: HomeViewModel? = null
 ) {
+    // homeViewModel이 전달되지 않으면 기본 hiltViewModel 사용
+    val actualHomeViewModel = homeViewModel ?: hiltViewModel<HomeViewModel>()
+    println("📱 DiaryScreen - HomeViewModel 인스턴스: ${actualHomeViewModel.hashCode()}")
+    println("📱 DiaryScreen - 전달받은 HomeViewModel: ${homeViewModel?.hashCode() ?: "null"}")
+
     val backgroundColor = Color(0xFFF5F5F5)
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val homeState by homeViewModel.momProfile.collectAsStateWithLifecycle()
+    val homeState by actualHomeViewModel.momProfile.collectAsState()
 
     // 실제 임신 정보 사용
     val currentWeek = homeState?.let { profile ->
+        println("📊 DiaryScreen - MomProfile 데이터: 주차=${profile.pregnancyWeek}, 계산된일차=${profile.currentDay}, 닉네임=${profile.nickname}")
+        println("📊 DiaryScreen - homeState 객체 해시: ${profile.hashCode()}")
         PregnancyWeek(
             week = profile.pregnancyWeek,
             dayCount = profile.currentDay
         )
-    } ?: PregnancyWeek(week = 1, dayCount = 1) // 기본값
+    } ?: run {
+        println("⚠️ DiaryScreen - homeState가 null, 기본값 사용")
+        PregnancyWeek(week = 1, dayCount = 1)
+    }
 
     // API에서 받은 주간 일기 상태를 기존 형식으로 변환
     val weeklyDiaryStatus = state.weeklyDiaryStatus.map { weeklyStatus ->
@@ -101,6 +111,29 @@ fun DiaryScreen(
         condition = "좋음"
     )
 
+    // HomeViewModel에서 임신 주차가 업데이트될 때 DiaryViewModel 새로고침
+    LaunchedEffect(homeState?.pregnancyWeek) {
+        homeState?.let { profile ->
+            println("🔄 DiaryScreen - 임신 주차 변경 감지: ${profile.pregnancyWeek}주차")
+            viewModel.loadWeeklyDiaries(profile.pregnancyWeek)
+        }
+    }
+
+    // 디버깅: HomeState 변경사항 추적
+    LaunchedEffect(homeState) {
+        if (homeState == null) {
+            println("📊 DiaryScreen - HomeState가 null입니다")
+        } else {
+            println("📊 DiaryScreen - LaunchedEffect HomeState 업데이트: 주차=${homeState.pregnancyWeek}, 닉네임=${homeState.nickname}, currentDay=${homeState.currentDay}")
+            println("📊 DiaryScreen - homeState 객체 해시: ${homeState.hashCode()}")
+        }
+    }
+
+    // StateFlow 값 직접 확인
+    LaunchedEffect(Unit) {
+        println("📊 DiaryScreen - HomeViewModel StateFlow 직접 확인: ${actualHomeViewModel.momProfile.value.pregnancyWeek}주차")
+    }
+
     // 에러 메시지 표시
     LaunchedEffect(state.errorMessage) {
         state.errorMessage?.let { message ->
@@ -114,7 +147,9 @@ fun DiaryScreen(
         CustomTopAppBar(
             title = "${currentWeek.week}주차 (${currentWeek.dayCount}일째)",
             navController = navController
-        )
+        ).also {
+            println("🏷️ DiaryScreen TopAppBar - 표시 중: ${currentWeek.week}주차 (${currentWeek.dayCount}일째)")
+        }
 
         Column(
             modifier = Modifier

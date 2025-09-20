@@ -6,7 +6,9 @@ import com.ms.helloworld.dto.request.CoupleUpdateRequest
 import com.ms.helloworld.dto.request.MemberUpdateRequest
 import com.ms.helloworld.dto.response.MomProfile
 import com.ms.helloworld.dto.response.MemberProfile
+import com.ms.helloworld.dto.response.CoupleInviteCodeResponse
 import com.ms.helloworld.repository.MomProfileRepository
+import com.ms.helloworld.repository.CoupleRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,12 +22,15 @@ data class CoupleProfileState(
     val errorMessage: String? = null,
     val momProfile: MomProfile? = null,
     val memberProfile: MemberProfile? = null,
-    val inviteCode: String? = null
+    val inviteCode: String? = null,
+    val inviteCodeResponse: CoupleInviteCodeResponse? = null,
+    val isPartnerConnected: Boolean = false
 )
 
 @HiltViewModel
 class CoupleProfileViewModel @Inject constructor(
-    private val momProfileRepository: MomProfileRepository
+    private val momProfileRepository: MomProfileRepository,
+    private val coupleRepository: CoupleRepository
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(CoupleProfileState())
@@ -45,18 +50,21 @@ class CoupleProfileViewModel @Inject constructor(
                 val momProfile = momProfileRepository.getMomProfile()
 
                 if (momProfile != null) {
-                    // TODO: 초대코드 기능은 백엔드에서 구현 필요 (여성유저에게만 노출)
-                    val inviteCode = "ABC123" // 임시 코드
-
                     println("🚺 성별 디버깅 - memberProfile gender: ${userInfoResponse.member.gender}")
                     println("🚺 성별 디버깅 - memberProfile 전체: ${userInfoResponse.member}")
+
+                    // 파트너 연결 여부 확인
+                    val isPartnerConnected = userInfoResponse.couple?.userAId != null &&
+                                           userInfoResponse.couple?.userBId != null
 
                     _state.value = _state.value.copy(
                         isLoading = false,
                         momProfile = momProfile,
                         memberProfile = userInfoResponse.member,
-                        inviteCode = inviteCode
+                        isPartnerConnected = isPartnerConnected
                     )
+
+                    // 파트너가 연결되지 않은 경우에는 초대 코드 생성 버튼만 표시
                 } else {
                     _state.value = _state.value.copy(
                         isLoading = false,
@@ -136,6 +144,89 @@ class CoupleProfileViewModel @Inject constructor(
                 _state.value = _state.value.copy(
                     isLoading = false,
                     errorMessage = e.message ?: "네트워크 오류가 발생했습니다."
+                )
+            }
+        }
+    }
+
+
+    fun generateInviteCode() {
+        viewModelScope.launch {
+            try {
+                _state.value = _state.value.copy(isLoading = true, errorMessage = null)
+
+                val result = coupleRepository.generateInviteCode()
+                if (result.isSuccess) {
+                    val inviteCodeResponse = result.getOrNull()
+                    _state.value = _state.value.copy(
+                        isLoading = false,
+                        inviteCodeResponse = inviteCodeResponse,
+                        inviteCode = inviteCodeResponse?.code
+                    )
+                    println("✅ 초대 코드 생성 성공: ${inviteCodeResponse?.code}")
+                } else {
+                    val error = result.exceptionOrNull()?.message ?: "초대 코드 생성 실패"
+                    _state.value = _state.value.copy(
+                        isLoading = false,
+                        errorMessage = error
+                    )
+                }
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(
+                    isLoading = false,
+                    errorMessage = e.message ?: "네트워크 오류"
+                )
+            }
+        }
+    }
+
+    fun acceptInviteCode(code: String) {
+        viewModelScope.launch {
+            try {
+                _state.value = _state.value.copy(isLoading = true, errorMessage = null)
+
+                val result = coupleRepository.acceptInvite(code)
+                if (result.isSuccess) {
+                    println("✅ 초대 코드 수락 성공")
+                    // 프로필 정보 다시 로드
+                    loadCoupleProfile()
+                } else {
+                    val error = result.exceptionOrNull()?.message ?: "초대 코드 수락 실패"
+                    _state.value = _state.value.copy(
+                        isLoading = false,
+                        errorMessage = error
+                    )
+                }
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(
+                    isLoading = false,
+                    errorMessage = e.message ?: "네트워크 오류"
+                )
+            }
+        }
+    }
+
+    fun disconnectCouple() {
+        viewModelScope.launch {
+            try {
+                _state.value = _state.value.copy(isLoading = true, errorMessage = null)
+
+                val result = coupleRepository.disconnectCouple()
+                if (result.isSuccess) {
+                    println("✅ 커플 연결 해제 성공")
+                    // 프로필 정보 다시 로드
+                    loadCoupleProfile()
+                } else {
+                    val error = result.exceptionOrNull()?.message ?: "커플 연결 해제 실패"
+                    _state.value = _state.value.copy(
+                        isLoading = false,
+                        errorMessage = error
+                    )
+                }
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(
+                    isLoading = false,
+                    errorMessage = e.message ?: "네트워크 오류"
                 )
             }
         }
