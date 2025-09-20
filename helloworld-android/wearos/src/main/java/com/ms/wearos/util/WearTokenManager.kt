@@ -7,16 +7,21 @@ import com.google.android.gms.wearable.DataEvent
 import com.google.android.gms.wearable.DataEventBuffer
 import com.google.android.gms.wearable.DataMapItem
 import com.google.android.gms.wearable.Wearable
+import com.google.firebase.messaging.FirebaseMessaging
+import com.ms.wearos.dto.request.Platforms
+import com.ms.wearos.repository.FcmRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
+import javax.inject.Provider
 import javax.inject.Singleton
 
 @Singleton
 class WearTokenManager @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val fcmRepositoryProvider: Provider<FcmRepository>
 ) : DataClient.OnDataChangedListener {
 
     companion object {
@@ -93,6 +98,8 @@ class WearTokenManager @Inject constructor(
     }
 
     private fun updateTokensInternal(accessToken: String, refreshToken: String?, timestamp: Long) {
+        val hadToken = !_accessToken.value.isNullOrEmpty()
+
         _accessToken.value = accessToken
         _refreshToken.value = refreshToken
         _tokenTimestamp.value = timestamp
@@ -101,6 +108,29 @@ class WearTokenManager @Inject constructor(
         Log.d(TAG, "WearTokenManager - Internal token update completed")
         Log.d(TAG, "WearTokenManager - Token timestamp: $timestamp")
         Log.d(TAG, "WearTokenManager - Current time: ${System.currentTimeMillis()}")
+
+        // 토큰을 새로 받았을 때 FCM 토큰 재등록
+        if (!hadToken) {
+            registerFcmTokenIfAvailable()
+        }
+    }
+
+    private fun registerFcmTokenIfAvailable() {
+        // Firebase에서 현재 FCM 토큰 가져와서 서버에 등록
+        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+            if (!task.isSuccessful) {
+                Log.w(TAG, "FCM 토큰 가져오기 실패", task.exception)
+                return@addOnCompleteListener
+            }
+
+            val fcmToken = task.result
+            Log.d(TAG, "Access Token 받은 후 FCM 토큰 재등록: ${fcmToken}")
+
+            // 서버에 FCM 토큰 등록
+            // Provider를 통해 런타임에 가져오기
+            val fcmRepository = fcmRepositoryProvider.get()
+            fcmRepository.registerTokenAsync(token = fcmToken, Platforms.WATCH)
+        }
     }
 
     private fun clearTokensInternal() {

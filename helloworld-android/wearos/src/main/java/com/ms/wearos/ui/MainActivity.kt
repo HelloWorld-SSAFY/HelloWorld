@@ -1,4 +1,4 @@
-package com.ms.wearos.presentation
+package com.ms.wearos.ui
 
 import android.Manifest
 import android.content.*
@@ -31,13 +31,15 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.filled.Face
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModelProvider
+import com.ms.wearos.repository.FcmRepository
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
-import com.ms.wearos.presentation.theme.HelloWorldTheme
+import com.ms.wearos.ui.theme.HelloWorldTheme
 import com.ms.wearos.service.HealthDataService
 import com.ms.wearos.service.HealthServiceHelper
 import com.ms.wearos.viewmodel.WearMainViewModel
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
 private const val TAG = "싸피_MainActivity"
 
