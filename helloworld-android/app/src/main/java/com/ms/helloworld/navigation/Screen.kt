@@ -38,4 +38,5 @@ sealed class Screen(val route: String) {
         }
     }
     object NotificationScreen : Screen("notification")
+    object WearableRecommendedScreen : Screen("wearable_recommended")
 }

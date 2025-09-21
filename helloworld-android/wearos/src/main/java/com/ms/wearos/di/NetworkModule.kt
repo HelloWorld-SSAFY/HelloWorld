@@ -1,0 +1,78 @@
+package com.ms.wearos.di
+
+import com.ms.wearos.network.AuthInterceptor
+import com.ms.wearos.network.api.AuthApiService
+import com.ms.wearos.network.api.FcmApi
+import com.ms.wearos.network.api.WearApiService
+import dagger.Module
+import dagger.Provides
+import dagger.hilt.InstallIn
+import dagger.hilt.components.SingletonComponent
+import okhttp3.OkHttpClient
+import okhttp3.logging.HttpLoggingInterceptor
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
+import java.util.concurrent.TimeUnit
+import javax.inject.Singleton
+
+@Module
+@InstallIn(SingletonComponent::class)
+object NetworkModule {
+
+    private const val BASE_URL = "http://j13d204.p.ssafy.io:80"
+
+    // HTTP 로깅 인터셉터
+    @Provides
+    @Singleton
+    fun provideHttpLoggingInterceptor(): HttpLoggingInterceptor {
+        return HttpLoggingInterceptor().apply {
+            level = HttpLoggingInterceptor.Level.BODY
+        }
+    }
+
+    // OkHttpClient 제공
+    @Provides
+    @Singleton
+    fun provideOkHttpClient(
+        authInterceptor: AuthInterceptor,
+        loggingInterceptor: HttpLoggingInterceptor
+    ): OkHttpClient {
+        return OkHttpClient.Builder()
+            .addInterceptor(loggingInterceptor)    // HTTP 로그
+            .addInterceptor(authInterceptor)       // 토큰 자동 추가
+            .connectTimeout(30, TimeUnit.SECONDS)  // 연결 타임아웃
+            .readTimeout(30, TimeUnit.SECONDS)     // 읽기 타임아웃
+            .writeTimeout(30, TimeUnit.SECONDS)    // 쓰기 타임아웃
+            .build()
+    }
+
+    // Retrofit 제공
+    @Provides
+    @Singleton
+    fun provideRetrofit(okHttpClient: OkHttpClient): Retrofit {
+        return Retrofit.Builder()
+            .baseUrl(BASE_URL)
+            .client(okHttpClient)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+    }
+
+    @Provides
+    @Singleton
+    fun provideWearApi(retrofit: Retrofit): WearApiService {
+        return retrofit.create(WearApiService::class.java)
+    }
+
+    @Provides
+    @Singleton
+    fun provideAuthApiService(retrofit: Retrofit): AuthApiService {
+        return retrofit.create(AuthApiService::class.java)
+    }
+
+    @Provides
+    @Singleton
+    fun provideFcmApi(retrofit: Retrofit): FcmApi {
+        return retrofit.create(FcmApi::class.java)
+    }
+
+}

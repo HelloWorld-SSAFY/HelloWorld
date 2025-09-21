@@ -198,6 +198,10 @@ fun MainNavigation(
             composable(Screen.NotificationScreen.route) {
                 NotificationScreen(navController)
             }
+
+            composable(Screen.WearableRecommendedScreen.route){
+                WearableRecommendedScreen(navController)
+            }
         }
     }
 }

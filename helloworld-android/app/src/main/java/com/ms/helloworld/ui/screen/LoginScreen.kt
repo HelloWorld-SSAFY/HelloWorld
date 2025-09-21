@@ -129,7 +129,7 @@ fun LoginScreen(
                 // Kakao 로그인 버튼
                 Button(
                     onClick = {
-                        viewModel.signInWithKakao(context)
+//                        viewModel.signInWithKakao(context)
                     },
                     enabled = !state.isLoading,
                     modifier = Modifier
