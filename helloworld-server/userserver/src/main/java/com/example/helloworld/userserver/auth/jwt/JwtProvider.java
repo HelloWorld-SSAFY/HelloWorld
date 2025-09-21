@@ -5,6 +5,7 @@ import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 
+import lombok.Getter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -16,6 +17,7 @@ public class JwtProvider {
 
     private final SecretKey accessKey;
     private final SecretKey refreshKey;
+    @Getter
     private final long accessTokenMillis;
     private final long refreshTokenMillis;
 
@@ -71,4 +73,16 @@ public class JwtProvider {
                 .getSubject();
         return Long.parseLong(sub);
     }
+
+    public long getAccessTokenRemainingSeconds(String token) {
+        Date exp = Jwts.parserBuilder()
+                .setSigningKey(accessKey)
+                .build()
+                .parseClaimsJws(token)
+                .getBody()
+                .getExpiration();
+        long nowSec = System.currentTimeMillis() / 1000;
+        return Math.max(1, exp.getTime() / 1000 - nowSec);
+    }
+
 }

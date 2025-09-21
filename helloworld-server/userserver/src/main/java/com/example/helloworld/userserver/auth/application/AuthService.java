@@ -4,14 +4,20 @@ import com.example.helloworld.userserver.auth.application.command.LoginCommand;
 import com.example.helloworld.userserver.auth.application.result.LoginResult;
 import com.example.helloworld.userserver.auth.jwt.JwtProvider;
 import com.example.helloworld.userserver.auth.presentation.request.LogoutRequest;
-import com.example.helloworld.userserver.auth.token.*;
+import com.example.helloworld.userserver.auth.token.RefreshRequest;
+import com.example.helloworld.userserver.auth.token.RefreshResponse;
+import com.example.helloworld.userserver.auth.token.RefreshToken;
+import com.example.helloworld.userserver.auth.token.RefreshTokenRepository;
+import com.example.helloworld.userserver.auth.token.TokenHashes;
 import com.example.helloworld.userserver.exception.HelloWordException;
 import com.example.helloworld.userserver.exception.code.AuthErrorCode;
 import com.example.helloworld.userserver.member.entity.Member;
 import com.example.helloworld.userserver.member.persistence.MemberRepository;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken.Payload;
+import io.jsonwebtoken.Jwts;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -24,22 +30,20 @@ import java.util.concurrent.ThreadLocalRandom;
 
 @Service
 @RequiredArgsConstructor(access = AccessLevel.PROTECTED)
+@Slf4j
 public class AuthService {
 
     private final OAuthClient oAuthClient;
     private final MemberRepository memberRepository;
     private final JwtProvider jwtProvider;
     private final RefreshTokenRepository refreshTokenRepository;
+    private final TokenCacheService tokenCacheService;
 
     @Value("${jwt.refresh.expire}")     // ms 단위
     private long refreshMillis;
 
     /**
      * 로그인 + 자동 회원가입 (통합)
-     * - Google idToken 검증
-     * - 기존 회원 조회: googleEmail 기준
-     * - 없으면 자동 생성(닉네임 = "user" + 4자리 숫자, 중복 시 재시도)
-     * - JWT 발급(subject = memberId)
      */
     @Transactional
     public LoginResult login(LoginCommand command) {
@@ -55,13 +59,13 @@ public class AuthService {
         Member member = memberRepository.findByGoogleEmail(googleEmail).orElse(null);
 
         if (member == null) {
-            member = createMemberWithRetry(googleEmail, googleName); // <-- 새 헬퍼로 위임
+            member = createMemberWithRetry(googleEmail, googleName);
         }
 
         String accessToken  = jwtProvider.issueAccessToken(member.getId());
         String refreshToken = jwtProvider.issueRefreshToken(member.getId());
 
-        // 만료 계산 & 저장
+        // 만료 계산 & 저장 (RefreshToken DB)
         Instant rtExpiry = Instant.ofEpochMilli(System.currentTimeMillis() + refreshMillis);
         RefreshToken rt = RefreshToken.builder()
                 .memberId(member.getId())
@@ -71,11 +75,116 @@ public class AuthService {
                 .build();
         refreshTokenRepository.save(rt);
 
+        // AccessToken 캐시 등록 (Redis)
+        try {
+            long accessExpMs = System.currentTimeMillis() + jwtProvider.getAccessTokenMillis();
+            // TokenCacheService api: registerAccessToken(accessToken, memberId, coupleId, role, accessExpMs)
+            tokenCacheService.registerAccessToken(accessToken, member.getId(), null, null, accessExpMs);
+        } catch (Exception e) {
+            log.warn("Failed to register access token in cache for memberId={}: {}", member.getId(), e.getMessage());
+        }
+
         String gender = (member.getGender() == null) ? null : member.getGender().toString();
 
-        return new LoginResult(member.getId(), accessToken, refreshToken,gender);
+        return new LoginResult(member.getId(), accessToken, refreshToken, gender);
     }
 
+    // -----------------------
+    // RTR 적용된 refresh
+    // -----------------------
+    @Transactional
+    public RefreshResponse refresh(RefreshRequest req) {
+        String incomingRt = req.refreshToken();
+        if (incomingRt == null || incomingRt.isBlank()) {
+            throw new HelloWordException(AuthErrorCode.INVALID_REFRESH_TOKEN);
+        }
+
+        String hash = TokenHashes.sha256B64(incomingRt);
+
+        // 1) 원자적으로 해당 refresh 토큰을 revoked=true로 마킹 (한 번만 성공)
+        int updated = refreshTokenRepository.revokeIfNotRevoked(hash);
+
+        if (updated == 1) {
+            // 정상: 이 요청이 토큰 사용의 '첫번째' 성공자
+            Long memberId;
+            try {
+                memberId = jwtProvider.parseRefreshSubject(incomingRt);
+            } catch (Exception e) {
+                throw new HelloWordException(AuthErrorCode.INVALID_REFRESH_TOKEN);
+            }
+
+            // 3) 새 AT/RT 발급
+            String newAT = jwtProvider.issueAccessToken(memberId);
+            String newRT = jwtProvider.issueRefreshToken(memberId);
+
+            // 4) 새 RT DB에 저장
+            RefreshToken newEntity = RefreshToken.builder()
+                    .memberId(memberId)
+                    .tokenHash(TokenHashes.sha256B64(newRT))
+                    .expiresAt(Instant.ofEpochMilli(System.currentTimeMillis() + refreshMillis))
+                    .revoked(false)
+                    .build();
+            refreshTokenRepository.save(newEntity);
+
+            // 5) 새 AccessToken Redis 등록
+            try {
+                long accessExpMs = System.currentTimeMillis() + jwtProvider.getAccessTokenMillis();
+                tokenCacheService.registerAccessToken(newAT, memberId, null, null, accessExpMs);
+            } catch (Exception e) {
+                log.warn("token cache registration failed for memberId={}: {}", memberId, e.getMessage());
+            }
+
+            return new RefreshResponse(memberId, newAT, newRT);
+        } else {
+            // updated == 0 -> 이미 revoked 되었거나 DB에 없음
+            var maybe = refreshTokenRepository.findByTokenHash(hash);
+            if (maybe.isEmpty()) {
+                throw new HelloWordException(AuthErrorCode.INVALID_REFRESH_TOKEN);
+            } else {
+                RefreshToken existing = maybe.get();
+                Long memberId = existing.getMemberId();
+
+                try {
+                    refreshTokenRepository.revokeAllByMemberId(memberId);
+                } catch (Exception e) {
+                    log.error("Failed to revoke refresh tokens for member {}: {}", memberId, e.getMessage());
+                }
+
+                try {
+                    tokenCacheService.revokeAllAccessTokensForMember(memberId);
+                } catch (Exception e) {
+                    log.warn("Failed to revoke access tokens in cache for member {}: {}", memberId, e.getMessage());
+                }
+
+                log.warn("Refresh token reuse detected for memberId={} tokenHash={}", memberId, hash);
+
+                throw new HelloWordException(AuthErrorCode.REFRESH_TOKEN_REUSE_DETECTED);
+            }
+        }
+    }
+
+    @Transactional
+    public void logout(LogoutRequest req, String accessToken) {
+        if (req.refreshToken() != null && !req.refreshToken().isBlank()) {
+            String hash = TokenHashes.sha256B64(req.refreshToken());
+            refreshTokenRepository.findByTokenHash(hash).ifPresent(RefreshToken::revoke);
+        }
+        if (accessToken != null && !accessToken.isBlank()) {
+            long remain = jwtProvider.getAccessTokenRemainingSeconds(accessToken);
+            tokenCacheService.blacklistAccessToken(accessToken, remain);
+        }
+    }
+
+    @Transactional
+    public void withdraw(Long memberId) {
+        refreshTokenRepository.revokeAllByMemberId(memberId);
+        if (!memberRepository.existsById(memberId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        }
+        memberRepository.deleteById(memberId);
+    }
+
+    // --- 기존 헬퍼들 ---
     private String generateNickname() {
         String candidate;
         do {
@@ -97,54 +206,6 @@ public class AuthService {
         return (idx > 0) ? email.substring(0, idx) : email;
     }
 
-    @Transactional
-    public RefreshResponse refresh(RefreshRequest req){
-        String rt = req.refreshToken();
-        Long memberId = jwtProvider.parseRefreshSubject(rt);
-
-        var saved = refreshTokenRepository.findByTokenHash(TokenHashes.sha256B64(rt))
-                .orElseThrow(() -> new HelloWordException(AuthErrorCode.INVALID_ID_TOKEN));
-        if (saved.isRevoked() || saved.getExpiresAt().isBefore(Instant.now())) {
-            throw new HelloWordException(AuthErrorCode.INVALID_ID_TOKEN);
-        }
-
-        // rotate
-        saved.revoke(); // 필드 setter 추가하거나 copy-entity 저장 방식으로 처리
-        String newAT = jwtProvider.issueAccessToken(memberId);
-        String newRT = jwtProvider.issueRefreshToken(memberId);
-        refreshTokenRepository.save(
-                RefreshToken.builder()
-                        .memberId(memberId)
-                        .tokenHash(TokenHashes.sha256B64(newRT))
-                        .expiresAt(Instant.ofEpochMilli(System.currentTimeMillis() + refreshMillis))
-                        .revoked(false)
-                        .build()
-        );
-        return new RefreshResponse(memberId, newAT, newRT);
-    }
-
-    @Transactional
-    public void logout(LogoutRequest req) {
-        String rt = req.refreshToken();
-        if (rt == null || rt.isBlank()) return; // 바디 비어도 조용히 종료(정보 노출 방지)
-        String hash = TokenHashes.sha256B64(rt);
-        refreshTokenRepository.findByTokenHash(hash)
-                .ifPresent(RefreshToken::revoke); // 엔티티의 revoke() 사용
-    }
-
-    @Transactional
-    public void withdraw(Long memberId) {
-        // 1) RT 모두 무효화(선택: FK CASCADE면 생략 가능)
-        refreshTokenRepository.revokeAllByMemberId(memberId);
-
-        // 2) 하드 삭제
-        if (!memberRepository.existsById(memberId)) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
-        }
-
-        memberRepository.deleteById(memberId); // 실제 DELETE
-    }
-
     private Member createMemberWithRetry(String googleEmail, String googleName) {
         for (int i = 0; i < 5; i++) {
             try {
@@ -152,14 +213,11 @@ public class AuthService {
                         .googleEmail(googleEmail)
                         .nickname(generateNickname())
                         .build();
-                return memberRepository.save(toSave); // 성공 시 즉시 반환
+                return memberRepository.save(toSave);
             } catch (DataIntegrityViolationException ex) {
-                // 1) 이메일 경합: 누군가 먼저 가입
                 Member existing = memberRepository.findByGoogleEmail(googleEmail).orElse(null);
                 if (existing != null) return existing;
-
-                // 2) 닉네임 UNIQUE 충돌 등 → 닉네임 재생성 후 재시도
-                if (i == 4) throw ex; // 마지막에도 실패면 그대로 던져 트랜잭션 롤백
+                if (i == 4) throw ex;
             }
         }
         throw new IllegalStateException("회원 생성 재시도 초과");
