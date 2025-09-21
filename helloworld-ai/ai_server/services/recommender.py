@@ -2,7 +2,7 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass
 from typing import List, Optional, Dict, Any, Tuple
-from datetime import timedelta, timezone
+from datetime import timedelta, timezone, datetime
 
 from django.db import transaction
 from django.utils import timezone as dj_tz
@@ -46,6 +46,18 @@ def _as_list_lower(x) -> List[str]:
             return [t.strip().lower() for t in x.split(",") if t.strip()]
         return [x.strip().lower()] if x.strip() else []
     return []
+
+def _get_excluded_tags(ctx: Dict[str, Any]) -> List[str]:
+    """
+    입력 컨텍스트의 금기 태그 키를 호환성 있게 취합.
+    - 신규: 'taboo_tags'
+    - 구버전: 'excluded_tags'
+    """
+    out = []
+    out += _as_list_lower(ctx.get("taboo_tags"))
+    out += _as_list_lower(ctx.get("excluded_tags"))
+    # 중복 제거
+    return list(dict.fromkeys(out))
 
 def _tags_from_content(c: Content) -> List[str]:
     # 가장 흔한 필드들 보호적으로 조회
@@ -161,19 +173,26 @@ def _passes_preferences(c: Content, ec: Optional[ExposureCandidate], prefs: Opti
 def _ts_score(prior_a: float = 1.0, prior_b: float = 1.0) -> float:
     return random.betavariate(prior_a, prior_b)
 
+def _parse_hour_from_ts(ts_val: Any) -> int:
+    """
+    ctx['ts']가 문자열(ISO8601) 또는 datetime일 수 있으므로 안전 파싱.
+    실패시 현재 KST 시각의 시(hour) 반환.
+    """
+    try:
+        if isinstance(ts_val, datetime):
+            return ts_val.astimezone(KST).hour if ts_val.tzinfo else ts_val.replace(tzinfo=timezone.utc).astimezone(KST).hour
+        if isinstance(ts_val, str) and len(ts_val) >= 13:
+            return int(ts_val[11:13])
+    except Exception:
+        pass
+    return dj_tz.now().astimezone(KST).hour
+
 def _context_boost(base: float, ctx: Optional[Dict[str, Any]], c: Content) -> float:
     if not ctx:
         return base
 
     # 시간대
-    try:
-        ts = ctx.get("ts")  # ISO8601 or None
-        if ts:
-            hour = int(ts[11:13])
-        else:
-            hour = dj_tz.now().astimezone(KST).hour
-    except Exception:
-        hour = dj_tz.now().astimezone(KST).hour
+    hour = _parse_hour_from_ts(ctx.get("ts"))
 
     hr = ctx.get("hr")
     stress = ctx.get("stress")
@@ -239,7 +258,7 @@ def recommend_on_session(session_id: str, rec_in: RecInput) -> RecOutput:
     새 세션 만들지 않고, 주어진 session_id의 후보(ExposureCandidate)를 기반으로 추천.
     후보가 없으면 Content 테이블에서 category로 보강.
     - 컨텍스트:
-      * excluded_tags: 금기 태그(포함되면 제외)
+      * taboo_tags / excluded_tags: 금기 태그(포함되면 제외)  ← 호환 지원
       * preferences.duration_min/max: 길이 조건
       * preferences.music_provider: MUSIC 공급자 선호
     """
@@ -249,7 +268,7 @@ def recommend_on_session(session_id: str, rec_in: RecInput) -> RecOutput:
         raise ValueError("INVALID_SESSION")
 
     ctx = rec_in.context or {}
-    excluded = _as_list_lower(ctx.get("excluded_tags"))
+    excluded = _get_excluded_tags(ctx)  # ← 통합된 금기 태그
     prefs = ctx.get("preferences") if isinstance(ctx.get("preferences"), dict) else None
 
     # 1) 세션에 쌓인 후보 우선
@@ -298,8 +317,22 @@ def recommend_on_session(session_id: str, rec_in: RecInput) -> RecOutput:
     picked, best_score = scored[0]
 
     # 3) 선택 기록(ItemRec) (unique_together 보호)
-    if not ItemRec.objects.filter(session=sess, content=picked).exists():
-        ItemRec.objects.create(session=sess, content=picked, rank=1, score=best_score, reason="ts+context")
+    #    점수가 더 높으면 갱신
+    rec, created = ItemRec.objects.get_or_create(
+        session=sess,
+        content=picked,
+        defaults={"rank": 1, "score": best_score, "reason": "ts+context"},
+    )
+    if not created:
+        dirty = False
+        if rec.score is None or best_score > float(rec.score):
+            rec.score = best_score
+            dirty = True
+        if not rec.reason:
+            rec.reason = "ts+context"
+            dirty = True
+        if dirty:
+            rec.save(update_fields=["score", "reason"])
 
     # 4) 응답
     thumb = _thumb_for(sess, picked)
