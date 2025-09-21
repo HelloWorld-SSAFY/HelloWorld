@@ -62,10 +62,9 @@ spec:
           value: "true"
         - name: GATEWAY_HMAC_SECRET
           value: "ahCwnX3I9VuzLSYtQVn0cztXZrd4zhXSqgCy8j4q57o="
-        - name: SPRING_APPLICATION_JSON
-          value: >-
-            {"gateway":{"auth":{"skip-paths":
-            "/user/login,/user/refresh,/user/register,/swagger-ui,/swagger-ui/**,/v3/api-docs,/v3/api-docs/**,/user/v3/api-docs,/user/v3/api-docs/**,/calendar/v3/api-docs,/calendar/v3/api-docs/**,/health/v3/api-docs,/health/v3/api-docs/**,/weekly/v3/api-docs,/weekly/v3/api-docs/**,/ai/schema,/ai/schema/**,/actuator/**,/ai/swagger,/ai/swagger/**,/ai/docs,/ai/docs/**,/ai/static/**,/ai/v1/healthz"}}}
+        - name: GATEWAY_AUTH_SKIP_PATHS
+          value: "/user/login,/user/refresh,/user/register,/swagger-ui,/swagger-ui/**,/v3/api-docs,/v3/api-docs/**,/user/v3/api-docs,/user/v3/api-docs/**,/calendar/v3/api-docs,/calendar/v3/api-docs/**,/health/v3/api-docs,/health/v3/api-docs/**,/weekly/v3/api-docs,/weekly/v3/api-docs/**,/ai/schema,/ai/schema/**,/ai/swagger,/ai/swagger/**,/ai/docs,/ai/docs/**,/actuator/**,/user/api/auth/google"
+
         # === Redis (Bitnami 기본 값 기준) ===
         - name: SPRING_REDIS_HOST
           value: "redis-svc.apps.svc.cluster.local"
