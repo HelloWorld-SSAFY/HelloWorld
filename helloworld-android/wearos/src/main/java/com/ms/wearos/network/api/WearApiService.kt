@@ -1,6 +1,8 @@
 package com.ms.wearos.network.api
 
+import com.ms.wearos.dto.request.FetalMovementRequest
 import com.ms.wearos.dto.request.HealthDataRequest
+import com.ms.wearos.dto.request.LaborDataRequest
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.POST
@@ -15,5 +17,17 @@ interface WearApiService {
         @Body healthData: HealthDataRequest
     ): Response<Any>
 
+    // 태동 데이터 전송
+    @POST("/health/api/fetal-movement")
+    suspend fun sendFetalMovement(
+        @Query("coupleId") coupleId: Int,
+        @Body request: FetalMovementRequest
+    ): Response<Any>
 
+    // 진통 세션 전송
+    @POST("/health/api/contractions")
+    suspend fun sendLaborData(
+        @Query("coupleId") coupleId: Int,
+        @Body laborData: LaborDataRequest
+    ): Response<Any>
 }

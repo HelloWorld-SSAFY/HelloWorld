@@ -3,7 +3,9 @@ package com.ms.wearos.viewmodel
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ms.wearos.dto.request.FetalMovementRequest
 import com.ms.wearos.dto.request.HealthDataRequest
+import com.ms.wearos.dto.request.LaborDataRequest
 import com.ms.wearos.repository.AuthRepository
 import com.ms.wearos.repository.WearApiRepository
 import com.ms.wearos.util.WearTokenManager
@@ -29,7 +31,7 @@ private const val TAG = "싸피_WearMainViewModel"
 class WearMainViewModel @Inject constructor(
     private val wearRepository: WearApiRepository,
     private val authRepository: AuthRepository,
-    private val tokenManager: WearTokenManager
+    private val tokenManager: WearTokenManager,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(WearMainUiState())
@@ -112,11 +114,14 @@ class WearMainViewModel @Inject constructor(
     fun sendHealthData(date: String, heartRate: Int, stress: Int) {
         viewModelScope.launch {
             try {
+                val userInfo = authRepository.getUserInfo()
+                val coupleId = userInfo?.couple?.couple_id!!
+
                 val healthData = HealthDataRequest(date, heartRate, stress)
 
                 Log.d("WearMainViewModel", "건강 데이터 전송 시도: $healthData")
 
-                val response = wearRepository.sendHealthData(healthData)
+                val response = wearRepository.sendHealthData(coupleId, healthData)
 
                 if (response.isSuccessful) {
                     Log.d("WearMainViewModel", "건강 데이터 전송 성공: 심박수=${healthData.heartrate}, 스트레스=$healthData.stress")
@@ -130,6 +135,102 @@ class WearMainViewModel @Inject constructor(
                 Log.e("WearMainViewModel", "건강 데이터 전송 중 오류 발생", e)
                 _uiState.value = _uiState.value.copy(
                     errorMessage = "건강 데이터 전송 오류: ${e.message}"
+                )
+            }
+        }
+    }
+
+    fun sendFetalMovementData(recordedAt: String) {
+        viewModelScope.launch {
+            try {
+                _uiState.value = _uiState.value.copy(isLoading = true)
+
+                // 커플 ID 조회
+                val coupleId = getCoupleIdIfValid()
+                if (coupleId == null) {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        errorMessage = "커플 연동이 필요합니다"
+                    )
+                    return@launch
+                }
+
+                // FetalMovementRequest 객체 생성
+                val fetalMovementRequest = FetalMovementRequest(recordedAt = recordedAt)
+
+                // 태동 기록 전송
+                val response = wearRepository.sendFetalMovement(coupleId, fetalMovementRequest)
+
+                if (response.isSuccessful) {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                    )
+                    Log.d(TAG, "태동 기록 성공")
+                } else {
+                    val errorBody = response.errorBody()?.string()
+
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        errorMessage = "태동 기록 실패 (${response.code()}): $errorBody"
+                    )
+                }
+
+            } catch (e: Exception) {
+                Log.e(TAG, "태동 기록 예외", e)
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    errorMessage = "태동 기록 중 오류: ${e.message}"
+                )
+            }
+        }
+    }
+
+    fun sendLaborData(startTime: String, endTime: String) {
+        viewModelScope.launch {
+            try {
+                _uiState.value = _uiState.value.copy(isLoading = true)
+
+                // 커플 ID 조회
+                val coupleId = getCoupleIdIfValid()
+                if (coupleId == null) {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        errorMessage = "커플 연동이 필요합니다"
+                    )
+                    return@launch
+                }
+
+                // LaborDataRequest 객체 생성
+                val laborDataRequest = LaborDataRequest(
+                    startTime = startTime,
+                    endTime = endTime
+                )
+
+                Log.d(TAG, "진통 기록 전송 시도: coupleId=$coupleId, startTime=$startTime, endTime=$endTime")
+
+                // 진통 기록 전송
+                val response = wearRepository.sendLaborData(coupleId, laborDataRequest)
+
+                if (response.isSuccessful) {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        successMessage = "진통이 기록되었습니다"
+                    )
+                    Log.d(TAG, "진통 기록 성공")
+                } else {
+                    val errorBody = response.errorBody()?.string()
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        errorMessage = "진통 기록 실패 (${response.code()}): $errorBody"
+                    )
+                    Log.e(TAG, "진통 기록 실패: ${response.code()}")
+                }
+
+            } catch (e: Exception) {
+                Log.e(TAG, "진통 기록 예외", e)
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    errorMessage = "진통 기록 중 오류: ${e.message}"
                 )
             }
         }

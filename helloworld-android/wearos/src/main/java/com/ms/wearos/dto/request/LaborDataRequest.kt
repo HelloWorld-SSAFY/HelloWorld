@@ -1,8 +1,10 @@
 package com.ms.wearos.dto.request
 
+import com.google.gson.annotations.SerializedName
+
 data class LaborDataRequest(
-    val isActive: Boolean,
-    val duration: String?,
-    val interval: String?,
-    val timestamp: Long = System.currentTimeMillis()
+    @SerializedName("start_time")
+    val startTime: String,
+    @SerializedName("end_time")
+    val endTime: String
 )

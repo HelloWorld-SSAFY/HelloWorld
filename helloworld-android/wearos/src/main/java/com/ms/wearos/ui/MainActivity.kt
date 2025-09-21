@@ -345,12 +345,12 @@ class MainActivity : ComponentActivity() {
         return ensureAuthAndCouple(
             viewModel = viewModel,
             onAuthenticated = {
-                val currentTime =
-                    java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
-                        .format(java.util.Date())
+                // 수정: ISO 8601 형식으로 변경 (서버가 기대하는 형식)
+                val currentTime = java.time.Instant.now().toString()
+                // 결과: "2025-09-21T11:30:45.123Z" 형식
 
                 Log.d(TAG, "태동 기록됨: $currentTime")
-//                viewModel.sendFetalMovementData(currentTime)
+                viewModel.sendFetalMovementData(currentTime)
             },
             featureName = "태동 기록 서버 전송"
         )
@@ -359,15 +359,14 @@ class MainActivity : ComponentActivity() {
     // 진통 기록 (인증 체크 포함)
     private suspend fun recordLaborData(
         viewModel: WearMainViewModel,
-        isActive: Boolean,
-        duration: String? = null,
-        interval: String? = null
+        startTime: String,
+        endTime: String
     ): Boolean {
         return ensureAuthAndCouple(
             viewModel = viewModel,
             onAuthenticated = {
-                Log.d(TAG, "서버로 진통 데이터 전송 - 활성: $isActive, 지속시간: $duration, 간격: $interval")
-//                viewModel.sendLaborData(isActive, duration, interval)
+                Log.d(TAG, "서버로 진통 데이터 전송 - 시작: $startTime, 종료: $endTime")
+                viewModel.sendLaborData(startTime, endTime)
             },
             featureName = "진통 기록 서버 전송"
         )
@@ -593,14 +592,6 @@ class MainActivity : ComponentActivity() {
                 tint = MaterialTheme.colors.primary
             )
 
-            if (fetalMovementCount > 0) {
-                Text(
-                    text = "오늘 태동 횟수: ${fetalMovementCount}회",
-                    style = MaterialTheme.typography.body2,
-                    color = MaterialTheme.colors.onBackground
-                )
-            }
-
             Button(
                 onClick = {
                     lifecycleScope.launch {
@@ -625,12 +616,9 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun LaborRecordScreen(viewModel: WearMainViewModel) {
         var isLaborActive by remember { mutableStateOf(false) }
-        var laborStartTime by remember { mutableStateOf<Long?>(null) }
-        var laborDuration by remember { mutableStateOf("") }
+        var laborStartTime by remember { mutableStateOf<String?>(null) } // String으로 변경
         var laborCount by remember { mutableStateOf(0) }
         var lastLaborEndTime by remember { mutableStateOf("") }
-        var laborInterval by remember { mutableStateOf("") }
-        var previousLaborEndTime by remember { mutableStateOf<Long?>(null) }
 
         BackHandler {
             currentScreen.value = Screen.Main
@@ -660,82 +648,31 @@ class MainActivity : ComponentActivity() {
 
             Button(
                 onClick = {
-                    val currentTimeMs = System.currentTimeMillis()
-                    val currentTimeString =
-                        java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
-                            .format(java.util.Date(currentTimeMs))
-
                     if (!isLaborActive) {
-                        // 진통 시작
-                        var intervalToSend: String? = null
+                        // 진통 시작 - 시작 시간만 저장
+                        val startTime = java.time.Instant.now().toString()
+                        laborStartTime = startTime
+                        isLaborActive = true
 
-                        if (previousLaborEndTime != null) {
-                            val intervalMs = currentTimeMs - previousLaborEndTime!!
-                            val intervalMinutes = intervalMs / (1000 * 60)
-                            val intervalSeconds = (intervalMs % (1000 * 60)) / 1000
-                            intervalToSend = "${intervalMinutes}분 ${intervalSeconds}초"
-                            laborInterval = intervalToSend
-
-                            Log.d(TAG, "진통 시작됨: $currentTimeString, 이전 진통과의 간격: $intervalToSend")
-                        } else {
-                            Log.d(TAG, "첫 번째 진통 시작됨: $currentTimeString")
-                        }
-
-                        var success = false
-                        // 서버로 진통 시작 데이터 전송 (인증 체크 포함)
-                        lifecycleScope.launch {
-                            success = recordLaborData(viewModel, true, null, intervalToSend)
-                        }
-
-                        if (success) {
-                            isLaborActive = true
-                            laborStartTime = currentTimeMs
-                            laborDuration = ""
-                        }
-
-                        if (previousLaborEndTime != null) {
-                            val intervalMs = currentTimeMs - previousLaborEndTime!!
-                            val intervalMinutes = intervalMs / (1000 * 60)
-                            val intervalSeconds = (intervalMs % (1000 * 60)) / 1000
-                            laborInterval = "${intervalMinutes}분 ${intervalSeconds}초"
-
-                            Log.d(TAG, "진통 시작됨: $currentTimeString, 이전 진통과의 간격: $laborInterval")
-                        } else {
-                            Log.d(TAG, "첫 번째 진통 시작됨: $currentTimeString")
-                        }
-
+                        Log.d(TAG, "진통 시작됨: $startTime")
                     } else {
-                        // 진통 종료
-                        var durationToSend = ""
+                        // 진통 종료 - 서버로 데이터 전송
+                        val endTime = java.time.Instant.now().toString()
+                        val startTime = laborStartTime
 
-                        if (laborStartTime != null) {
-                            val durationMs = currentTimeMs - laborStartTime!!
-                            val durationMinutes = durationMs / (1000 * 60)
-                            val durationSeconds = (durationMs % (1000 * 60)) / 1000
-                            durationToSend = "${durationMinutes}분 ${durationSeconds}초"
-
-                            Log.d(
-                                TAG,
-                                "진통 종료됨: $currentTimeString, 지속시간: $laborDuration, 총 횟수: $laborCount"
-                            )
+                        if (startTime != null) {
+                            lifecycleScope.launch {
+                                val success = recordLaborData(viewModel, startTime, endTime)
+                                if (success) {
+                                    isLaborActive = false
+                                    laborCount++
+                                    lastLaborEndTime = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
+                                        .format(java.util.Date())
+                                    laborStartTime = null
+                                }
+                            }
+                            Log.d(TAG, "진통 종료됨: $endTime")
                         }
-
-                        // 서버로 진통 종료 데이터 전송 (인증 체크 포함)
-                        var success = false
-                        lifecycleScope.launch {
-                            success = recordLaborData(viewModel, false, durationToSend, null)
-                        }
-
-                        // 인증이 성공한 경우에만 상태 변경
-                        if (success) {
-                            isLaborActive = false
-                            laborCount++
-                            lastLaborEndTime = currentTimeString
-                            previousLaborEndTime = currentTimeMs
-                            laborDuration = durationToSend
-                            laborStartTime = null
-                        }
-
                     }
                 },
                 modifier = Modifier
@@ -778,22 +715,6 @@ class MainActivity : ComponentActivity() {
                         if (laborCount > 0) {
                             Text(
                                 text = "총 진통 횟수: ${laborCount}회",
-                                style = MaterialTheme.typography.caption2,
-                                color = MaterialTheme.colors.onSurface
-                            )
-                        }
-
-                        if (laborDuration.isNotEmpty()) {
-                            Text(
-                                text = "지속시간: $laborDuration",
-                                style = MaterialTheme.typography.caption2,
-                                color = MaterialTheme.colors.onSurface
-                            )
-                        }
-
-                        if (laborInterval.isNotEmpty()) {
-                            Text(
-                                text = "간격: $laborInterval",
                                 style = MaterialTheme.typography.caption2,
                                 color = MaterialTheme.colors.onSurface
                             )
