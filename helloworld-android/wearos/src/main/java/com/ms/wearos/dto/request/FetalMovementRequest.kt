@@ -1,6 +1,8 @@
 package com.ms.wearos.dto.request
 
+import com.google.gson.annotations.SerializedName
+
 data class FetalMovementRequest(
-    val timestamp: String,
-    val recordedAt: Long = System.currentTimeMillis()
+    @SerializedName("recorded_at")
+    val recordedAt: String
 )
