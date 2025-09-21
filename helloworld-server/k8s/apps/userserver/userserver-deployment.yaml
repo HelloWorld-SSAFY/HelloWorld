@@ -53,11 +53,11 @@ spec:
               key: POSTGRES_PASSWORD
 
         # === Redis (Bitnami 기본 값 기준) ===
-        - name: SPRING_DATA_REDIS_HOST
-          value: "redis-svc.data.svc.cluster.local"
-        - name: SPRING_DATA_REDIS_PORT
+        - name: SPRING_REDIS_URL
+          value: "redis-svc.apps.svc.cluster.local"
+        - name: SPRING_REDIS_PORT
           value: "6379"
-        - name: SPRING_DATA_REDIS_PASSWORD
+        - name: SPRING_REDIS_PASSWORD
           valueFrom:
             secretKeyRef:
               name: redis               # bitnami/redis 릴리스 기본 시크릿 이름
