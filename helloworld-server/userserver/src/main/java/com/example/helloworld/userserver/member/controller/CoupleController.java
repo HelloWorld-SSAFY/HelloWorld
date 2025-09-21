@@ -4,6 +4,7 @@ import com.example.helloworld.userserver.auth.jwt.JwtProvider;
 import com.example.helloworld.userserver.member.dto.request.CoupleUpdateRequest;
 import com.example.helloworld.userserver.member.dto.response.CoupleResponse;
 import com.example.helloworld.userserver.member.dto.request.CoupleCreateRequest; // 새 DTO (생성 시 사용)
+import com.example.helloworld.userserver.member.dto.response.CoupleWithUsersResponse;
 import com.example.helloworld.userserver.member.service.CoupleService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -23,12 +24,21 @@ public class CoupleController {
     private final CoupleService coupleService;
     private final JwtProvider jwt;
 
-    @Operation(summary = "내 커플 조회")
-    @GetMapping("/me")
+//    @Operation(summary = "내 커플 조회")
+//    @GetMapping("/me")
+//    @SecurityRequirement(name = "bearerAuth")
+//    public ResponseEntity<CoupleResponse> getMyCouple(@RequestHeader("Authorization") String authz) {
+//        Long uid = jwt.parseAccessSubject(extractBearer(authz));
+//        return ResponseEntity.ok(coupleService.getMyCouple(uid));
+//    }
+
+    @Operation(summary = "내 커플(상세) 조회: 커플 + 양쪽 유저")
+    @GetMapping("/me/detail")
     @SecurityRequirement(name = "bearerAuth")
-    public ResponseEntity<CoupleResponse> getMyCouple(@RequestHeader("Authorization") String authz) {
+    public ResponseEntity<CoupleWithUsersResponse> getMyCoupleDetail(
+            @RequestHeader("Authorization") String authz) {
         Long uid = jwt.parseAccessSubject(extractBearer(authz));
-        return ResponseEntity.ok(coupleService.getMyCouple(uid));
+        return ResponseEntity.ok(coupleService.getMyCoupleWithUsers(uid));
     }
 
 
