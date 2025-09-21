@@ -50,6 +50,12 @@ spring:
 #            # 배포 도메인으로 교체 (게이트웨이 경유)
 #            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
 #            scope: [ email, profile, openid ]
+#    redis:
+#      host: ${SPRING_REDIS_URL}
+#      port: 6379
+#      lettuce:
+#        pool:
+#          max-active: 8
 #app:
 #  invite-code:
 #    ttl-minutes: 1440   # 기본 24h

@@ -131,9 +131,14 @@ public class AuthController {
             @ApiResponse(responseCode = "401", description = "인증 실패"),
             @ApiResponse(responseCode = "500", description = "서버 오류")
     })
+
     @PostMapping("/logout")
-    public ResponseEntity<Void> logout(@RequestBody LogoutRequest req) {
-        authService.logout(req);
+    public ResponseEntity<Void> logout(
+            @RequestHeader("Authorization") String authz,
+            @RequestBody LogoutRequest req
+    ) {
+        String at = authz != null && authz.startsWith("Bearer ") ? authz.substring(7) : null;
+        authService.logout(req, at);
         return ResponseEntity.noContent().build();
     }
 
