@@ -138,29 +138,14 @@ class MainActivity : ComponentActivity() {
 
         // 타입별 화면으로 이동
         when (deeplinkType) {
-            "calendar" -> {
+            "REMINDER" -> {
                 navController.currentBackStackEntry?.savedStateHandle?.set("coupleId", coupleId)
                 navController.navigate(Screen.CalendarScreen.route) {
                     launchSingleTop = true
                 }
             }
-            "health_heart_rate" -> {
+            "EMERGENCY" -> {
                 navController.currentBackStackEntry?.savedStateHandle?.set("coupleId", coupleId)
-                navController.currentBackStackEntry?.savedStateHandle?.set("healthType", "heart_rate")
-                navController.navigate(Screen.WearableRecommendedScreen.route) {
-                    launchSingleTop = true
-                }
-            }
-            "health_stress" -> {
-                navController.currentBackStackEntry?.savedStateHandle?.set("coupleId", coupleId)
-                navController.currentBackStackEntry?.savedStateHandle?.set("healthType", "stress")
-                navController.navigate(Screen.WearableRecommendedScreen.route) {
-                    launchSingleTop = true
-                }
-            }
-            "health_activity" -> {
-                navController.currentBackStackEntry?.savedStateHandle?.set("coupleId", coupleId)
-                navController.currentBackStackEntry?.savedStateHandle?.set("healthType", "activity")
                 navController.navigate(Screen.WearableRecommendedScreen.route) {
                     launchSingleTop = true
                 }

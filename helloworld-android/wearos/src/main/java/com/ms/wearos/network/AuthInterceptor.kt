@@ -31,7 +31,7 @@ class AuthInterceptor @Inject constructor(
             request
         } else {
             val accessToken = wearTokenManager.getAccessToken()
-            Log.d(TAG, "WearOS accessToken 사용됨 = ${accessToken?.take(20)}...")
+            Log.d(TAG, "WearOS accessToken 사용됨 = ${accessToken}")
 
             if (!accessToken.isNullOrEmpty()) {
                 request.newBuilder()

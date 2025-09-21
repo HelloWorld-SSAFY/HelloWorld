@@ -5,6 +5,6 @@ import retrofit2.Response
 import retrofit2.http.GET
 
 interface AuthApiService {
-    @GET("/user/api/users/info")
+    @GET("/user/api/couples/me/detail")
     suspend fun getUserInfo(): Response<UserInfoResponse>
 }

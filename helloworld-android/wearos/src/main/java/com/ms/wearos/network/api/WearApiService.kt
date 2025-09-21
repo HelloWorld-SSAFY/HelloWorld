@@ -9,7 +9,7 @@ import retrofit2.http.Query
 interface WearApiService {
 
     // 건강 데이터 전송 (심박수 + 스트레스 지수)
-    @POST("/health/api/records")
+    @POST("/health/api/wearable")
     suspend fun sendHealthData(
         @Query("coupleId") coupleId: Int,
         @Body healthData: HealthDataRequest

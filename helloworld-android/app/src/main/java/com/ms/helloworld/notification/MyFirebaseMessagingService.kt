@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.PendingIntent
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.hardware.Sensor.TYPE_HEART_RATE
 import android.os.Build
 import android.util.Log
 import androidx.compose.ui.graphics.Color
@@ -28,10 +29,8 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
     @Inject lateinit var fcmRepository: FcmRepository
 
     companion object {
-        const val TYPE_CALENDAR = "CALENDAR"           // 캘린더 일정 알림
-        const val TYPE_HEART_RATE = "HEART_RATE"       // 심박수 이상 알림
-        const val TYPE_STRESS = "STRESS"               // 스트레스 지수 이상 알림
-        const val TYPE_ACTIVITY = "ACTIVITY"           // 활동량 알림
+        const val TYPE_REMINDER = "REMINDER"           // 일정 알림
+        const val TYPE_EMERGENCY = "EMERGENCY"       // 심박수,스트레스 지수, 활동량 이상 알림
     }
 
     override fun onNewToken(token: String) {
@@ -89,38 +88,20 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
      */
     private fun createNotificationConfig(type: String, title: String, body: String): NotificationConfig {
         return when (type) {
-            TYPE_CALENDAR -> {
+            TYPE_REMINDER -> {
                 NotificationConfig(
                     title = title.ifEmpty { "일정 알림" },
-                    body = body.ifEmpty { "예정된 일정이 있습니다" },
+                    body = body.ifEmpty { "예정된 일정이 있습니다." },
                     iconRes = R.drawable.ic_calendar,
                     priority = NotificationCompat.PRIORITY_DEFAULT,
                     colorRes = MainColor
                 )
             }
-            TYPE_HEART_RATE -> {
+            TYPE_EMERGENCY -> {
                 NotificationConfig(
-                    title = title.ifEmpty { "심박수 알림" },
-                    body = body.ifEmpty { "심박수가 정상 범위를 벗어났습니다" },
+                    title = title.ifEmpty { "위험 알림" },
+                    body = body.ifEmpty { "웨어러블 데이터가 정상 범위를 초과했습니다." },
                     iconRes = R.drawable.ic_heart,
-                    priority = NotificationCompat.PRIORITY_DEFAULT,
-                    colorRes = MainColor
-                )
-            }
-            TYPE_STRESS -> {
-                NotificationConfig(
-                    title = title.ifEmpty { "스트레스 알림" },
-                    body = body.ifEmpty { "스트레스 지수가 높습니다. 휴식을 취해보세요" },
-                    iconRes = R.drawable.ic_stress,
-                    priority = NotificationCompat.PRIORITY_DEFAULT,
-                    colorRes = MainColor
-                )
-            }
-            TYPE_ACTIVITY -> {
-                NotificationConfig(
-                    title = title.ifEmpty { "활동량 알림" },
-                    body = body.ifEmpty { "오늘 활동량이 부족합니다. 조금 더 움직여보세요!" },
-                    iconRes = R.drawable.ic_activity,
                     priority = NotificationCompat.PRIORITY_DEFAULT,
                     colorRes = MainColor
                 )
@@ -152,21 +133,13 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
             // 타입별 딥링크 설정
             when (type) {
-                TYPE_CALENDAR -> {
-                    putExtra("deeplink_type", "calendar")
+                TYPE_REMINDER -> {
+                    putExtra("deeplink_type", "REMINDER")
                     // 캘린더 화면으로 이동 + coupleId로 해당 커플의 일정 조회
                 }
-                TYPE_HEART_RATE -> {
-                    putExtra("deeplink_type", "health_heart_rate")
+                TYPE_EMERGENCY -> {
+                    putExtra("deeplink_type", "EMERGENCY")
                     // 웨어러블 추천 화면으로 이동 + coupleId로 해당 커플의 심박수 데이터 조회
-                }
-                TYPE_STRESS -> {
-                    putExtra("deeplink_type", "health_stress")
-                    // 웨어러블 추천 화면으로 이동 + coupleId로 해당 커플의 스트레스 데이터 조회
-                }
-                TYPE_ACTIVITY -> {
-                    putExtra("deeplink_type", "health_activity")
-                    // 웨어러블 추천 화면으로 이동 + coupleId로 해당 커플의 활동량 데이터 조회
                 }
                 else -> {
                     putExtra("deeplink_type", "main")
