@@ -23,6 +23,10 @@ import com.ms.helloworld.dto.request.GoogleLoginRequest
 import com.ms.helloworld.dto.response.LoginResponse
 import com.ms.helloworld.repository.AuthRepository
 import com.ms.helloworld.util.TokenManager
+import com.ms.helloworld.repository.MomProfileRepository
+import com.ms.helloworld.model.OnboardingStatus
+import androidx.navigation.NavHostController
+import com.ms.helloworld.navigation.Screen
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -42,7 +46,8 @@ data class LoginState(
 @HiltViewModel
 class LoginViewModel @Inject constructor(
     private val authRepository: AuthRepository,
-    private val tokenManager: TokenManager
+    private val tokenManager: TokenManager,
+    private val momProfileRepository: MomProfileRepository
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(LoginState())
@@ -370,5 +375,78 @@ class LoginViewModel @Inject constructor(
         _state.value = _state.value.copy(loginSuccess = false)
     }
 
+    // 앱 시작 시 자동 로그인 체크
+    fun checkAutoLogin(navController: NavHostController) {
+        viewModelScope.launch {
+            try {
+                val accessToken = tokenManager.getAccessToken()
+
+                if (accessToken.isNullOrBlank()) {
+                    println("🔑 토큰 없음 → 로그인 UI 표시")
+                    return@launch
+                }
+
+                println("🔑 토큰 있음 → 온보딩 상태 체크")
+                val result = momProfileRepository.checkOnboardingStatus()
+
+                navigateBasedOnOnboardingStatus(result, navController)
+
+            } catch (e: Exception) {
+                println("❌ 자동 로그인 체크 실패: ${e.message}")
+                // 토큰이 유효하지 않을 수 있으므로 삭제
+                try {
+                    tokenManager.clearTokens()
+                } catch (clearException: Exception) {
+                    println("토큰 삭제 실패: ${clearException.message}")
+                }
+            }
+        }
+    }
+
+    // 수동 로그인 성공 후 처리
+    fun handleLoginSuccess(navController: NavHostController) {
+        viewModelScope.launch {
+            try {
+                clearLoginSuccess()
+                println("🔍 로그인 성공 후 온보딩 상태 체크")
+                val result = momProfileRepository.checkOnboardingStatus()
+
+                navigateBasedOnOnboardingStatus(result, navController)
+
+            } catch (e: Exception) {
+                println("❌ 온보딩 상태 체크 실패 → 온보딩 화면으로 이동")
+                navController.navigate(Screen.OnboardingScreens.route) {
+                    popUpTo(Screen.LoginScreen.route) { inclusive = true }
+                }
+            }
+        }
+    }
+
+    // 온보딩 상태에 따른 화면 이동
+    private fun navigateBasedOnOnboardingStatus(
+        result: com.ms.helloworld.model.OnboardingCheckResult,
+        navController: NavHostController
+    ) {
+        when (result.status) {
+            OnboardingStatus.FULLY_COMPLETED -> {
+                println("✅ 온보딩 완료됨 → 홈으로 이동")
+                navController.navigate(Screen.HomeScreen.route) {
+                    popUpTo(Screen.LoginScreen.route) { inclusive = true }
+                }
+            }
+            OnboardingStatus.BASIC_COMPLETED -> {
+                println("📝 온보딩 미완료 → 온보딩 화면으로 이동")
+                navController.navigate(Screen.OnboardingScreens.route) {
+                    popUpTo(Screen.LoginScreen.route) { inclusive = true }
+                }
+            }
+            OnboardingStatus.NOT_STARTED -> {
+                println("🆕 새로운 사용자 → 온보딩 화면으로 이동")
+                navController.navigate(Screen.OnboardingScreens.route) {
+                    popUpTo(Screen.LoginScreen.route) { inclusive = true }
+                }
+            }
+        }
+    }
 
 }

@@ -35,7 +35,6 @@ import java.time.Duration
 import javax.inject.Inject
 
 private const val TAG = "싸피_MainActivity"
-
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 

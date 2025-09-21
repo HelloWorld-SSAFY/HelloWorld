@@ -6,10 +6,17 @@ import kotlin.math.abs
 data class MomProfile(
     val nickname: String,
     val pregnancyWeek: Int,
-    val dueDate: LocalDate
+    val dueDate: LocalDate,
+    val lastMenstruationDate: LocalDate? = null
 ) {
     val currentDay: Int
         get() = (pregnancyWeek - 1) * 7 + 1
+
+    val daysUntilDue: Int
+        get() {
+            val today = LocalDate.now()
+            return abs(dueDate.toEpochDay() - today.toEpochDay()).toInt()
+        }
 
     fun getProfileImageResource(): String {
         return when (pregnancyWeek) {
@@ -19,10 +26,5 @@ data class MomProfile(
             in 31..40 -> "pregnant_week_37_40"
             else -> "pregnant_default"
         }
-    }
-
-    fun getDaysUntilDue(): Int {
-        val today = LocalDate.now()
-        return abs(dueDate.toEpochDay() - today.toEpochDay()).toInt()
     }
 }

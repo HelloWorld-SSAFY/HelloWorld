@@ -1,12 +1,9 @@
 package com.ms.helloworld.dto.request
 
+import com.google.gson.annotations.SerializedName
+
 data class MemberRegisterRequest(
-    val nickname: String,
-    val gender: String, // "female" or "male"
-    val age: Int,
-    val menstrual_date: String? = null, // "yyyy-MM-dd" format, nullable
-    val is_childbirth: Boolean? = null, // nullable로 변경
-    val pregnancyWeek: Int? = null,
-    val due_date: String? = null, // "yyyy-MM-dd" format, nullable
-    val invitationCode: String? = null // 아빠용 초대 코드
+    @SerializedName("nickname") val nickname: String,
+    @SerializedName("gender") val gender: String, // "female" or "male"
+    @SerializedName("age") val age: Int
 )

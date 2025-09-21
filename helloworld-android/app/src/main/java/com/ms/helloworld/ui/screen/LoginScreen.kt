@@ -29,21 +29,17 @@ fun LoginScreen(
     val context = LocalContext.current
     val state by viewModel.state.collectAsState()
 
-    // 로그인 성공 시 gender에 따라 화면 이동
+    // 앱 시작 시 토큰 체크 및 자동 로그인
+    LaunchedEffect(Unit) {
+        println("🚀 LoginScreen 시작 - 토큰 체크")
+        viewModel.checkAutoLogin(navController)
+    }
+
+    // 수동 로그인 성공 시 화면 이동
     LaunchedEffect(state.loginSuccess) {
         if (state.loginSuccess) {
-            viewModel.clearLoginSuccess()
-            if (state.userGender == null) {
-                // gender가 null이면 온보딩으로 이동
-                navController.navigate(Screen.OnboardingScreens.route) {
-                    popUpTo(Screen.LoginScreen.route) { inclusive = true }
-                }
-            } else {
-                // gender가 있으면 홈으로 이동
-                navController.navigate(Screen.HomeScreen.route) {
-                    popUpTo(Screen.LoginScreen.route) { inclusive = true }
-                }
-            }
+            println("✅ 수동 로그인 성공")
+            viewModel.handleLoginSuccess(navController)
         }
     }
 

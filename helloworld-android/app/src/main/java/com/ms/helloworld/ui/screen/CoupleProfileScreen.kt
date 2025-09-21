@@ -27,7 +27,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import com.ms.helloworld.ui.components.CustomTopAppBar
+import com.ms.helloworld.ui.components.ProfileEditDialog
 import com.ms.helloworld.viewmodel.CoupleProfileViewModel
+import com.ms.helloworld.viewmodel.HomeViewModel
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
@@ -40,12 +42,28 @@ fun CoupleProfileScreen(
     viewModel: CoupleProfileViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+
+    // HomeViewModel도 함께 사용하여 프로필 업데이트 시 동기화
+    val homeViewModel: HomeViewModel = hiltViewModel()
+
+    // 프로필 업데이트 완료 감지하여 HomeViewModel 새로고침
+    LaunchedEffect(state.momProfile, state.isLoading) {
+        // 로딩이 끝나고 momProfile이 업데이트되었을 때 HomeViewModel 새로고침
+        if (!state.isLoading && state.momProfile != null) {
+            println("🔄 CoupleProfileScreen - 프로필 업데이트 감지, HomeViewModel 새로고침")
+            kotlinx.coroutines.delay(500) // API 완료 대기
+            homeViewModel.refreshProfile()
+        }
+    }
+
     var showInviteCodeBottomSheet by remember { mutableStateOf(false) }
+    var showProfileEditDialog by remember { mutableStateOf(false) }
     val bottomSheetState = rememberModalBottomSheetState()
     val backgroundColor = Color(0xFFFFFFFF)
 
-    val isPartnerConnected = false // TODO: 파트너 연결 상태 백엔드에서 관리 필요
-    val shouldShowInviteCode = true // TODO: 성별 정보 범위에서 처리 필요
+    val isPartnerConnected = state.isPartnerConnected
+    val shouldShowInviteCode = state.memberProfile?.gender?.uppercase() == "FEMALE" // 여성만 초대 코드 생성
+    val currentUserGender = state.memberProfile?.gender?.uppercase() // 현재 사용자 성별
 
         Column(
             modifier = Modifier
@@ -97,23 +115,26 @@ fun CoupleProfileScreen(
                             horizontalArrangement = Arrangement.Center
                         ) {
                             Text(
-                                text = state.momProfile?.nickname ?: "아내 닉네임",
+                                text = state.userA?.nickname ?: "아내 닉네임",
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = Color.Black,
                                 textAlign = TextAlign.Center
                             )
 
-                            IconButton(
-                                onClick = { /* TODO: 아내 프로필 수정 */ },
-                                modifier = Modifier.size(20.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Edit,
-                                    contentDescription = "아내 프로필 수정",
-                                    tint = Color.Gray,
-                                    modifier = Modifier.size(14.dp)
-                                )
+                            // 여성 사용자만 아내 프로필 수정 버튼 표시
+                            if (currentUserGender == "FEMALE") {
+                                IconButton(
+                                    onClick = { showProfileEditDialog = true },
+                                    modifier = Modifier.size(20.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Edit,
+                                        contentDescription = "프로필 수정",
+                                        tint = Color.Gray,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
                             }
                         }
                     }
@@ -148,14 +169,27 @@ fun CoupleProfileScreen(
                             horizontalArrangement = Arrangement.Center
                         ) {
                             Text(
-                                text = "남편 닉네임", // TODO: 파트너 정보 API에서 가져오기
+                                text = state.userB?.nickname ?: "남편 닉네임",
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = Color.Black,
                                 textAlign = TextAlign.Center
                             )
 
-                            // TODO: 성별에 따른 수정 버튼 처리
+                            // 남성 사용자만 남편 프로필 수정 버튼 표시
+                            if (currentUserGender == "MALE") {
+                                IconButton(
+                                    onClick = { showProfileEditDialog = true },
+                                    modifier = Modifier.size(20.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Edit,
+                                        contentDescription = "프로필 수정",
+                                        tint = Color.Gray,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -244,10 +278,15 @@ fun CoupleProfileScreen(
                     PartnerConnectionButton(
                         isPartnerConnected = isPartnerConnected,
                         onInviteCodeClick = {
+                            if (state.inviteCode == null) {
+                                // 초대 코드가 없으면 생성
+                                viewModel.generateInviteCode()
+                            }
+                            // 바텀시트 표시 (생성 중이거나 이미 있는 경우 모두)
                             showInviteCodeBottomSheet = true
                         },
                         onDisconnectClick = {
-                            // TODO: 연동 해제 처리
+                            viewModel.disconnectCouple()
                         }
                     )
                 }
@@ -272,10 +311,31 @@ fun CoupleProfileScreen(
             containerColor = Color(0xFFFFFFFF)
         ) {
             InviteCodeBottomSheetContent(
-                inviteCode = state.inviteCode ?: generateInviteCode(),
+                inviteCode = state.inviteCode ?: "코드 생성 중...",
                 onDismiss = { showInviteCodeBottomSheet = false }
             )
         }
+    }
+
+    // 프로필 수정 다이얼로그
+    if (showProfileEditDialog) {
+        val memberProfile = state.memberProfile
+        val coupleProfile = state.coupleProfile
+
+        ProfileEditDialog(
+            currentNickname = state.momProfile?.nickname ?: "",
+            currentDueDate = state.momProfile?.dueDate,
+            currentAge = memberProfile?.age,
+            currentMenstrualDate = coupleProfile?.menstrualDate?.let { LocalDate.parse(it) },
+            currentIsChildbirth = coupleProfile?.isChildbirth,
+            currentGender = memberProfile?.gender,
+            onDismiss = { showProfileEditDialog = false },
+            onSave = { nickname, age, menstrualDate, dueDate, isChildbirth ->
+                // 프로필 업데이트
+                viewModel.updateProfile(nickname, age, menstrualDate, dueDate, isChildbirth)
+                showProfileEditDialog = false
+            }
+        )
     }
 }
 
@@ -429,12 +489,7 @@ private fun InviteCodeBottomSheetContent(
     }
 }
 
-private fun generateInviteCode(): String {
-    val chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-    return (1..6)
-        .map { chars.random() }
-        .joinToString("")
-}
+// generateInviteCode 함수는 제거 - 이제 API에서 실제 코드 생성
 
 
 @Preview(showBackground = true)

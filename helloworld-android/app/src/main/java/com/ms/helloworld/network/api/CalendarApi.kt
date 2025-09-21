@@ -4,6 +4,7 @@ import com.ms.helloworld.dto.request.CalendarCreateRequest
 import com.ms.helloworld.dto.request.CalendarUpdateRequest
 import com.ms.helloworld.dto.response.CalendarEventResponse
 import com.ms.helloworld.dto.response.CalendarEventsPageResponse
+import retrofit2.Response
 import retrofit2.http.*
 
 interface CalendarApi {
@@ -24,7 +25,7 @@ interface CalendarApi {
     @DELETE("calendar/calendar/{eventId}")
     suspend fun deleteEvent(
         @Path("eventId") eventId: Long
-    )
+    ): Response<Unit>
 
     @GET("calendar/calendar/{eventId}")
     suspend fun getEvent(
