@@ -8,6 +8,7 @@ group = 'com.example.helloworld'
 version = '0.0.1-SNAPSHOT'
 description = 'second project'
 
+
 java {
 	toolchain {
 		languageVersion = JavaLanguageVersion.of(17)

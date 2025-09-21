@@ -65,11 +65,7 @@ spec:
         - name: SPRING_APPLICATION_JSON
           value: >-
             {"gateway":{"auth":{"skip-paths":
-            "/user/login,/user/refresh,/user/register,
-            /swagger-ui,/swagger-ui/**,/v3/api-docs,/v3/api-docs/**,
-            /user/v3/api-docs,/user/v3/api-docs/**,/calendar/v3/api-docs,/calendar/v3/api-docs/**,
-            /health/v3/api-docs,/health/v3/api-docs/**,/weekly/v3/api-docs,/weekly/v3/api-docs/**,
-            /ai/schema,/ai/schema/**,/actuator/**"}}}
+            "/user/login,/user/refresh,/user/register,/swagger-ui,/swagger-ui/**,/v3/api-docs,/v3/api-docs/**,/user/v3/api-docs,/user/v3/api-docs/**,/calendar/v3/api-docs,/calendar/v3/api-docs/**,/health/v3/api-docs,/health/v3/api-docs/**,/weekly/v3/api-docs,/weekly/v3/api-docs/**,/ai/schema,/ai/schema/**,/actuator/**"}}}
         # === Redis (Bitnami 기본 값 기준) ===
         - name: SPRING_REDIS_URL
           value: "redis-svc.apps.svc.cluster.local"
