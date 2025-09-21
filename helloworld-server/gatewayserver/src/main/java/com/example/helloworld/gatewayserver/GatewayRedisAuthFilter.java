@@ -48,7 +48,7 @@ public class GatewayRedisAuthFilter implements GlobalFilter {
         String auth = exchange.getRequest().getHeaders().getFirst("Authorization");
         if (auth == null || !auth.startsWith("Bearer ")) return unauthorized(exchange);
 
-        
+
         String token = auth.substring(7);
         String hash = sha256B64(token);
         String blacklistKey = "blacklist:" + hash;
