@@ -16,8 +16,7 @@ eureka:
       # 각 피어(Pod) 주소를 모두 기입 (Headless Service DNS)
       defaultZone: >
         http://eurekaserver-0.eurekaserver-hs.apps.svc.cluster.local:8761/eureka/,
-        http://eurekaserver-1.eurekaserver-hs.apps.svc.cluster.local:8761/eureka/,
-        http://eurekaserver-2.eurekaserver-hs.apps.svc.cluster.local:8761/eureka/
+        http://eurekaserver-1.eurekaserver-hs.apps.svc.cluster.local:8761/eureka/
 
 management:
   endpoint:
