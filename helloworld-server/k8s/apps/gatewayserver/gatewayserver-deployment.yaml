@@ -70,6 +70,17 @@ spec:
             /user/v3/api-docs,/user/v3/api-docs/**,/calendar/v3/api-docs,/calendar/v3/api-docs/**,
             /health/v3/api-docs,/health/v3/api-docs/**,/weekly/v3/api-docs,/weekly/v3/api-docs/**,
             /ai/schema,/ai/schema/**,/actuator/**"}}}
+        # === Redis (Bitnami 기본 값 기준) ===
+        - name: SPRING_REDIS_URL
+          value: "redis-svc.apps.svc.cluster.local"
+        - name: SPRING_REDIS_PORT
+          value: "6379"
+        - name: SPRING_REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis               # bitnami/redis 릴리스 기본 시크릿 이름
+              key: redis-password
+
 
 
 
