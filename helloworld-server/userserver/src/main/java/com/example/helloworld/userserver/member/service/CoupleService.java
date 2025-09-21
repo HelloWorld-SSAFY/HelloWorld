@@ -4,6 +4,7 @@ package com.example.helloworld.userserver.member.service;
 import com.example.helloworld.userserver.member.dto.request.CoupleCreateRequest;
 import com.example.helloworld.userserver.member.dto.request.CoupleUpdateRequest;
 import com.example.helloworld.userserver.member.dto.response.CoupleResponse;
+import com.example.helloworld.userserver.member.dto.response.CoupleWithUsersResponse;
 
 public interface CoupleService {
 
@@ -18,4 +19,8 @@ public interface CoupleService {
 
     /** 커플 공유 정보 수정 (기본: userA만 허용) */
     CoupleResponse updateMyCouple(Long memberId, CoupleUpdateRequest req);
+
+    CoupleWithUsersResponse getMyCoupleWithUsers(Long memberId);
+
+    CoupleWithUsersResponse getCoupleWithUsersById(Long coupleId);
 }

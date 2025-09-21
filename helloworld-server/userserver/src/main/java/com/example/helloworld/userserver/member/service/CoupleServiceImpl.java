@@ -12,6 +12,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import com.example.helloworld.userserver.member.dto.response.CoupleWithUsersResponse;
+import static com.example.helloworld.userserver.member.dto.response.CoupleWithUsersResponse.*;
 
 import java.sql.Timestamp;
 import java.time.LocalDate;
@@ -113,4 +115,55 @@ public class CoupleServiceImpl implements CoupleService {
                 c.isChildbirth()
         );
     }
+
+    @Transactional(readOnly = true)
+    @Override
+    public CoupleWithUsersResponse getMyCoupleWithUsers(Long memberId) {
+        Member me = memberRepository.findById(memberId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Member not found"));
+
+        Couple couple = coupleRepository.findByUserAId(me.getId())
+                .or(() -> coupleRepository.findByUserBId(me.getId()))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Couple not found"));
+
+        return toWithUsers(couple);
+    }
+
+    @Transactional(readOnly = true)
+    @Override
+    public CoupleWithUsersResponse getCoupleWithUsersById(Long coupleId) {
+        Couple couple = coupleRepository.findById(coupleId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Couple not found"));
+        // 필요 시 접근 제어(본인 커플만 열람) 추가
+        return toWithUsers(couple);
+    }
+
+    /* ====== 매핑 헬퍼 ====== */
+    private CoupleWithUsersResponse toWithUsers(Couple c) {
+        var coupleBlock = new CoupleWithUsersResponse.CoupleBlock(
+                c.getId(),
+                (c.getUserA()!=null)? c.getUserA().getId(): null,
+                (c.getUserB()!=null)? c.getUserB().getId(): null,
+                c.getPregnancyWeek(),
+                (c.getDueDate()!=null)? c.getDueDate().toLocalDateTime().toLocalDate(): null,
+                c.getMenstrualDate(),
+                c.isChildbirth()
+        );
+
+        UserBrief userABrief = toBrief(c.getUserA());
+        UserBrief userBBrief = toBrief(c.getUserB());
+
+        return new CoupleWithUsersResponse(coupleBlock, userABrief, userBBrief);
+    }
+
+    private CoupleWithUsersResponse.UserBrief toBrief(Member m) {
+        if (m == null) return null;
+        return new CoupleWithUsersResponse.UserBrief(
+                m.getId(),
+                m.getNickname(),
+                m.getImageUrl(),
+                (m.getGender()!=null)? m.getGender().name() : null // 대문자 "FEMALE"/"MALE"
+        );
+    }
+
 }
