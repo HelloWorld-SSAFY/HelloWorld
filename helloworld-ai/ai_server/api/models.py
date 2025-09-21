@@ -384,3 +384,62 @@ class PlaceExposure(models.Model):
 
     def __str__(self) -> str:
         return f"{self.user_ref}:{self.place_type}:{self.place_id}"
+
+
+# ─────────────────────────────────────────────────────────────────────
+# NEW: 추천/장소 제공 결과 통합 로그 (recommend + places 모두 저장)
+# ─────────────────────────────────────────────────────────────────────
+class RecommendationDelivery(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    # 한 요청에서 내려간 아이템들을 묶는 식별자
+    request_id = models.UUIDField(default=uuid.uuid4, db_index=True)
+    # 누가 요청했는지
+    user_ref = models.CharField(max_length=64, db_index=True)
+
+    # 어떤 세션(있으면)과 연관되는지
+    session = models.ForeignKey(
+        "RecommendationSession",
+        null=True, blank=True,
+        on_delete=models.SET_NULL,
+        related_name="deliveries"
+    )
+
+    # 4개 카테고리로 조회 용이하게
+    category = models.CharField(max_length=20, db_index=True)  # MEDITATION|MUSIC|YOGA|OUTING
+    # 아이템 종류: 콘텐츠 | 장소
+    item_kind = models.CharField(max_length=10)  # "content" | "place"
+
+    # 공통 메타
+    title = models.CharField(max_length=255)
+    rank = models.IntegerField(default=1)
+    score = models.FloatField(null=True, blank=True)
+    reason = models.CharField(max_length=255, blank=True, default="")
+    trigger = models.CharField(max_length=64, blank=True, default="")      # 세션 트리거 기록용
+    requested_by = models.CharField(max_length=32, default="mobile")       # mobile|auto|server
+    context = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    # 콘텐츠 전용 필드
+    content = models.ForeignKey("Content", null=True, blank=True, on_delete=models.SET_NULL)
+    url = models.URLField(blank=True, default="")
+    thumbnail = models.URLField(blank=True, default="")
+
+    # 장소 전용 필드
+    place_type = models.CharField(max_length=10, blank=True, default="")   # inside|outside
+    place_id = models.IntegerField(null=True, blank=True)
+    lat = models.FloatField(null=True, blank=True)
+    lng = models.FloatField(null=True, blank=True)
+    address = models.CharField(max_length=255, blank=True, default="")
+    distance_km = models.FloatField(null=True, blank=True)
+    weather_gate = models.CharField(max_length=10, blank=True, default="") # OUTDOOR|INDOOR|...
+
+    class Meta:
+        db_table = "recommend_delivery"
+        indexes = [
+            models.Index(fields=["user_ref", "category", "-created_at"]),
+            models.Index(fields=["session", "created_at"]),
+            models.Index(fields=["request_id"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user_ref}/{self.category}#{self.rank} ({self.item_kind})"

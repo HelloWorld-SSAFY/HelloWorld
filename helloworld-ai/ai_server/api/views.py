@@ -2,8 +2,11 @@ import os
 import json
 import uuid
 from math import radians, cos, sin, asin, sqrt
-from datetime import datetime, timezone, timedelta, date
+from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
+
+import logging
+from django.utils import timezone as dj_timezone
 
 from django.http import HttpRequest
 from rest_framework.views import APIView
@@ -21,8 +24,8 @@ from drf_spectacular.utils import (
 # 서비스 계층
 from services.anomaly import AnomalyDetector, AnomalyConfig, KST
 from services.orm_stats_provider import OrmStatsProvider
-from services.policy_service import categories_for_trigger  # DB 우선 + 폴백
-from services.weather_gateway import get_weather_gateway    # env 모드에 따라 remote/fallback
+from services.policy_service import categories_for_trigger
+from services.weather_gateway import get_weather_gateway
 
 # --- 저장용 모델 ---------------------------------------------------------------
 from api.models import (
@@ -35,9 +38,10 @@ from api.models import (
     PlaceInside,
     PlaceOutside,
     PlaceExposure,
-    # 개인화 통계 (개인화/TS 학습용)
     ContentStat,
     UserContentStat,
+    RecommendationDelivery,   # recommend/places 결과 로그 (테이블명: recommend_delivery)
+    UserStepsTodStatsDaily,   # ✅ 걸음수 기준선(평균) 비교용
 )
 
 APP_TOKEN = os.getenv("APP_TOKEN", "").strip()
@@ -46,7 +50,6 @@ from services.youtube_ingest import ingest_youtube_to_session
 from services.spotify_ingest import ingest_spotify_to_session
 from services.recommender import recommend_on_session, RecInput
 
-
 # ──────────────────────────────────────────────────────────────────────────────
 # 전역 싱글턴 (상태 유지)
 # ──────────────────────────────────────────────────────────────────────────────
@@ -54,8 +57,15 @@ _config = AnomalyConfig()
 _provider = OrmStatsProvider()
 _detector = AnomalyDetector(config=_config, provider=_provider)
 
+log = logging.getLogger(__name__)
+
+# ✅ auto precompute cooldown
+AUTO_COOLDOWN = timedelta(minutes=3)
+
+# ✅ 걸음수 격차 임계값(기본 500걸음): avg - cum_steps ≥ THRESHOLD → restrict
+STEPS_GAP_THRESHOLD = int(os.getenv("STEPS_GAP_THRESHOLD", "500"))
+
 def _assert_app_token(request: HttpRequest):
-    """X-App-Token 검사 (Healthz 제외 모든 엔드포인트에서 사용)."""
     got = request.headers.get("X-App-Token", "").strip()
     if not APP_TOKEN or got != APP_TOKEN:
         return Response({"ok": False, "error": "invalid app token"}, status=401)
@@ -74,7 +84,7 @@ APP_TOKEN_PARAM = OpenApiParameter(
 )
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 공통 Serializer (문서/검증용)
+# 공통 Serializer
 # ──────────────────────────────────────────────────────────────────────────────
 class MetricsSerializer(serializers.Serializer):
     hr = serializers.FloatField(required=False, help_text="현재 심박수(bpm)")
@@ -105,7 +115,7 @@ class ContentItemSerializer(serializers.Serializer):
     content_id = serializers.IntegerField()
     title = serializers.CharField()
     url = serializers.URLField()
-    thumbnail = serializers.URLField(required=False, allow_blank=True)  # ✓ 썸네일 필드
+    thumbnail = serializers.URLField(required=False, allow_blank=True)
     rank = serializers.IntegerField(min_value=1)
     score = serializers.FloatField(required=False)
     reason = serializers.CharField(required=False)
@@ -123,8 +133,7 @@ class PlaceItemSerializer(serializers.Serializer):
     address = serializers.CharField(required=False, allow_blank=True)
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 텔레메트리: 요청/응답 스키마 (응답은 폴리모픽)
-#  - 요구사항대로 user_ref/ts/metrics만 받음
+# 텔레메트리 스키마
 # ──────────────────────────────────────────────────────────────────────────────
 class TelemetryIn(serializers.Serializer):
     user_ref = serializers.CharField()
@@ -149,9 +158,9 @@ class TelemetryRestrictResp(serializers.Serializer):
     mode = serializers.ChoiceField(choices=["restrict"])
     reasons = serializers.ListField(child=serializers.CharField())
     recommendation = RecommendationEnvelopeSerializer()
-    cooldown = CooldownSerializer(required=False)  # optional
+    cooldown = CooldownSerializer(required=False)
     new_session = serializers.BooleanField(required=False)
-    cooldown_min = serializers.IntegerField(required=False)    # 하위호환
+    cooldown_min = serializers.IntegerField(required=False)
 
 class TelemetryEmergencyResp(serializers.Serializer):
     ok = serializers.BooleanField(default=True)
@@ -162,7 +171,6 @@ class TelemetryEmergencyResp(serializers.Serializer):
     action = ActionSerializer()
     safe_templates = SafeTemplateSerializer(many=True)
 
-# 신규: cooldown 응답 스키마(세션 생성 안 함)
 class TelemetryCooldownResp(serializers.Serializer):
     ok = serializers.BooleanField(default=True)
     anomaly = serializers.BooleanField(default=True)
@@ -172,13 +180,20 @@ class TelemetryCooldownResp(serializers.Serializer):
     cooldown = CooldownSerializer()
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Steps: 요청/응답 스키마 (응답은 폴리모픽)
+# Steps 스키마 (위치 필수, 형식 고정)
 # ──────────────────────────────────────────────────────────────────────────────
 class StepsCheckIn(serializers.Serializer):
     user_ref = serializers.CharField()
     ts = serializers.DateTimeField(help_text="KST 권장, 12:00/16:00/20:00 호출")
     cum_steps = serializers.IntegerField(min_value=0, help_text="동시간대 누적 걸음수")
-    ctx = serializers.JSONField(required=False, help_text="유저 컨텍스트(선택)")
+    # ↓ 위치는 무조건 top-level 로 필수
+    lat = serializers.FloatField(help_text="사용자 현재 위도 (필수)")
+    lng = serializers.FloatField(help_text="사용자 현재 경도 (필수)")
+    # 추천 반경/개수 옵션(없으면 기본값 사용)
+    max_distance_km = serializers.FloatField(required=False, help_text="기본 3.0, 0.5~10.0")
+    limit = serializers.IntegerField(required=False, help_text="기본 3, 1~5")
+    # 그 외 컨텍스트(선택)
+    ctx = serializers.JSONField(required=False, help_text="기타 유저 컨텍스트(선택)")
 
 class StepsNormalResp(serializers.Serializer):
     ok = serializers.BooleanField(default=True)
@@ -194,7 +209,7 @@ class StepsRestrictResp(serializers.Serializer):
     recommendation = RecommendationEnvelopeSerializer()
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Feedback: 요청/응답 스키마
+# Feedback 스키마
 # ──────────────────────────────────────────────────────────────────────────────
 class FeedbackIn(serializers.Serializer):
     user_ref = serializers.CharField()
@@ -203,13 +218,13 @@ class FeedbackIn(serializers.Serializer):
     external_id = serializers.CharField(required=False)
     dwell_ms = serializers.IntegerField(required=False)
     watched_pct = serializers.FloatField(required=False)
-    content_id = serializers.IntegerField(required=False)  # ✓ 어떤 컨텐츠에 대한 피드백인지 명시 가능
+    content_id = serializers.IntegerField(required=False)
 
 class FeedbackOut(serializers.Serializer):
     ok = serializers.BooleanField()
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Places: 요청/응답 스키마
+# Places 스키마
 # ──────────────────────────────────────────────────────────────────────────────
 class PlacesIn(serializers.Serializer):
     user_ref = serializers.CharField()
@@ -229,11 +244,11 @@ class PlacesOut(serializers.Serializer):
     fallback_used = serializers.BooleanField()
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 헬스 체크 (토큰 요구 O) — 하위호환상 auth=[]로 토큰 없이 호출 허용
+# Healthz
 # ──────────────────────────────────────────────────────────────────────────────
 class HealthzView(APIView):
     @extend_schema(
-        auth=[],  # 전역 SECURITY 무시 → 토큰 없이 호출 가능
+        auth=[],
         responses={200: inline_serializer("Healthz", {"ok": serializers.BooleanField(), "version": serializers.CharField()})},
         tags=["health"],
         summary="Health check (no auth)",
@@ -244,7 +259,7 @@ class HealthzView(APIView):
         return Response({"ok": True, "version": "v0.2.1"})
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 유틸: 카테고리 직렬화 (스펙: category/rank/(reason))
+# 유틸
 # ──────────────────────────────────────────────────────────────────────────────
 def _serialize_categories(cats: List[Dict[str, Any]], reason: Optional[str] = None) -> List[Dict[str, Any]]:
     cats_sorted = sorted(cats, key=lambda x: x.get("priority", 999))
@@ -266,8 +281,56 @@ def _reason_from_trigger(trigger: Optional[str]) -> str:
     t = (trigger or "").lower()
     return m.get(t, t or "trigger")
 
+# ---- Delivery 로깅 헬퍼들 (필드명 정정: item_kind, context, thumbnail) ---------
+def _log_recommend_delivery(*, session: RecommendationSession, user_ref: str, category: str, items: List[Dict[str, Any]]):
+    rows = []
+    for it in items:
+        rows.append(RecommendationDelivery(
+            session=session,
+            user_ref=user_ref,
+            # source 필드 없음
+            category=category,
+            item_kind="CONTENT",
+            content_id=it["content_id"],
+            title=it.get("title", ""),
+            url=it.get("url", ""),
+            thumbnail=it.get("thumbnail", "") or "",  # ← thumbnail_url 아님
+            rank=it.get("rank"),
+            score=it.get("score"),
+            reason=it.get("reason", ""),
+            context={"api": "recommend"},             # ← meta 아님
+        ))
+    if rows:
+        RecommendationDelivery.objects.bulk_create(rows)
+
+def _log_places_delivery(*, session: RecommendationSession, user_ref: str, category: str, items: List[Dict[str, Any]]):
+    rows = []
+    for it in items:
+        rows.append(RecommendationDelivery(
+            session=session,
+            user_ref=user_ref,
+            # source 필드 없음
+            category=category or "OUTING",
+            item_kind="PLACE",
+            place_type=it.get("place_type"),
+            place_id=it.get("content_id"),
+            title=it.get("title", ""),
+            lat=it.get("lat"),
+            lng=it.get("lng"),
+            rank=it.get("rank"),
+            score=None,
+            reason=it.get("reason", ""),
+            context={
+                "weather_gate": it.get("weather_gate"),
+                "address": it.get("address", ""),
+                "distance_km": it.get("distance_km"),
+            },
+        ))
+    if rows:
+        RecommendationDelivery.objects.bulk_create(rows)
+
 # ──────────────────────────────────────────────────────────────────────────────
-# 세션 보장/컨텍스트 저장 유틸
+# 세션 유틸
 # ──────────────────────────────────────────────────────────────────────────────
 def _ensure_restrict_session(
     *,
@@ -277,12 +340,6 @@ def _ensure_restrict_session(
     detector_result: Dict[str, Any],
     user_ctx: Optional[Dict[str, Any]] = None,
 ) -> tuple[RecommendationSession, Dict[str, Any], bool]:
-    """
-    - detector_result에 session_id가 있으면 조회, 없으면 새로 생성
-    - context에 session_id / categories / trigger + (user_ctx) 저장
-    - recommend 응답용 envelope 반환
-    - return: (session, recommendation_envelope, new_session_flag)
-    """
     cat_payload = _serialize_categories(cats, reason=_reason_from_trigger(trigger)) if cats else []
 
     sess_uuid = None
@@ -334,8 +391,243 @@ def _ensure_restrict_session(
     recommendation = {"session_id": str(session.id), "categories": cat_payload}
     return session, recommendation, new_session
 
+# ✅ 최근 사전추천 존재 여부(쿨다운 가드) — 현재 세션은 제외
+def _recent_auto_exists(user_ref: str, exclude_session_id: Optional[uuid.UUID] = None) -> bool:
+    cut = dj_timezone.now() - AUTO_COOLDOWN
+    qs = RecommendationSession.objects.filter(
+        user_ref=user_ref, mode="restrict", created_at__gte=cut
+    )
+    if exclude_session_id:
+        qs = qs.exclude(id=exclude_session_id)
+    return qs.exists()
+
 # ──────────────────────────────────────────────────────────────────────────────
-# 텔레메트리 업로드 → 즉시 판단
+# 내부 실행 유틸: 카테고리별 콘텐츠 추천 실행 → Delivery 저장 (응답 미포함)
+# ──────────────────────────────────────────────────────────────────────────────
+def _ingest_for_category(session_id: uuid.UUID, category: str, top_k: int):
+    try:
+        if category == "MEDITATION":
+            ingest_youtube_to_session(session_id=session_id, category="MEDITATION", max_total=max(30, top_k * 8))
+        elif category == "YOGA":
+            ingest_youtube_to_session(session_id=session_id, category="YOGA", max_total=max(30, top_k * 8))
+        elif category == "MUSIC":
+            # 기본 검색어
+            ingest_spotify_to_session(
+                session_id=session_id,
+                max_total=max(30, top_k * 10),
+                query="태교 음악 relaxing instrumental",
+                market="KR"
+            )
+        elif category == "BREATHING":
+            # youtube_ingest가 막아둘 수 있음 → 시도했다가 허용 안 되면 조용히 스킵
+            ingest_youtube_to_session(session_id=session_id, category="BREATHING", max_total=max(24, top_k * 6))
+        # 그 외 카테고리는 DB 사전적재 가정 → 인제스트 스킵
+    except ValueError as e:
+        # 유입 모듈이 명시적으로 금지하는 카테고리면 noisy 스택트레이스 없이 스킵
+        if str(e) == "CATEGORY_NOT_ALLOWED":
+            log.info("ingest skipped (CATEGORY_NOT_ALLOWED): category=%s session=%s", category, session_id)
+        else:
+            log.exception("ingest failed for category=%s session=%s", category, session_id)
+    except Exception:
+        log.exception("ingest failed for category=%s session=%s", category, session_id)
+
+def _run_content_delivery_for_category(*, session: RecommendationSession, user_ref: str, category: str, top_k: int = 3):
+    # 인제스트
+    _ingest_for_category(session.id, category, top_k)
+
+    # 세션 컨텍스트 합성
+    try:
+        base_ctx = (session.context or {}).get("user_ctx") or {}
+    except Exception:
+        base_ctx = {}
+    merged_ctx = dict(base_ctx)
+
+    # 추천 실행
+    try:
+        rec_out = recommend_on_session(
+            session_id=session.id,
+            rec_in=RecInput(user_ref=user_ref, category=category, context=merged_ctx),
+        )
+    except ValueError:
+        # 🔹 후보 없음은 정상 흐름으로 취급: 조용히 스킵(스택트레이스 X)
+        log.info("skip auto content delivery: no candidates (session=%s, category=%s)", session.id, category)
+        return
+    except Exception:
+        log.exception("recommend_on_session failed (session=%s, category=%s)", session.id, category)
+        return
+
+    # 아이템 구성 (picked + 후보 상위)
+    items: List[Dict[str, Any]] = []
+    picked = rec_out.picked
+    if picked:
+        items.append({
+            "content_id": picked["content_id"],
+            "title": picked["title"],
+            "url": picked["url"],
+            "thumbnail": picked.get("thumbnail") or "",
+            "rank": 1,
+            "score": None,
+            "reason": "ts+context",
+        })
+
+    try:
+        exps = ExposureCandidate.objects.filter(
+            session=session, content__category__iexact=category
+        ).select_related("content")
+        exps = sorted(exps, key=lambda e: (getattr(e, "pre_score", 0.0) or 0.0), reverse=True)
+        for e in exps:
+            if len(items) >= top_k:
+                break
+            if picked and e.content_id == picked.get("content_id"):
+                continue
+            c = e.content
+            thumb = getattr(c, "thumbnail_url", None) or ((e.x_item_vec or {}).get("thumb_url")) or ""
+            items.append({
+                "content_id": c.id,
+                "title": c.title,
+                "url": c.url,
+                "thumbnail": thumb,
+                "rank": len(items) + 1,
+                "score": getattr(e, "pre_score", None),
+                "reason": "candidate",
+            })
+    except Exception:
+        pass
+
+    if items:
+        _log_recommend_delivery(session=session, user_ref=user_ref, category=category, items=items[:top_k])
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 내부 실행 유틸: OUTING 장소 추천 → Delivery 저장 (응답 미포함)
+# ──────────────────────────────────────────────────────────────────────────────
+def _haversine_km(lat1, lon1, lat2, lon2):
+    r = 6371.0
+    dlat = radians(lat2 - lat1)
+    dlon = radians(lon2 - lon1)
+    a = sin(dlat/2)**2 + cos(radians(lat1))*cos(radians(lat2))*sin(dlon/2)**2
+    c = 2*asin(min(1, sqrt(a)))
+    return r * c
+
+def _extract_latlng_from_ctx(ctx: Optional[Dict[str, Any]]) -> Optional[tuple[float, float]]:
+    if not ctx:
+        return None
+    # 평평한 키 우선
+    lat = ctx.get("lat") or ctx.get("latitude")
+    lng = ctx.get("lng") or ctx.get("lon") or ctx.get("longitude")
+    if lat is not None and lng is not None:
+        try:
+            return float(lat), float(lng)
+        except Exception:
+            return None
+    # 중첩 객체(location: {lat, lng})
+    loc = ctx.get("location") if isinstance(ctx, dict) else None
+    if isinstance(loc, dict):
+        lat = loc.get("lat") or loc.get("latitude")
+        lng = loc.get("lng") or loc.get("lon") or loc.get("longitude")
+        if lat is not None and lng is not None:
+            try:
+                return float(lat), float(lng)
+            except Exception:
+                return None
+    return None
+
+def _run_places_delivery(*, session: RecommendationSession, user_ref: str, ctx: Optional[Dict[str, Any]], default_max_km: float = 3.0, default_limit: int = 3):
+    ll = _extract_latlng_from_ctx(ctx)
+    if not ll:
+        log.warning("OUTING delivery skipped: missing lat/lng in ctx (session=%s, user=%s)", session.id, user_ref)
+        return
+    lat0, lng0 = ll
+    max_km = float(ctx.get("max_distance_km") or default_max_km) if isinstance(ctx, dict) else default_max_km
+    limit = int(ctx.get("limit") or default_limit) if isinstance(ctx, dict) else default_limit
+    max_km = max(0.5, min(10.0, max_km))
+    limit = max(1, min(5, limit))
+
+    # 1) 날씨 게이트
+    weather_fallback = False
+    try:
+        gw = get_weather_gateway()
+        if callable(gw):
+            weather_kind, gate = gw(lat=lat0, lng=lng0)
+        else:
+            weather_kind, gate = gw.gate(lat=lat0, lng=lng0)
+    except Exception:
+        weather_kind, gate = "unknown", None
+        weather_fallback = True
+
+    # 2) 게이트별 테이블 선택
+    if gate == "OUTDOOR":
+        qs_out = PlaceOutside.objects.filter(is_active=True)
+        qs_in = PlaceInside.objects.none()
+    elif gate == "INDOOR":
+        qs_out = PlaceOutside.objects.none()
+        qs_in = PlaceInside.objects.filter(is_active=True)
+    else:
+        qs_out = PlaceOutside.objects.filter(is_active=True)
+        qs_in = PlaceInside.objects.filter(is_active=True)
+
+    outs = list(qs_out.values("id", "name", "lat", "lon", "address"))
+    ins  = list(qs_in.values("id", "name", "lat", "lon", "address"))
+
+    items: List[Dict[str, Any]] = []
+    for p in outs:
+        if p.get("lat") is None or p.get("lon") is None:
+            continue
+        dist = _haversine_km(lat0, lng0, float(p["lat"]), float(p["lon"]))
+        if dist > max_km:
+            continue
+        items.append({
+            "place_type": "outside",
+            "content_id": p["id"],
+            "title": p.get("name") or f"Outside {p['id']}",
+            "lat": float(p["lat"]),
+            "lng": float(p["lon"]),
+            "distance_km": round(dist, 2),
+            "rank": 0,
+            "reason": "distance",
+            "weather_gate": "OUTDOOR",
+            "address": p.get("address", ""),
+        })
+    for p in ins:
+        if p.get("lat") is None or p.get("lon") is None:
+            continue
+        dist = _haversine_km(lat0, lng0, float(p["lat"]), float(p["lon"]))
+        if dist > max_km:
+            continue
+        items.append({
+            "place_type": "inside",
+            "content_id": p["id"],
+            "title": p.get("name") or f"Inside {p['id']}",
+            "lat": float(p["lat"]),
+            "lng": float(p["lon"]),
+            "distance_km": round(dist, 2),
+            "rank": 0,
+            "reason": "distance",
+            "weather_gate": "INDOOR",
+            "address": p.get("address", ""),
+        })
+
+    items.sort(key=lambda x: x["distance_km"])
+    for i, it in enumerate(items, start=1):
+        it["rank"] = i
+
+    # 노출 기록 (PlaceExposure)
+    if items:
+        try:
+            PlaceExposure.objects.bulk_create([
+                PlaceExposure(user_ref=user_ref, place_type=it["place_type"], place_id=it["content_id"])
+                for it in items[:limit]
+            ], ignore_conflicts=True)
+        except Exception:
+            pass
+
+    # Delivery 로깅
+    _log_places_delivery(session=session, user_ref=user_ref, category="OUTING", items=items[:limit])
+
+    if weather_fallback or (not items):
+        log.info("places delivery fallback or empty (session=%s, user=%s)", session.id, user_ref)
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Telemetry
 # ──────────────────────────────────────────────────────────────────────────────
 class TelemetryView(APIView):
     @extend_schema(
@@ -344,12 +636,12 @@ class TelemetryView(APIView):
         responses={
             200: PolymorphicProxySerializer(
                 component_name="TelemetryResponse",
-                resource_type_field_name="mode",   # discriminator
+                resource_type_field_name="mode",
                 serializers={
                     "normal": TelemetryNormalResp,
                     "restrict": TelemetryRestrictResp,
                     "emergency": TelemetryEmergencyResp,
-                    "cooldown": TelemetryCooldownResp,  # 신규 모드 문서화
+                    "cooldown": TelemetryCooldownResp,
                 },
                 many=False,
             )
@@ -361,7 +653,8 @@ class TelemetryView(APIView):
             "- 기준선: user_tod_stats_daily(4h 버킷)\n"
             "- 연속 조건: 10초 Z-score 3회 연속\n"
             "- 응급 룰: |Z|≥5 또는 HR≥150/≤45 for 120s\n"
-            "- restrict 시 trigger_category_policy로 카테고리 도출"
+            "- restrict 시 trigger_category_policy로 카테고리 도출\n"
+            "- ⚠ 트리거 발생 시 내부에서 바로 추천 실행하고 recommend_delivery에 저장(응답엔 미포함)"
         ),
         operation_id="postTelemetry",
     )
@@ -381,7 +674,9 @@ class TelemetryView(APIView):
         )
         level = result.get("level", "normal")
         trigger = result.get("trigger")
-        reasons = result.get("reasons", []) or result.get("reason", [])
+        reasons = result.get("reasons") or result.get("reason") or []
+        if not reasons and trigger:
+            reasons = [trigger]
 
         if level == "emergency":
             risk_level = "critical"
@@ -392,16 +687,14 @@ class TelemetryView(APIView):
         else:
             risk_level = "low"
 
-        # 공통 베이스
         resp: Dict[str, Any] = {
             "ok": True,
             "anomaly": level != "normal",
             "risk_level": risk_level,
-            "mode": level,   # 그대로 노출 (cooldown 포함)
+            "mode": level,
         }
 
         if level == "restrict":
-            # (1) 트리거 기반 카테고리
             cats = categories_for_trigger(trigger) or []
             if not cats:
                 met = payload.get("metrics", {}) or {}
@@ -412,7 +705,6 @@ class TelemetryView(APIView):
                     fallback = [{"code": "BREATHING"}, {"code": "YOGA"}]
                 cats = fallback
 
-            # (2) 세션 보장 (텔레메트리는 유저 컨텍스트 사용 안 함)
             session, recommendation, new_session = _ensure_restrict_session(
                 user_ref=payload["user_ref"],
                 trigger=trigger,
@@ -421,7 +713,6 @@ class TelemetryView(APIView):
                 user_ctx=None,
             )
 
-            # (3) 쿨다운 정보
             cooldown_min = result.get("cooldown_min")
             cooldown_ends_at = result.get("cooldown_until") or result.get("cooldown_ends_at")
             if isinstance(cooldown_ends_at, str):
@@ -430,7 +721,12 @@ class TelemetryView(APIView):
                 except Exception:
                     cooldown_ends_at = None
             if not cooldown_ends_at and cooldown_min is not None:
-                cooldown_ends_at = (payload["ts"].astimezone(KST) if payload["ts"].tzinfo else payload["ts"]).astimezone(KST) + timedelta(minutes=int(cooldown_min))
+                dt = payload["ts"]
+                try:
+                    dt = dt.astimezone(KST)
+                except Exception:
+                    pass
+                cooldown_ends_at = dt + timedelta(minutes=int(cooldown_min))
 
             cooldown_obj = None
             if cooldown_ends_at:
@@ -438,15 +734,25 @@ class TelemetryView(APIView):
                 secs_left = int(max(0, (cooldown_ends_at - now).total_seconds()))
                 cooldown_obj = {"active": secs_left > 0, "ends_at": cooldown_ends_at.isoformat(), "secs_left": secs_left}
 
-            # (4) 응답
             resp.update({"reasons": reasons or [], "recommendation": recommendation, "new_session": new_session})
             if cooldown_obj:
                 resp["cooldown"] = cooldown_obj
             if result.get("cooldown_min") is not None:
                 resp["cooldown_min"] = int(result["cooldown_min"])
 
+            # ⚙️ restrict 시: 카테고리별 내부 추천 실행 → recommend_delivery 저장 (응답 미포함)
+            try:
+                if not _recent_auto_exists(payload["user_ref"], exclude_session_id=session.id):
+                    cat_codes = [c.get("code") for c in cats if isinstance(c, dict) and c.get("code")]
+                    cat_codes = [c for c in cat_codes if c and c != "OUTING"]
+                    for cat in cat_codes:
+                        _run_content_delivery_for_category(session=session, user_ref=payload["user_ref"], category=cat, top_k=3)
+                else:
+                    log.info("skip auto delivery (cooldown) user=%s", payload["user_ref"])
+            except Exception:
+                log.exception("restrict auto delivery failed (user=%s)", payload.get("user_ref"))
+
         elif level == "cooldown":
-            # 세션 생성 금지, 쿨다운 정보만
             ends = result.get("cooldown_until")
             if isinstance(ends, str):
                 try:
@@ -465,11 +771,10 @@ class TelemetryView(APIView):
             action = result.get("action") or {"type": "EMERGENCY_CONTACT", "cooldown_min": 60}
             resp.update({"reasons": reasons or ["emergency condition"], "action": action, "safe_templates": result.get("safe_templates", [])})
 
-        # normal이면 resp 그대로
         return Response(resp)
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 피드백 기록 (ACCEPT/COMPLETE/EFFECT) + 통계 업데이트(개인화 학습)
+# Feedback
 # ──────────────────────────────────────────────────────────────────────────────
 class FeedbackView(APIView):
     @extend_schema(
@@ -560,7 +865,74 @@ class FeedbackView(APIView):
         return Response({"ok": True})
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 걸음수 저활동 판단 → steps_low 세션 발급
+# Baseline(평균) 임포트: 메인서버 응답 형식 그대로 반영
+# ──────────────────────────────────────────────────────────────────────────────
+class StepsBaselineRecord(serializers.Serializer):
+    hour_range = serializers.CharField()                 # "00-12" | "00-16" | "00-24"
+    avg_steps = serializers.FloatField(allow_null=True)  # null이면 스킵
+
+class StepsBaselineImportIn(serializers.Serializer):
+    user_ref = serializers.CharField()
+    date = serializers.DateField(help_text="YYYY-MM-DD (KST 기준)")
+    records = StepsBaselineRecord(many=True)
+
+def _bucket_from_hour_range(hr: str) -> Optional[int]:
+    try:
+        _, end_s = hr.split("-")
+        end_h = int(end_s)
+        b = end_h // 4
+        if end_h >= 24:
+            b = 5
+        return max(0, min(5, b))
+    except Exception:
+        return None
+
+def _upsert_steps_baseline_records(*, user_ref: str, d, records: list[dict]) -> list[int]:
+    saved = []
+    for r in records:
+        avg = r.get("avg_steps", None)
+        if avg is None:
+            continue
+        b = _bucket_from_hour_range(str(r.get("hour_range", "")))
+        if b is None:
+            continue
+        obj, _ = UserStepsTodStatsDaily.objects.update_or_create(
+            user_ref=user_ref, d=d, bucket=b,
+            defaults={
+                "cum_mu": float(avg),
+                "cum_sigma": 0.0,                          # 표준편차 미제공 → 0
+                # p20은 사용하지 않지만 NOT NULL이므로 채워둠(평균-임계값 하한0)
+                "p20": max(float(avg) - STEPS_GAP_THRESHOLD, 0.0),
+            }
+        )
+        saved.append(b)
+    return saved
+
+class StepsBaselineImportView(APIView):
+    @extend_schema(
+        parameters=[APP_TOKEN_PARAM],
+        request=StepsBaselineImportIn,
+        responses={200: inline_serializer("StepsBaselineImportOut", {
+            "ok": serializers.BooleanField(),
+            "saved_buckets": serializers.ListField(child=serializers.IntegerField()),
+        })},
+        tags=["steps"],
+        summary="Import daily cumulative steps averages from main server format",
+        description='메인서버 응답 {"records":[{"hour_range":"00-12","avg_steps":1234},...]} 를 그대로 넣으면 user_steps_tod_stats_daily에 upsert.',
+        operation_id="postStepsBaselineImport",
+    )
+    def post(self, request: HttpRequest):
+        bad = _assert_app_token(request)
+        if bad:
+            return bad
+        ser = StepsBaselineImportIn(data=request.data)
+        ser.is_valid(raise_exception=True)
+        d = ser.validated_data
+        saved = _upsert_steps_baseline_records(user_ref=d["user_ref"], d=d["date"], records=d["records"])
+        return Response({"ok": True, "saved_buckets": saved})
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Steps Check  ✅ 평균 대비 고정 격차 비교 + (트리거 시) 장소 추천 저장
 # ──────────────────────────────────────────────────────────────────────────────
 class StepsCheckView(APIView):
     @extend_schema(
@@ -578,8 +950,9 @@ class StepsCheckView(APIView):
             )
         },
         tags=["steps"],
-        summary="Check cumulative steps at 12/16/20(KST) and issue steps_low session",
+        summary="Compare cum_steps to stored average; restrict if gap ≥ threshold(기본 500)",
         operation_id="postStepsCheck",
+        description="입력으로 user_ref/ts/cum_steps/lat/lng를 받고, 저장된 평균(cum_mu)과 비교해 (avg - cum_steps) ≥ THRESHOLD(기본 500) 이면 OUTING을 내부 추천하여 recommend_delivery에 저장합니다(응답엔 미포함).",
     )
     def post(self, request: HttpRequest):
         bad = _assert_app_token(request)
@@ -590,61 +963,95 @@ class StepsCheckView(APIView):
         ser.is_valid(raise_exception=True)
         d = ser.validated_data
 
-        cum_steps = d["cum_steps"]
-        # NOTE: 임시 로직(데모). 실제는 기준선/버킷 기반 Z-score 판단으로 교체.
-        if cum_steps >= 2000:
+        # 🔹 위치는 top-level 필수 → user_ctx 구성
+        user_ctx: Dict[str, Any] = {"lat": float(d["lat"]), "lng": float(d["lng"])}
+        if d.get("max_distance_km") is not None:
+            user_ctx["max_distance_km"] = float(d["max_distance_km"])
+        if d.get("limit") is not None:
+            user_ctx["limit"] = int(d["limit"])
+        if d.get("ctx"):
+            extra = dict(d["ctx"])
+            extra.pop("lat", None); extra.pop("lng", None)
+            user_ctx.update(extra)
+        user_ctx["location_source"] = "steps-check"
+
+        # ts → KST & 버킷(0..5)
+        ts = d["ts"]
+        try:
+            ts_kst = ts.astimezone(KST)
+        except Exception:
+            ts_kst = ts  # 이미 KST라고 가정
+        hour = ts_kst.hour
+        bucket = hour // 4  # 0..5
+
+        # 오늘 기준선(평균) 조회
+        baseline = UserStepsTodStatsDaily.objects.filter(
+            user_ref=d["user_ref"],
+            d=ts_kst.date(),
+            bucket=bucket,
+        ).first()
+
+        cum_steps = int(d["cum_steps"])
+
+        # 기준선 없으면 '정상'
+        if not baseline or baseline.cum_mu is None:
             return Response({"ok": True, "anomaly": False, "mode": "normal"})
 
-        # 저활동 → restrict 세션 발급
-        cats = categories_for_trigger("steps_low")
-        session = RecommendationSession.objects.create(
-            user_ref=d["user_ref"],
-            trigger="steps_low",
-            mode="restrict",
-            context={},
-        )
-        ctx = {
-            "session_id": str(session.id),
-            "categories": _serialize_categories(cats, reason=_reason_from_trigger("steps_low")),
-        }
-        # 유저 컨텍스트가 오면 같이 저장
-        if d.get("ctx"):
-            ctx["user_ctx"] = d["ctx"]
+        avg = float(baseline.cum_mu or 0.0)
+        gap = max(0.0, avg - float(cum_steps))
 
-        # context 저장
-        try:
-            session.set_context(ctx, save=True)
-        except Exception:
-            try:
-                session.update_context(ctx, save=True)
-            except Exception:
-                session.context = ctx
-                session.save(update_fields=["context"])
-
-        resp = {
-            "ok": True,
-            "anomaly": True,
-            "mode": "restrict",
-            "trigger": "steps_low",
-            "reasons": [f"cum_steps<{2000} or z<=-1.0"],
-            "recommendation": {
+        # 격차 임계 비교
+        if gap >= float(STEPS_GAP_THRESHOLD):
+            cats = categories_for_trigger("steps_low") or []
+            session = RecommendationSession.objects.create(
+                user_ref=d["user_ref"],
+                trigger="steps_low",
+                mode="restrict",
+                context={},
+            )
+            ctx = {
                 "session_id": str(session.id),
-                "categories": ctx["categories"],
-            },
-        }
-        return Response(resp)
+                "categories": _serialize_categories(cats, reason=_reason_from_trigger("steps_low")),
+                "user_ctx": user_ctx,
+                "ts": ts_kst.isoformat(),
+            }
+
+            # context 저장
+            try:
+                session.set_context(ctx, save=True)
+            except Exception:
+                try:
+                    session.update_context(ctx, save=True)
+                except Exception:
+                    session.context = ctx
+                    session.save(update_fields=["context"])
+
+            # ⚙️ OUTING 장소 추천 실행 → recommend_delivery 저장 (lat/lng는 user_ctx에서 추출)
+            try:
+                _run_places_delivery(session=session, user_ref=d["user_ref"], ctx=user_ctx or {})
+            except Exception:
+                log.exception("steps_low places delivery failed (user=%s)", d["user_ref"])
+
+            reasons = [f"avg({avg:.0f}) - cum_steps({cum_steps}) = {int(gap)} ≥ {STEPS_GAP_THRESHOLD} @bucket{bucket}"]
+            resp = {
+                "ok": True,
+                "anomaly": True,
+                "mode": "restrict",
+                "trigger": "steps_low",
+                "reasons": reasons,
+                "recommendation": {
+                    "session_id": str(session.id),
+                    "categories": ctx["categories"],
+                },
+            }
+            return Response(resp)
+
+        # 기준선 이상(또는 격차 미만) → normal
+        return Response({"ok": True, "anomaly": False, "mode": "normal"})
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 나들이 장소 추천 (OUTING) — 날씨/공기질 게이트 + 거리순
+# Places (외부 호출용은 유지하되 Delivery 필드명 정정)
 # ──────────────────────────────────────────────────────────────────────────────
-def _haversine_km(lat1, lon1, lat2, lon2):
-    r = 6371.0
-    dlat = radians(lat2 - lat1)
-    dlon = radians(lon2 - lon1)
-    a = sin(dlat/2)**2 + cos(radians(lat1))*cos(radians(lat2))*sin(dlon/2)**2
-    c = 2*asin(min(1, sqrt(a)))
-    return r * c
-
 class PlacesView(APIView):
     @extend_schema(
         parameters=[APP_TOKEN_PARAM],
@@ -668,7 +1075,7 @@ class PlacesView(APIView):
         max_km = max(0.5, min(10.0, max_km))
         limit = max(1, min(5, limit))
 
-        # 1) 날씨 게이트 (함수/인스턴스 모두 대응, 실패 시 폴백)
+        # 1) 날씨 게이트
         weather_fallback = False
         try:
             gw = get_weather_gateway()
@@ -767,7 +1174,6 @@ class PlacesView(APIView):
             "max_distance_km": max_km,
             "limit": limit,
         }
-        # 세션에 기존 user_ctx가 있으면 보존
         try:
             existing_user_ctx = (session.context or {}).get("user_ctx")
         except Exception:
@@ -788,10 +1194,16 @@ class PlacesView(APIView):
 
         # 6) 노출 기록 (PlaceExposure)
         if items:
-            PlaceExposure.objects.bulk_create([
-                PlaceExposure(user_ref=d["user_ref"], place_type=it["place_type"], place_id=it["content_id"])
-                for it in items[:limit]
-            ], ignore_conflicts=True)
+            try:
+                PlaceExposure.objects.bulk_create([
+                    PlaceExposure(user_ref=d["user_ref"], place_type=it["place_type"], place_id=it["content_id"])
+                    for it in items[:limit]
+                ], ignore_conflicts=True)
+            except Exception:
+                pass
+
+        # ✅ RecommendationDelivery 로깅 (필드명 정정: item_kind/context/thumbnail)
+        _log_places_delivery(session=session, user_ref=d["user_ref"], category=d.get("category", "OUTING"), items=items[:limit])
 
         resp = {
             "ok": True,
@@ -803,8 +1215,6 @@ class PlacesView(APIView):
         return Response(resp)
 
 # ==== /v1/recommend ====
-
-# 신규: 추천 컨텍스트 정식 스키마(하위호환으로 기존 gw/ctx도 허용)
 class RecommendPreferencesSerializer(serializers.Serializer):
     lang = serializers.CharField(required=False)
     duration_min = serializers.IntegerField(required=False, min_value=1, max_value=60)
@@ -887,7 +1297,7 @@ class RecommendView(APIView):
         category = (d["category"] or "").upper().strip()
         top_k = max(1, min(5, int(d.get("top_k") or 3)))
 
-        # 1) 카테고리별 인제스트 (Content/ExposureCandidate 적재)
+        # 1) 인제스트
         try:
             if category == "MEDITATION":
                 ingest_youtube_to_session(session_id=session.id, category="MEDITATION", max_total=max(30, top_k*8))
@@ -898,11 +1308,15 @@ class RecommendView(APIView):
                 ingest_spotify_to_session(session_id=session.id, max_total=max(30, top_k*10), query=q, market="KR")
             else:
                 return Response({"ok": False, "error": f"unsupported category '{category}'"}, status=400)
+        except ValueError as e:
+            if str(e) == "CATEGORY_NOT_ALLOWED":
+                log.info("ingest skipped in /v1/recommend (CATEGORY_NOT_ALLOWED): category=%s session=%s", category, session.id)
+            else:
+                pass
         except Exception:
-            # 인제스트 실패해도 기존 후보가 있으면 추천은 시도
             pass
 
-        # 2) 추천(세션 기반) — 세션에 저장된 user_ctx + 요청 context/gw 병합
+        # 2) 추천
         try:
             base_ctx = {}
             try:
@@ -910,13 +1324,11 @@ class RecommendView(APIView):
             except Exception:
                 base_ctx = {}
 
-            # 정식 context 우선, 없으면 legacy ctx/gw 사용
             ctx_in = d.get("context") or {}
             legacy_ctx = d.get("ctx") or {}
             if d.get("gw") is not None:
                 legacy_ctx = {**legacy_ctx, "gw": int(d["gw"])}
 
-            # trimester 보정
             if "trimester" not in ctx_in and ("pregnancy_week" in ctx_in or "gw" in ctx_in):
                 week = ctx_in.get("pregnancy_week", ctx_in.get("gw"))
                 ctx_in["trimester"] = _derive_trimester(week)
@@ -925,20 +1337,15 @@ class RecommendView(APIView):
             if d.get("ts"):
                 merged_ctx["ts"] = d["ts"].isoformat()
 
-            # (NOTE) 당분간 금기 필터는 서버에서 적용하지 않음
-            # 필요 시 merged_ctx["excluded_tags"] + context.apply_taboo=true 로 다시 켤 것.
-
             rec_out = recommend_on_session(
                 session_id=session.id,
                 rec_in=RecInput(user_ref=d["user_ref"], category=category, context=merged_ctx),
             )
         except ValueError:
-            # 후보 없으면 200 + 빈 배열
             return Response({"ok": True, "session_id": str(session.id), "category": category, "items": []})
         except Exception:
             return Response({"ok": False, "error": "recommendation failed"}, status=500)
 
-        # 3) 응답 items 구성: pick + 상위 후보들
         items: List[Dict[str, Any]] = []
         picked = rec_out.picked
         items.append({
@@ -951,7 +1358,6 @@ class RecommendView(APIView):
             "reason": "ts+context",
         })
 
-        # 후보에서 추가 (세션 내 후보 pre_score 높은 순)
         try:
             exps = ExposureCandidate.objects.filter(
                 session=session, content__category__iexact=category
@@ -976,4 +1382,7 @@ class RecommendView(APIView):
         except Exception:
             pass
 
-        return Response({"ok": True, "session_id": rec_out.session_id, "category": category, "items": items[:top_k]})
+        # ✅ RecommendationDelivery 로깅 (필드명 정정)
+        _log_recommend_delivery(session=session, user_ref=d["user_ref"], category=category, items=items[:top_k])
+
+        return Response({"ok": True, "session_id": str(session.id), "category": category, "items": items[:top_k]})
