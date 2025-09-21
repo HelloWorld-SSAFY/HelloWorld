@@ -14,6 +14,14 @@ from .views import (
     RecommendView,  # ✅ 추가
 )
 
+# ⬇️ Delivery 전용 뷰(세션 내 N개 반환) — 분리했다면 views_delivery에서 임포트
+from .views_delivery import (
+    MusicDeliveryView,
+    MeditationDeliveryView,
+    YogaDeliveryView,
+    OutingDeliveryView,
+)
+
 @extend_schema(
     tags=["health"],
     summary="Health check (no auth)",
@@ -42,4 +50,10 @@ urlpatterns = [
     path("places",       PlacesView.as_view(),      name="places"),
     path("recommend",    RecommendView.as_view(),   name="recommend"),  # ✅ 추가
     path("healthz",      healthz,                   name="healthz"),
+
+    # ✅ Delivery: 카테고리 GET → 최신 세션의 여러 개 반환 (기본 3개)
+    path("delivery/music",       MusicDeliveryView.as_view(),      name="delivery-music"),
+    path("delivery/meditation",  MeditationDeliveryView.as_view(), name="delivery-meditation"),
+    path("delivery/yoga",        YogaDeliveryView.as_view(),       name="delivery-yoga"),
+    path("delivery/outing",      OutingDeliveryView.as_view(),     name="delivery-outing"),
 ]
