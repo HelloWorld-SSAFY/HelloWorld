@@ -40,6 +40,7 @@ import com.ms.wearos.service.HealthServiceHelper
 import com.ms.wearos.viewmodel.WearMainViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
+import kotlin.math.log
 
 private const val TAG = "싸피_MainActivity"
 
@@ -249,13 +250,17 @@ class MainActivity : ComponentActivity() {
     private fun startHeartRateServerSync(viewModel: WearMainViewModel) {
         heartRateJob?.cancel()
         heartRateJob = lifecycleScope.launch {
+            Log.d(TAG, "startHeartRateServerSync: ?")
             while (isToggleEnabled.value) {
+                Log.d(TAG, "startHeartRateServerSync: 0")
                 val uiState = viewModel.uiState.value
 
                 if (uiState.isAuthenticated) {
+                    Log.d(TAG, "startHeartRateServerSync: 1")
                     // 커플 아이디 조회
                     val coupleId = viewModel.getCoupleIdIfValid()
                     if (coupleId != null) {
+                        Log.d(TAG, "startHeartRateServerSync: 2")
                         val heartRate = currentHeartRate.value
                         val stressIndex = currentStressIndex.value
 
@@ -293,6 +298,9 @@ class MainActivity : ComponentActivity() {
                     viewModel = viewModel,
                     onAuthenticated = {
                         lifecycleScope.launch {
+                            // 먼저 상태 업데이트
+                            isToggleEnabled.value = true
+
                             sharedPreferences.edit()
                                 .putBoolean("heart_rate_toggle", enabled)
                                 .apply()
