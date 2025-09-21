@@ -23,8 +23,6 @@ management:
     web:
       exposure:
         include: health,info,prometheus
-  server:
-    port: 8888
   health:
     probes:
       enabled: true
