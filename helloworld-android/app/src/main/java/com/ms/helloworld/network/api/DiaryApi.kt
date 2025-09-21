@@ -13,7 +13,8 @@ interface DiaryApi {
     suspend fun getDiaries(
         @Query("page") page: Int = 0,
         @Query("size") size: Int = 20,
-        @Query("sort") sort: String = "createdAt,desc"
+        @Query("sort") sort: String = "createdAt,desc",
+        @Query("coupleId") coupleId: Long? = null
     ): DiaryListResponse
 
     @GET("calendar/diary/{diaryId}")

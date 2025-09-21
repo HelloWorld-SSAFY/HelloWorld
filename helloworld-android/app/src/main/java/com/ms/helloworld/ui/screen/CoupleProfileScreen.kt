@@ -115,7 +115,7 @@ fun CoupleProfileScreen(
                             horizontalArrangement = Arrangement.Center
                         ) {
                             Text(
-                                text = state.momProfile?.nickname ?: "아내 닉네임",
+                                text = state.userA?.nickname ?: "아내 닉네임",
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = Color.Black,
@@ -169,11 +169,7 @@ fun CoupleProfileScreen(
                             horizontalArrangement = Arrangement.Center
                         ) {
                             Text(
-                                text = if (currentUserGender == "MALE") {
-                                    state.memberProfile?.nickname ?: "남편 닉네임"
-                                } else {
-                                    "남편 닉네임" // TODO: 파트너 정보 API에서 가져오기
-                                },
+                                text = state.userB?.nickname ?: "남편 닉네임",
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = Color.Black,

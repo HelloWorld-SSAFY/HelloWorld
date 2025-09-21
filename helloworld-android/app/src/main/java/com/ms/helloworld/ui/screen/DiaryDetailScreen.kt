@@ -117,9 +117,6 @@ fun DiaryDetailScreen(
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
                 println("🔄 DiaryDetailScreen - 화면 복귀, 일기 새로고침")
 
-                // 디버깅용: 전체 일기 조회
-                diaryViewModel.loadAllDiariesForDebug()
-
                 // 일별 일기 조회
                 diaryViewModel.loadDiariesByDay(
                     coupleId = getCoupleId(),

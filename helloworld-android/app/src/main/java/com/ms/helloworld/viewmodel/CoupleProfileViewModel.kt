@@ -8,6 +8,8 @@ import com.ms.helloworld.dto.response.MomProfile
 import com.ms.helloworld.dto.response.MemberProfile
 import com.ms.helloworld.dto.response.CoupleInviteCodeResponse
 import com.ms.helloworld.dto.response.CoupleProfile
+import com.ms.helloworld.dto.response.CoupleDetailResponse
+import com.ms.helloworld.dto.response.UserDetail
 import com.ms.helloworld.repository.MomProfileRepository
 import com.ms.helloworld.repository.CoupleRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -26,7 +28,11 @@ data class CoupleProfileState(
     val coupleProfile: CoupleProfile? = null,
     val inviteCode: String? = null,
     val inviteCodeResponse: CoupleInviteCodeResponse? = null,
-    val isPartnerConnected: Boolean = false
+    val isPartnerConnected: Boolean = false,
+    // 새로운 필드들
+    val coupleDetail: CoupleDetailResponse? = null,
+    val userA: UserDetail? = null,
+    val userB: UserDetail? = null,
 )
 
 @HiltViewModel
@@ -47,32 +53,66 @@ class CoupleProfileViewModel @Inject constructor(
             try {
                 _state.value = _state.value.copy(isLoading = true, errorMessage = null)
 
-                // 전체 사용자 정보 가져오기 (멤버 + 커플 정보)
-                val userInfoResponse = momProfileRepository.getUserInfo()
-                val momProfile = momProfileRepository.getMomProfile()
+                // 새로운 CoupleDetail API 사용
+                val momProfile = momProfileRepository.getHomeProfileData()
 
-                if (momProfile != null) {
-                    println("🚺 성별 디버깅 - memberProfile gender: ${userInfoResponse.member.gender}")
-                    println("🚺 성별 디버깅 - memberProfile 전체: ${userInfoResponse.member}")
+                // CoupleDetail API 직접 호출하여 상세 정보 가져오기
+                val response = momProfileRepository.getCoupleDetailInfo()
 
-                    // 파트너 연결 여부 확인
-                    val isPartnerConnected = userInfoResponse.couple?.userAId != null &&
-                                           userInfoResponse.couple?.userBId != null
+                if (response.isSuccessful) {
+                    val coupleDetail = response.body()
+                    if (coupleDetail != null) {
+                        println("🚺 userA 정보: ${coupleDetail.userA}")
+                        println("🚺 userB 정보: ${coupleDetail.userB}")
 
-                    _state.value = _state.value.copy(
-                        isLoading = false,
-                        momProfile = momProfile,
-                        memberProfile = userInfoResponse.member,
-                        coupleProfile = userInfoResponse.couple,
-                        isPartnerConnected = isPartnerConnected
-                    )
+                        // 파트너 연결 여부 확인
+                        val isPartnerConnected = coupleDetail.couple.userAId != null &&
+                                               coupleDetail.couple.userBId != null
 
-                    // 파트너가 연결되지 않은 경우에는 초대 코드 생성 버튼만 표시
+                        // 기존 형태로 변환하여 호환성 유지 (userA를 기본으로 사용)
+                        val memberProfile = MemberProfile(
+                            id = coupleDetail.userA.id,
+                            googleEmail = null,
+                            nickname = coupleDetail.userA.nickname,
+                            gender = coupleDetail.userA.gender,
+                            imageUrl = coupleDetail.userA.imageUrl,
+                            age = null
+                        )
+
+                        _state.value = _state.value.copy(
+                            isLoading = false,
+                            momProfile = momProfile,
+                            memberProfile = memberProfile,
+                            coupleProfile = coupleDetail.couple,
+                            isPartnerConnected = isPartnerConnected,
+                            // 새로운 데이터
+                            coupleDetail = coupleDetail,
+                            userA = coupleDetail.userA,
+                            userB = coupleDetail.userB
+                        )
+                    } else {
+                        _state.value = _state.value.copy(
+                            isLoading = false,
+                            errorMessage = "커플 상세 정보를 불러오는데 실패했습니다."
+                        )
+                    }
                 } else {
-                    _state.value = _state.value.copy(
-                        isLoading = false,
-                        errorMessage = "프로필 정보를 불러오는데 실패했습니다."
-                    )
+                    // 404일 경우 기본 사용자 정보만으로 처리
+                    if (response.code() == 404) {
+                        val userInfo = momProfileRepository.getUserInfo()
+                        val memberProfile = userInfo.member
+
+                        _state.value = _state.value.copy(
+                            isLoading = false,
+                            memberProfile = memberProfile,
+                            isPartnerConnected = false
+                        )
+                    } else {
+                        _state.value = _state.value.copy(
+                            isLoading = false,
+                            errorMessage = "서버 오류가 발생했습니다: ${response.code()}"
+                        )
+                    }
                 }
             } catch (e: Exception) {
                 _state.value = _state.value.copy(

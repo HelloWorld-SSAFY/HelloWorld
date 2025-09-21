@@ -79,6 +79,52 @@ fun OnboardingScreens(
 ) {
     val state by viewModel.state.collectAsState()
 
+    // 온보딩 상태 체크 및 중간 단계부터 재개
+    var initialPageIndex by remember { mutableStateOf(0) }
+    var isStatusChecked by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        try {
+            val result = viewModel.checkAndResumeOnboarding()
+
+            when (result.status) {
+                com.ms.helloworld.model.OnboardingStatus.FULLY_COMPLETED -> {
+                    // 온보딩이 이미 완료된 경우 홈으로 이동
+                    navController.navigate(Screen.HomeScreen.route) {
+                        popUpTo(Screen.OnboardingScreens.route) { inclusive = true }
+                    }
+                    return@LaunchedEffect
+                }
+                com.ms.helloworld.model.OnboardingStatus.BASIC_COMPLETED -> {
+                    // 중간 단계부터 시작
+                    initialPageIndex = viewModel.getResumePageIndex(result)
+                    println("📍 중간 단계부터 시작: 페이지 $initialPageIndex")
+                }
+                com.ms.helloworld.model.OnboardingStatus.NOT_STARTED -> {
+                    // 처음부터 시작
+                    initialPageIndex = 0
+                    println("🆕 처음부터 온보딩 시작")
+                }
+            }
+        } catch (e: Exception) {
+            println("❌ 온보딩 상태 체크 실패: ${e.message}")
+            initialPageIndex = 0
+        } finally {
+            isStatusChecked = true
+        }
+    }
+
+    // 상태 체크가 완료될 때까지 로딩 표시
+    if (!isStatusChecked) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator()
+        }
+        return
+    }
+
     val baseScreens = listOf(
         OnboardingScreen(
             title = "반가워요!",
@@ -136,7 +182,10 @@ fun OnboardingScreens(
         }
     }
 
-    val pagerState = rememberPagerState(pageCount = { screens.size })
+    val pagerState = rememberPagerState(
+        initialPage = initialPageIndex,
+        pageCount = { screens.size }
+    )
     val scope = rememberCoroutineScope()
 
     // 애니메이션을 위한 알파 값
@@ -245,14 +294,11 @@ fun OnboardingScreens(
                                 )
                             }
                         } else if (currentScreen.screenType == ScreenType.MOM_INFO_FORM) {
-                            // 엄마 정보 화면에서 다음: Couple 정보 저장
-                            val success = viewModel.saveCoupleInfo()
-                            if (success) {
-                                pagerState.animateScrollToPage(
-                                    pagerState.currentPage + 1,
-                                    animationSpec = tween(durationMillis = 500)
-                                )
-                            }
+                            // 엄마 정보 화면에서 다음: 데이터는 상태에만 저장하고 다음 페이지로
+                            pagerState.animateScrollToPage(
+                                pagerState.currentPage + 1,
+                                animationSpec = tween(durationMillis = 500)
+                            )
                         } else {
                             // 일반 다음 페이지 이동
                             pagerState.animateScrollToPage(
@@ -512,36 +558,75 @@ fun MomInfoFormContent(
                 enter = fadeIn(animationSpec = tween(300)),
                 exit = fadeOut(animationSpec = tween(300))
             ) {
-                Column {
-                    Text(
-                        text = "계산된 임신 주차",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Medium,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp)
-                            .background(
-                                Color(0xFFF5F5F5),
-                                RoundedCornerShape(8.dp)
-                            )
-                            .border(
-                                1.dp,
-                                Color(0xFFE0E0E0),
-                                RoundedCornerShape(8.dp)
-                            )
-                            .padding(horizontal = 16.dp),
-                        contentAlignment = Alignment.CenterStart
-                    ) {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    // 임신 주차
+                    Column {
                         Text(
-                            text = "${state.calculatedPregnancyWeek}주",
-                            fontSize = 14.sp,
-                            color = MainColor,
-                            fontWeight = FontWeight.Medium
+                            text = "계산된 임신 주차",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(bottom = 8.dp)
                         )
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
+                                .background(
+                                    Color(0xFFF5F5F5),
+                                    RoundedCornerShape(8.dp)
+                                )
+                                .border(
+                                    1.dp,
+                                    Color(0xFFE0E0E0),
+                                    RoundedCornerShape(8.dp)
+                                )
+                                .padding(horizontal = 16.dp),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
+                            Text(
+                                text = "${state.calculatedPregnancyWeek}주",
+                                fontSize = 14.sp,
+                                color = MainColor,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+
+                    // 계산된 예정일
+                    if (state.dueDate.isNotBlank()) {
+                        Column {
+                            Text(
+                                text = "계산된 출산 예정일",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            )
+
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp)
+                                    .background(
+                                        Color(0xFFF0F9FF),
+                                        RoundedCornerShape(8.dp)
+                                    )
+                                    .border(
+                                        1.dp,
+                                        MainColor.copy(alpha = 0.3f),
+                                        RoundedCornerShape(8.dp)
+                                    )
+                                    .padding(horizontal = 16.dp),
+                                contentAlignment = Alignment.CenterStart
+                            ) {
+                                Text(
+                                    text = state.dueDate,
+                                    fontSize = 14.sp,
+                                    color = MainColor,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
                     }
                 }
             }

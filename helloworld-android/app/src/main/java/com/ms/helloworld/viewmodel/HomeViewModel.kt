@@ -52,6 +52,9 @@ class HomeViewModel @Inject constructor(
     private val _coupleId = MutableStateFlow<Long?>(null)
     val coupleId: StateFlow<Long?> = _coupleId.asStateFlow()
 
+    private val _menstrualDate = MutableStateFlow<String?>(null)
+    val menstrualDate: StateFlow<String?> = _menstrualDate.asStateFlow()
+
     // 임시 테스트용 - API 호출이 실패할 경우 기본값 설정
     private fun setTestGender() {
         println("🧪 HomeViewModel($viewModelId) - 테스트용 성별 설정: FEMALE")
@@ -73,11 +76,12 @@ class HomeViewModel @Inject constructor(
     private fun loadMomProfile() {
         viewModelScope.launch {
             try {
-                println("🚀 HomeViewModel($viewModelId) - loadMomProfile 시작")
+                println("🚀 HomeViewModel($viewModelId) - loadHomeProfile 시작")
                 _isLoading.value = true
-                val profile = momProfileRepository.getMomProfile()
+                val profile = momProfileRepository.getHomeProfileData()
                 if (profile != null) {
-                    println("🚀 HomeViewModel($viewModelId) - API에서 받은 데이터: 주차=${profile.pregnancyWeek}, 닉네임=${profile.nickname}")
+                    println("🚀 HomeViewModel($viewModelId) - Couple 테이블 기반 데이터: 주차=${profile.pregnancyWeek}, 닉네임=${profile.nickname}")
+                    println("🚀 HomeViewModel($viewModelId) - 예정일=${profile.dueDate}, D-day=${profile.daysUntilDue}")
 
                     // StateFlow 강제 업데이트 - 새로운 객체로 교체
                     val newProfile = profile.copy()
@@ -86,14 +90,14 @@ class HomeViewModel @Inject constructor(
                     println("🚀 HomeViewModel($viewModelId) - _momProfile.value 업데이트 완료: ${_momProfile.value.pregnancyWeek}주차")
                     println("🚀 HomeViewModel($viewModelId) - StateFlow 현재값: ${momProfile.value.pregnancyWeek}주차")
                 } else {
-                    println("❌ HomeViewModel($viewModelId) - API에서 null 데이터 받음")
+                    println("❌ HomeViewModel($viewModelId) - Couple 데이터에서 null 받음")
                 }
             } catch (e: Exception) {
-                println("💥 HomeViewModel - loadMomProfile 예외: ${e.message}")
+                println("💥 HomeViewModel - loadHomeProfile 예외: ${e.message}")
                 e.printStackTrace()
             } finally {
                 _isLoading.value = false
-                println("🏁 HomeViewModel - loadMomProfile 완료")
+                println("🏁 HomeViewModel - loadHomeProfile 완료")
             }
         }
     }
@@ -110,14 +114,17 @@ class HomeViewModel @Inject constructor(
                 val gender = userInfo.member.gender
                 val userId = userInfo.member.id
                 val coupleId = userInfo.couple?.id
+                val menstrualDate = userInfo.couple?.menstrualDate
 
                 println("🚻 HomeViewModel($viewModelId) - 원본 성별: $gender")
                 println("🚻 HomeViewModel($viewModelId) - 사용자 ID: $userId")
                 println("🚻 HomeViewModel($viewModelId) - 커플 ID: $coupleId")
+                println("🚻 HomeViewModel($viewModelId) - 생리일: $menstrualDate")
 
                 _userGender.value = gender
                 _userId.value = userId
                 _coupleId.value = coupleId
+                _menstrualDate.value = menstrualDate
 
                 println("🚻 HomeViewModel($viewModelId) - StateFlow 저장 완료")
             } catch (e: Exception) {
@@ -186,15 +193,16 @@ class HomeViewModel @Inject constructor(
     private fun refreshMomProfileSilently() {
         viewModelScope.launch {
             try {
-                println("🔄 HomeViewModel - refreshMomProfileSilently 시작")
+                println("🔄 HomeViewModel - refreshHomeProfileSilently 시작")
                 // 로딩 상태를 변경하지 않고 백그라운드에서 새로고침
-                val profile = momProfileRepository.getMomProfile()
+                val profile = momProfileRepository.getHomeProfileData()
                 if (profile != null) {
-                    println("🔄 HomeViewModel - 새 프로필 데이터: 주차=${profile.pregnancyWeek}, 닉네임=${profile.nickname}")
+                    println("🔄 HomeViewModel - 새 Couple 기반 프로필 데이터: 주차=${profile.pregnancyWeek}, 닉네임=${profile.nickname}")
+                    println("🔄 HomeViewModel - 예정일=${profile.dueDate}, D-day=${profile.daysUntilDue}")
                     _momProfile.value = profile
                     println("🔄 HomeViewModel - _momProfile 상태 업데이트 완료")
                 } else {
-                    println("❌ HomeViewModel - 프로필 데이터가 null입니다")
+                    println("❌ HomeViewModel - Couple 기반 프로필 데이터가 null입니다")
                 }
             } catch (e: Exception) {
                 println("❌ HomeScreen - 프로필 silent refresh 실패: ${e.message}")

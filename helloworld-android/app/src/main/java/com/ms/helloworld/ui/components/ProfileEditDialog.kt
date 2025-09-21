@@ -357,7 +357,8 @@ fun ProfileEditDialog(
                                     nickname.trim(),
                                     ageInt,
                                     finalMenstrualDate,
-                                    finalDueDate
+                                    finalDueDate,
+                                    isChildbirth
                                 )
                                 onDismiss()
                             }

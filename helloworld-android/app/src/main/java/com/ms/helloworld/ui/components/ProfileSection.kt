@@ -54,7 +54,7 @@ fun ProfileSection(
                 color = Color.Gray
             )
             Text(
-                text = "D-${momProfile.getDaysUntilDue()}",
+                text = "D-${momProfile.daysUntilDue}",
                 fontSize = 12.sp,
                 color = Color(0xFF4CAF50),
                 fontWeight = FontWeight.Medium

@@ -61,10 +61,13 @@ fun DiaryRegisterScreen(
     val userGender by homeViewModel.userGender.collectAsState()
     val userId by homeViewModel.userId.collectAsState()
     val coupleId by homeViewModel.coupleId.collectAsState()
+    val menstrualDate by homeViewModel.menstrualDate.collectAsState()
 
     // TODO: SharedPreferences나 DataStore에서 실제 사용자 정보 가져오기
-    val getCoupleId = { 1L } // 임시로 하드코딩
-    val getLmpDate = { "2025-02-02" } // 임시로 하드코딩
+    val getCoupleId = { coupleId ?: 1L } // coupleId 사용, fallback으로 1L
+    val getLmpDate = {
+        menstrualDate ?: "2025-02-02" // couple 데이터의 menstrualDate 사용
+    }
 
     // 날짜 계산 (임신 일수 -> 실제 날짜)
     val targetDate = remember(day) {
@@ -74,9 +77,20 @@ fun DiaryRegisterScreen(
     }
 
     val targetDateForApi = remember(day) {
-        val lmpDate = LocalDate.parse(getLmpDate())
+        val lmpDateString = getLmpDate()
+        val lmpDate = LocalDate.parse(lmpDateString)
         val actualDate = lmpDate.plusDays(day.toLong() - 1)
-        actualDate.toString() // yyyy-MM-dd 형식
+        val result = actualDate.toString() // yyyy-MM-dd 형식
+
+        println("📅 targetDate 계산:")
+        println("  - day: $day")
+        println("  - lmpDateString: $lmpDateString")
+        println("  - lmpDate: $lmpDate")
+        println("  - plusDays: ${day.toLong() - 1}")
+        println("  - actualDate: $actualDate")
+        println("  - result: $result")
+
+        result
     }
 
     // 입력 상태들
@@ -235,6 +249,15 @@ fun DiaryRegisterScreen(
                             println("📝 DiaryRegisterScreen - day: $day")
                             println("📝 DiaryRegisterScreen - targetDateForApi: $targetDateForApi")
                             println("📝 DiaryRegisterScreen - lmpDate: ${getLmpDate()}")
+                            println("📝 DiaryRegisterScreen - menstrualDate raw: $menstrualDate")
+                            println("📝 DiaryRegisterScreen - 계산 검증:")
+                            println("   생리일 + (day-1) = ${getLmpDate()} + ${day-1} = $targetDateForApi")
+                            println("📝 디버깅: HomeViewModel 상태 확인")
+                            println("   - userGender: $userGender")
+                            println("   - userId: $userId (expected: not null)")
+                            println("   - coupleId: $coupleId (expected: not 1)")
+                            println("   - menstrualDate: $menstrualDate (expected: 2025-05-15)")
+                            println("   - momProfile: $momProfile")
 
                             diaryViewModel.createDiary(
                                 title = diaryTitle,

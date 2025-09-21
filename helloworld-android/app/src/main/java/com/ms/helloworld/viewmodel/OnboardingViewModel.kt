@@ -5,8 +5,11 @@ import androidx.lifecycle.viewModelScope
 import com.ms.helloworld.dto.request.MemberRegisterRequest
 import com.ms.helloworld.dto.request.MemberUpdateRequest
 import com.ms.helloworld.dto.request.CoupleUpdateRequest
+import com.ms.helloworld.dto.request.CoupleCreateRequest
 import com.ms.helloworld.repository.MomProfileRepository
 import com.ms.helloworld.repository.CoupleRepository
+import com.ms.helloworld.model.OnboardingStatus
+import com.ms.helloworld.model.OnboardingCheckResult
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -107,7 +110,21 @@ class OnboardingViewModel @Inject constructor(
                 // 음수가 되지 않도록 보정
                 val calculatedWeek = if (pregnancyWeek > 0) pregnancyWeek else 0
 
-                _state.value = _state.value.copy(calculatedPregnancyWeek = calculatedWeek)
+                // 예정일 계산 (배란일 + 266일 = 임신 기간 38주)
+                val dueDate = ovulationDate.plusDays(266)
+                val dueDateString = dueDate.format(DateTimeFormatter.ISO_LOCAL_DATE)
+
+                println("📅 임신 정보 계산:")
+                println("  - 마지막 생리일: $menstrualDate")
+                println("  - 생리 주기: ${cycleLength}일")
+                println("  - 계산된 배란일: $ovulationDate")
+                println("  - 계산된 예정일: $dueDate (배란일 + 266일)")
+                println("  - 임신 주차: $calculatedWeek")
+
+                _state.value = _state.value.copy(
+                    calculatedPregnancyWeek = calculatedWeek,
+                    dueDate = dueDateString
+                )
             } catch (e: Exception) {
                 // 날짜 파싱 실패 시 0으로 설정
                 _state.value = _state.value.copy(calculatedPregnancyWeek = 0)
@@ -302,13 +319,37 @@ class OnboardingViewModel @Inject constructor(
 
                 when (currentState.selectedGender) {
                     "엄마" -> {
-                        // 엄마: 커플 정보가 이미 saveCoupleInfo()에서 저장되었으므로 완료 처리만
-                        println("👩 엄마 온보딩 완료")
-                        _state.value = _state.value.copy(
-                            isLoading = false,
-                            submitSuccess = true
+                        // 엄마: 커플 테이블 생성 및 정보 저장
+                        println("👩 엄마 커플 생성 시작")
+
+                        val coupleCreateRequest = CoupleCreateRequest(
+                            pregnancyWeek = if (currentState.calculatedPregnancyWeek > 0) currentState.calculatedPregnancyWeek else null,
+                            due_date = if (currentState.dueDate.isNotBlank()) currentState.dueDate else null,
+                            menstrual_date = if (currentState.menstrualDate.isNotBlank()) currentState.menstrualDate else null,
+                            menstrual_cycle = if (currentState.menstrualCycle.isNotBlank()) currentState.menstrualCycle.toIntOrNull() else null,
+                            is_childbirth = currentState.isChildbirth
                         )
-                        println("✅ 엄마 온보딩 완료")
+
+                        println("💾 백엔드로 전송할 couple 데이터:")
+                        println("  - pregnancyWeek: ${coupleCreateRequest.pregnancyWeek}")
+                        println("  - due_date: ${coupleCreateRequest.due_date}")
+                        println("  - menstrual_date: ${coupleCreateRequest.menstrual_date}")
+                        println("  - menstrual_cycle: ${coupleCreateRequest.menstrual_cycle}")
+                        println("  - is_childbirth: ${coupleCreateRequest.is_childbirth}")
+
+                        val result = momProfileRepository.createCouple(coupleCreateRequest)
+                        if (result != null) {
+                            _state.value = _state.value.copy(
+                                isLoading = false,
+                                submitSuccess = true
+                            )
+                            println("✅ 엄마 커플 생성 완료")
+                        } else {
+                            _state.value = _state.value.copy(
+                                isLoading = false,
+                                errorMessage = "커플 생성에 실패했습니다."
+                            )
+                        }
                     }
                     "아빠" -> {
                         // 아빠: 초대코드 검증만 확인 (기본 정보는 이미 저장됨)
@@ -345,5 +386,86 @@ class OnboardingViewModel @Inject constructor(
 
     fun clearError() {
         _state.value = _state.value.copy(errorMessage = null)
+    }
+
+    suspend fun checkAndResumeOnboarding(): OnboardingCheckResult {
+        return try {
+            println("🔍 온보딩 상태 체크 시작")
+            val result = momProfileRepository.checkOnboardingStatus()
+
+            when (result.status) {
+                OnboardingStatus.BASIC_COMPLETED -> {
+                    // 기존 사용자 정보로 상태 초기화
+                    initializeFromExistingData(result)
+                    println("📝 기존 정보로 상태 초기화 완료")
+                }
+                OnboardingStatus.FULLY_COMPLETED -> {
+                    println("✅ 온보딩 이미 완료됨")
+                }
+                OnboardingStatus.NOT_STARTED -> {
+                    println("🆕 새로운 사용자 - 처음부터 시작")
+                }
+            }
+
+            result
+        } catch (e: Exception) {
+            println("❌ 온보딩 상태 체크 실패: ${e.message}")
+
+            // 네트워크 오류인 경우 예외를 다시 던져서 로그인 화면으로 이동하도록 함
+            if (e is java.net.UnknownHostException ||
+                e.message?.contains("Unable to resolve host") == true ||
+                e.message?.contains("Network") == true) {
+                println("🌐 네트워크 오류 감지 → 로그인 화면으로 리다이렉트")
+                throw e
+            }
+
+            // 다른 오류는 새로운 사용자로 간주
+            OnboardingCheckResult(OnboardingStatus.NOT_STARTED)
+        }
+    }
+
+    private suspend fun initializeFromExistingData(result: OnboardingCheckResult) {
+        try {
+            // 사용자 정보 가져오기
+            val userInfo = momProfileRepository.getUserInfo()
+            val member = userInfo.member
+            val couple = userInfo.couple
+
+            // 기본 정보 초기화
+            val genderText = if (member.gender?.lowercase() == "female") "엄마" else "아빠"
+            val nickname = member.nickname?.replace(" $genderText", "") ?: ""
+
+            _state.value = _state.value.copy(
+                nickname = nickname,
+                selectedGender = genderText,
+                age = member.age?.toString() ?: "",
+                // couple 정보가 있다면 초기화
+                menstrualDate = couple?.menstrualDate ?: "",
+                isChildbirth = couple?.isChildbirth,
+                dueDate = couple?.dueDate ?: ""
+            )
+
+            println("📋 기존 데이터로 상태 초기화:")
+            println("  - nickname: $nickname")
+            println("  - gender: $genderText")
+            println("  - age: ${member.age}")
+
+        } catch (e: Exception) {
+            println("❌ 기존 데이터 초기화 실패: ${e.message}")
+        }
+    }
+
+    fun getResumePageIndex(result: OnboardingCheckResult): Int {
+        return when {
+            result.shouldGoToMomForm -> {
+                // 엄마 정보 입력 페이지로 (기본 온보딩 화면들을 건너뛰고 MOM_INFO_FORM으로)
+                6 // 일반적으로 온보딩 화면 5개 + 기본 정보 1개 = 6번째가 MOM_INFO_FORM
+            }
+            result.shouldGoToDadForm -> {
+                // 아빠 정보 입력 페이지로
+                6 // DAD_INFO_FORM도 같은 위치
+            }
+            else -> 0 // 처음부터 시작
+        }
     }
 }

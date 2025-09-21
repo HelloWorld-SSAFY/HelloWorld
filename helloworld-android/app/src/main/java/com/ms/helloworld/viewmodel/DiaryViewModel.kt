@@ -302,23 +302,8 @@ class DiaryViewModel @Inject constructor(
         _state.value = _state.value.copy(errorMessage = null)
     }
 
-    // 디버깅용: 전체 일기 조회
-    fun loadAllDiariesForDebug() {
-        viewModelScope.launch {
-            try {
-                println("🔍 DiaryViewModel - 디버깅용 전체 일기 조회 시작")
-                val result = diaryRepository.getDiaries(page = 0, size = 100)
-                if (result.isSuccess) {
-                    val response = result.getOrNull()
-                    println("🔍 전체 일기 조회 성공: ${response?.content?.size ?: 0}개")
-                } else {
-                    println("🔍 전체 일기 조회 실패: ${result.exceptionOrNull()?.message}")
-                }
-            } catch (e: Exception) {
-                println("🔍 전체 일기 조회 예외: ${e.message}")
-            }
-        }
-    }
+    // TODO: 나중에 필요시 전체 일기 조회 기능 추가
+    // fun loadAllDiariesForDebug() { ... }
 
     // 임신 주차 계산 (임시 구현)
     private fun getCurrentPregnancyWeek(currentDate: LocalDate): Int {

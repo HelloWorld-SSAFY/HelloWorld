@@ -20,7 +20,7 @@ data class CoupleProfile(
     @SerializedName("couple_id") val id: Long,
     @SerializedName("user_a_id") val userAId: Long?,
     @SerializedName("user_b_id") val userBId: Long?,
-    @SerializedName("pregnancy_week") val pregnancyWeek: Int?,
+    @SerializedName("pregnancyWeek") val pregnancyWeek: Int?,  // 서버가 camelCase로 보냄
     @SerializedName("due_date") val dueDate: String?, // "yyyy-MM-dd" format
     @SerializedName("menstrual_date") val menstrualDate: String?, // "yyyy-MM-dd" format
     @SerializedName("is_childbirth") val isChildbirth: Boolean?
