@@ -27,7 +27,9 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
+  server:
+    port: 8761
   health:
     probes:
       enabled: true

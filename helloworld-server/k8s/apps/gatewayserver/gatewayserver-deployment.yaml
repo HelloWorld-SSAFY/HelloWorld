@@ -60,6 +60,8 @@ spec:
           value: "true"
         - name: MANAGEMENT_HEALTH_READINESSSTATE_ENABLED
           value: "true"
+        - name: GATEWAY_HMAC_SECRET
+          value: "ahCwnX3I9VuzLSYtQVn0cztXZrd4zhXSqgCy8j4q57o="
 
         readinessProbe:
           httpGet: { path: /actuator/health/readiness, port: 8080 }
