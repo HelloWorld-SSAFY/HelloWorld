@@ -178,7 +178,7 @@ SPECTACULAR_SETTINGS = {
     "VERSION": "v0.2.1",
 
     # 전역 보안 요구 OFF → 각 API에서 헤더 파라미터로 입력
-    "SECURITY": [],
+    "SECURITY": [{"X-App-Token": []}],
 
     "SERVERS": [
         {"url": "/ai", "description": "via gateway"},
