@@ -6,6 +6,7 @@ import com.example.helloworld.userserver.member.dto.response.CoupleJoinResponse;
 import com.example.helloworld.userserver.member.dto.response.CoupleUnlinkResponse;
 import com.example.helloworld.userserver.member.dto.response.InviteCodeIssueResponse;
 import com.example.helloworld.userserver.member.service.CoupleInviteService;
+import com.example.helloworld.userserver.member.util.InternalPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.*;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -15,6 +16,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 
@@ -25,71 +27,29 @@ import org.springframework.web.bind.annotation.*;
 public class CoupleInviteController {
 
     private final CoupleInviteService inviteService;
-    private final JwtProvider jwtProvider;
 
-    // 초대코드 발급 (여성)
     @PostMapping("/invite")
     @SecurityRequirement(name = "bearerAuth")
-    @Operation(
-            summary = "초대코드 발급(여성 전용)",
-            description = "요청 바디 없음. 서버 설정 TTL로 만료시간이 정해지며, 응답에 code와 expiresAt이 포함됩니다."
-    )
-    @ApiResponse(responseCode = "200", description = "발급 성공",
-            content = @Content(schema = @Schema(implementation = InviteCodeIssueResponse.class)))
     public ResponseEntity<InviteCodeIssueResponse> issue(
-            @RequestHeader(value = "X-Internal-User-Id", required = false) String internalUserId,
-            @RequestHeader(value = "Authorization", required = false) String authz
+            @AuthenticationPrincipal InternalPrincipal me
     ) {
-        Long memberId = resolveMemberId(internalUserId, authz);
-        return ResponseEntity.ok(inviteService.issue(memberId));
+        return ResponseEntity.ok(inviteService.issue(me.memberId()));
     }
 
-    // 초대코드 합류 (남성)
     @PostMapping("/join")
     @SecurityRequirement(name = "bearerAuth")
-    @Operation(summary = "초대코드로 커플 합류(남성)")
-    @ApiResponse(responseCode = "200", description = "연동 성공",
-            content = @Content(schema = @Schema(implementation = CoupleJoinResponse.class)))
     public ResponseEntity<CoupleJoinResponse> join(
-            @RequestHeader(value = "X-Internal-User-Id", required = false) String internalUserId,
-            @RequestHeader(value = "Authorization", required = false) String authz,
+            @AuthenticationPrincipal InternalPrincipal me,
             @Valid @RequestBody CoupleJoinRequest req
     ) {
-        Long memberId = resolveMemberId(internalUserId, authz);
-        return ResponseEntity.ok(inviteService.join(memberId, req));
+        return ResponseEntity.ok(inviteService.join(me.memberId(), req));
     }
 
-    // 커플 연동 해제
     @DeleteMapping("/divorce")
     @SecurityRequirement(name = "bearerAuth")
-    @Operation(summary = "커플 연동 해제", description = "여성(userA) 또는 남성(userB) 당사자만 가능. 해제 후 userB=null")
-    @ApiResponse(responseCode = "200", description = "해제 성공",
-            content = @Content(schema = @Schema(implementation = CoupleUnlinkResponse.class)))
     public ResponseEntity<CoupleUnlinkResponse> unlink(
-            @RequestHeader(value = "X-Internal-User-Id", required = false) String internalUserId,
-            @RequestHeader(value = "Authorization", required = false) String authz
+            @AuthenticationPrincipal InternalPrincipal me
     ) {
-        Long memberId = resolveMemberId(internalUserId, authz);
-        return ResponseEntity.ok(inviteService.unlink(memberId));
-    }
-
-    /** 게이트웨이 내부 헤더가 있으면 그걸 사용, 없으면 로컬 테스트용으로 JWT 파싱 */
-    private Long resolveMemberId(String internalUserId, String authz) {
-        if (internalUserId != null && !internalUserId.isBlank()) {
-            return Long.valueOf(internalUserId);
-        }
-        return jwtProvider.parseAccessSubject(extractBearer(authz));
-    }
-
-    private static String extractBearer(String authz) {
-        if (authz == null)
-            throw new org.springframework.web.server.ResponseStatusException(
-                    HttpStatus.UNAUTHORIZED, "Missing Authorization header");
-        String token = authz.replaceFirst("(?i)^Bearer\\s+", "").trim();
-        if (token.isEmpty())
-            throw new org.springframework.web.server.ResponseStatusException(
-                    HttpStatus.UNAUTHORIZED, "Empty token");
-        return token;
+        return ResponseEntity.ok(inviteService.unlink(me.memberId()));
     }
 }
-
