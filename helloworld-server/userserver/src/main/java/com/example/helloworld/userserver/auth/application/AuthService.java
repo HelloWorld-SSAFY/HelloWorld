@@ -12,6 +12,7 @@ import com.example.helloworld.userserver.auth.token.TokenHashes;
 import com.example.helloworld.userserver.exception.HelloWordException;
 import com.example.helloworld.userserver.exception.code.AuthErrorCode;
 import com.example.helloworld.userserver.member.entity.Member;
+import com.example.helloworld.userserver.member.persistence.CoupleRepository;
 import com.example.helloworld.userserver.member.persistence.MemberRepository;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken.Payload;
 import io.jsonwebtoken.Jwts;
@@ -38,16 +39,30 @@ public class AuthService {
     private final JwtProvider jwtProvider;
     private final RefreshTokenRepository refreshTokenRepository;
     private final TokenCacheService tokenCacheService;
+    private final CoupleRepository coupleRepository;
 
     @Value("${jwt.refresh.expire}")     // ms 단위
     private long refreshMillis;
+
+    private record CoupleInfo(Long coupleId, String role) {}
+
+    private CoupleInfo resolveCoupleInfo(Long memberId) {
+        return coupleRepository.findByUserA_IdOrUserB_Id(memberId, memberId)
+                .map(c -> {
+                    String role = (c.getUserA() != null && c.getUserA().getId().equals(memberId)) ? "A"
+                            : (c.getUserB() != null && c.getUserB().getId().equals(memberId)) ? "B"
+                            : null;
+                    return new CoupleInfo(c.getId(), role);
+                })
+                .orElse(new CoupleInfo(null, null));
+    }
 
     /**
      * 로그인 + 자동 회원가입 (통합)
      */
     @Transactional
     public LoginResult login(LoginCommand command) {
-        Payload payload = oAuthClient.verify(command.idToken())
+        var payload = oAuthClient.verify(command.idToken())
                 .orElseThrow(() -> new HelloWordException(AuthErrorCode.INVALID_ID_TOKEN));
 
         String googleEmail = payload.getEmail();
@@ -57,15 +72,17 @@ public class AuthService {
         }
 
         Member member = memberRepository.findByGoogleEmail(googleEmail).orElse(null);
-
         if (member == null) {
             member = createMemberWithRetry(googleEmail, googleName);
         }
 
+        // 커플/역할 해석
+        CoupleInfo ci = resolveCoupleInfo(member.getId());
+
         String accessToken  = jwtProvider.issueAccessToken(member.getId());
         String refreshToken = jwtProvider.issueRefreshToken(member.getId());
 
-        // 만료 계산 & 저장 (RefreshToken DB)
+        // RT 저장
         Instant rtExpiry = Instant.ofEpochMilli(System.currentTimeMillis() + refreshMillis);
         RefreshToken rt = RefreshToken.builder()
                 .memberId(member.getId())
@@ -75,19 +92,20 @@ public class AuthService {
                 .build();
         refreshTokenRepository.save(rt);
 
-        // AccessToken 캐시 등록 (Redis)
+        // AT → Redis (coupleId/role 포함)
         try {
             long accessExpMs = System.currentTimeMillis() + jwtProvider.getAccessTokenMillis();
-            // TokenCacheService api: registerAccessToken(accessToken, memberId, coupleId, role, accessExpMs)
-            tokenCacheService.registerAccessToken(accessToken, member.getId(), null, null, accessExpMs);
+            tokenCacheService.registerAccessToken(
+                    accessToken, member.getId(), ci.coupleId(), ci.role(), accessExpMs
+            );
         } catch (Exception e) {
             log.warn("Failed to register access token in cache for memberId={}: {}", member.getId(), e.getMessage());
         }
 
         String gender = (member.getGender() == null) ? null : member.getGender().toString();
-
         return new LoginResult(member.getId(), accessToken, refreshToken, gender);
     }
+
 
     // -----------------------
     // RTR 적용된 refresh
@@ -100,24 +118,16 @@ public class AuthService {
         }
 
         String hash = TokenHashes.sha256B64(incomingRt);
-
-        // 1) 원자적으로 해당 refresh 토큰을 revoked=true로 마킹 (한 번만 성공)
         int updated = refreshTokenRepository.revokeIfNotRevoked(hash);
 
         if (updated == 1) {
-            // 정상: 이 요청이 토큰 사용의 '첫번째' 성공자
             Long memberId;
-            try {
-                memberId = jwtProvider.parseRefreshSubject(incomingRt);
-            } catch (Exception e) {
-                throw new HelloWordException(AuthErrorCode.INVALID_REFRESH_TOKEN);
-            }
+            try { memberId = jwtProvider.parseRefreshSubject(incomingRt); }
+            catch (Exception e) { throw new HelloWordException(AuthErrorCode.INVALID_REFRESH_TOKEN); }
 
-            // 3) 새 AT/RT 발급
             String newAT = jwtProvider.issueAccessToken(memberId);
             String newRT = jwtProvider.issueRefreshToken(memberId);
 
-            // 4) 새 RT DB에 저장
             RefreshToken newEntity = RefreshToken.builder()
                     .memberId(memberId)
                     .tokenHash(TokenHashes.sha256B64(newRT))
@@ -126,38 +136,27 @@ public class AuthService {
                     .build();
             refreshTokenRepository.save(newEntity);
 
-            // 5) 새 AccessToken Redis 등록
+            // 커플/역할 해석
+            CoupleInfo ci = resolveCoupleInfo(memberId);
+
             try {
                 long accessExpMs = System.currentTimeMillis() + jwtProvider.getAccessTokenMillis();
-                tokenCacheService.registerAccessToken(newAT, memberId, null, null, accessExpMs);
+                tokenCacheService.registerAccessToken(newAT, memberId, ci.coupleId(), ci.role(), accessExpMs);
             } catch (Exception e) {
                 log.warn("token cache registration failed for memberId={}: {}", memberId, e.getMessage());
             }
 
             return new RefreshResponse(memberId, newAT, newRT);
         } else {
-            // updated == 0 -> 이미 revoked 되었거나 DB에 없음
             var maybe = refreshTokenRepository.findByTokenHash(hash);
             if (maybe.isEmpty()) {
                 throw new HelloWordException(AuthErrorCode.INVALID_REFRESH_TOKEN);
             } else {
                 RefreshToken existing = maybe.get();
                 Long memberId = existing.getMemberId();
-
-                try {
-                    refreshTokenRepository.revokeAllByMemberId(memberId);
-                } catch (Exception e) {
-                    log.error("Failed to revoke refresh tokens for member {}: {}", memberId, e.getMessage());
-                }
-
-                try {
-                    tokenCacheService.revokeAllAccessTokensForMember(memberId);
-                } catch (Exception e) {
-                    log.warn("Failed to revoke access tokens in cache for member {}: {}", memberId, e.getMessage());
-                }
-
+                try { refreshTokenRepository.revokeAllByMemberId(memberId); } catch (Exception ignore) {}
+                try { tokenCacheService.revokeAllAccessTokensForMember(memberId); } catch (Exception ignore) {}
                 log.warn("Refresh token reuse detected for memberId={} tokenHash={}", memberId, hash);
-
                 throw new HelloWordException(AuthErrorCode.REFRESH_TOKEN_REUSE_DETECTED);
             }
         }
