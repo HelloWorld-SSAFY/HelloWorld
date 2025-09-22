@@ -22,6 +22,7 @@ from django.conf.urls.static import static
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework.permissions import AllowAny
 
+
 urlpatterns = [
     # path('admin/', admin.site.urls),
     path("v1/", include("api.urls")),
