@@ -75,9 +75,15 @@ def _assert_app_token(request: HttpRequest):
     return None
 
 def _user_ref_from_request(request: HttpRequest, fallback: Optional[str]) -> Optional[str]:
-    """헤더 X-Couple-Id가 있으면 그것을 user_ref로 사용, 없으면 바디 값 사용"""
+    """헤더 X-Couple-Id가 있으면 그것을 user_ref로 사용, 없으면 바디/쿼리 값 사용"""
     cid = request.headers.get("X-Couple-Id") or request.META.get("HTTP_X_COUPLE_ID")
     return (str(cid).strip() if cid else fallback)
+
+def _access_token_from_request(request: HttpRequest) -> Optional[str]:
+    """필요 시 외부 API 호출에 쓸 액세스 토큰 꺼내기(스웨거 입력용)"""
+    return (request.headers.get("X-Access-Token")
+            or request.META.get("HTTP_X_ACCESS_TOKEN")
+            or None)
 
 def _require_user_ref(request: HttpRequest, fallback: Optional[str]):
     uref = _user_ref_from_request(request, fallback)
@@ -102,6 +108,13 @@ COUPLE_ID_PARAM = OpenApiParameter(
     location=OpenApiParameter.HEADER,
     required=False,
     description="Gateway가 주입하는 커플 ID. 제공되면 user_ref로 사용합니다.",
+)
+ACCESS_TOKEN_PARAM = OpenApiParameter(
+    name="X-Access-Token",
+    type=OpenApiTypes.STR,
+    location=OpenApiParameter.HEADER,
+    required=False,
+    description="메인서버 등 외부 API 호출이 필요할 때 전달하는 액세스 토큰(선택)."
 )
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -617,12 +630,12 @@ def _run_places_delivery(*, session: RecommendationSession, user_ref: str, ctx: 
         try:
             PlaceExposure.objects.bulk_create([
                 PlaceExposure(user_ref=user_ref, place_type=it["place_type"], place_id=it["content_id"])
-                for it in items[:limit]
+                for it in items[:default_limit]
             ], ignore_conflicts=True)
         except Exception:
             pass
 
-    _log_places_delivery(session=session, user_ref=user_ref, category="OUTING", items=items[:limit])
+    _log_places_delivery(session=session, user_ref=user_ref, category="OUTING", items=items[:default_limit])
 
     if weather_fallback or (not items):
         log.info("places delivery fallback or empty (session=%s, user=%s)", session.id, user_ref)
@@ -632,7 +645,7 @@ def _run_places_delivery(*, session: RecommendationSession, user_ref: str, ctx: 
 # ──────────────────────────────────────────────────────────────────────────────
 class TelemetryView(APIView):
     @extend_schema(
-        parameters=[APP_TOKEN_PARAM, COUPLE_ID_PARAM],
+        parameters=[APP_TOKEN_PARAM, COUPLE_ID_PARAM, ACCESS_TOKEN_PARAM],
         request=TelemetryIn,
         responses={
             200: PolymorphicProxySerializer(
@@ -671,6 +684,9 @@ class TelemetryView(APIView):
         user_ref, missing = _require_user_ref(request, payload.get("user_ref"))
         if missing:
             return missing
+
+        # 필요 시 토큰 꺼내 쓰세요
+        _ = _access_token_from_request(request)
 
         result = _detector.handle_telemetry(
             user_ref=user_ref,
@@ -782,7 +798,7 @@ class TelemetryView(APIView):
 # ──────────────────────────────────────────────────────────────────────────────
 class FeedbackView(APIView):
     @extend_schema(
-        parameters=[APP_TOKEN_PARAM, COUPLE_ID_PARAM],
+        parameters=[APP_TOKEN_PARAM, COUPLE_ID_PARAM, ACCESS_TOKEN_PARAM],
         request=FeedbackIn,
         responses={200: FeedbackOut},
         tags=["feedback"],
@@ -801,6 +817,8 @@ class FeedbackView(APIView):
         user_ref, missing = _require_user_ref(request, d.get("user_ref"))
         if missing:
             return missing
+
+        _ = _access_token_from_request(request)
 
         try:
             sess_uuid = uuid.UUID(d["session_id"])
@@ -911,7 +929,7 @@ def _upsert_steps_baseline_records(*, user_ref: str, d, records: list[dict]) -> 
 
 class StepsBaselineImportView(APIView):
     @extend_schema(
-        parameters=[APP_TOKEN_PARAM, COUPLE_ID_PARAM],
+        parameters=[APP_TOKEN_PARAM, COUPLE_ID_PARAM, ACCESS_TOKEN_PARAM],
         request=StepsBaselineImportIn,
         responses={200: inline_serializer("StepsBaselineImportOut", {
             "ok": serializers.BooleanField(),
@@ -934,6 +952,8 @@ class StepsBaselineImportView(APIView):
         if missing:
             return missing
 
+        _ = _access_token_from_request(request)
+
         saved = _upsert_steps_baseline_records(user_ref=user_ref, d=d["date"], records=d["records"])
         return Response({"ok": True, "saved_buckets": saved})
 
@@ -942,7 +962,7 @@ class StepsBaselineImportView(APIView):
 # ──────────────────────────────────────────────────────────────────────────────
 class StepsCheckView(APIView):
     @extend_schema(
-        parameters=[APP_TOKEN_PARAM, COUPLE_ID_PARAM],
+        parameters=[APP_TOKEN_PARAM, COUPLE_ID_PARAM, ACCESS_TOKEN_PARAM],
         request=StepsCheckIn,
         responses={
             200: PolymorphicProxySerializer(
@@ -972,6 +992,8 @@ class StepsCheckView(APIView):
         user_ref, missing = _require_user_ref(request, d.get("user_ref"))
         if missing:
             return missing
+
+        _ = _access_token_from_request(request)
 
         user_ctx: Dict[str, Any] = {"lat": float(d["lat"]), "lng": float(d["lng"])}
         if d.get("max_distance_km") is not None:
@@ -1056,7 +1078,7 @@ class StepsCheckView(APIView):
 # ──────────────────────────────────────────────────────────────────────────────
 class PlacesView(APIView):
     @extend_schema(
-        parameters=[APP_TOKEN_PARAM, COUPLE_ID_PARAM],
+        parameters=[APP_TOKEN_PARAM, COUPLE_ID_PARAM, ACCESS_TOKEN_PARAM],
         request=PlacesIn,
         responses={200: PlacesOut},
         tags=["places"],
@@ -1075,6 +1097,8 @@ class PlacesView(APIView):
         user_ref, missing = _require_user_ref(request, d.get("user_ref"))
         if missing:
             return missing
+
+        _ = _access_token_from_request(request)
 
         max_km = float(d.get("max_distance_km") or 3.0)
         limit = int(d.get("limit") or 3)
@@ -1265,7 +1289,7 @@ def _derive_trimester(week: Optional[int]) -> Optional[int]:
 
 class RecommendView(APIView):
     @extend_schema(
-        parameters=[APP_TOKEN_PARAM, COUPLE_ID_PARAM],
+        parameters=[APP_TOKEN_PARAM, COUPLE_ID_PARAM, ACCESS_TOKEN_PARAM],
         request=RecommendIn,
         responses={200: RecommendOut},
         tags=["recommend"],
@@ -1284,6 +1308,8 @@ class RecommendView(APIView):
         user_ref, missing = _require_user_ref(request, d.get("user_ref"))
         if missing:
             return missing
+
+        _ = _access_token_from_request(request)
 
         try:
             sess_uuid = uuid.UUID(d["session_id"])
