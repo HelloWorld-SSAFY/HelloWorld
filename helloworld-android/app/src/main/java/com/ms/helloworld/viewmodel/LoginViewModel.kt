@@ -136,6 +136,7 @@ class LoginViewModel @Inject constructor(
                         isLoading = false,
                         errorMessage = "로그인 실패. 잠시 후 다시 시도해주세요."
                     )
+                    Log.d(TAG, "로그인 실패")
                 }
 
             } catch (e: GetCredentialException) {
