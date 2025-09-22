@@ -99,27 +99,28 @@ class OnboardingViewModel @Inject constructor(
                 val menstrualDate = LocalDate.parse(currentState.menstrualDate, DateTimeFormatter.ISO_LOCAL_DATE)
                 val cycleLength = currentState.menstrualCycle.toIntOrNull() ?: 28
 
-                // 배란일 계산 (생리 시작일 + 생리주기 - 14일)
-                val ovulationDate = menstrualDate.plusDays((cycleLength - 14).toLong())
-
-                // 임신 주차 계산 (배란일부터 현재까지의 일수 / 7 + 2주)
+                // 네겔레 법칙: 마지막 생리일부터 현재까지의 날짜 차이로 임신 주차 계산
                 val today = LocalDate.now()
-                val daysSinceOvulation = ChronoUnit.DAYS.between(ovulationDate, today)
-                val pregnancyWeek = ((daysSinceOvulation / 7) + 2).toInt()
+                val daysSinceLastPeriod = ChronoUnit.DAYS.between(menstrualDate, today)
+                val pregnancyWeek = ((daysSinceLastPeriod / 7) + 1).toInt()
 
-                // 음수가 되지 않도록 보정
-                val calculatedWeek = if (pregnancyWeek > 0) pregnancyWeek else 0
+                // 음수가 되지 않도록 보정 (1~42주 범위)
+                val calculatedWeek = when {
+                    pregnancyWeek < 1 -> 1
+                    pregnancyWeek > 42 -> 42
+                    else -> pregnancyWeek
+                }
 
-                // 예정일 계산 (배란일 + 266일 = 임신 기간 38주)
-                val dueDate = ovulationDate.plusDays(266)
+                // 예정일 계산 (마지막 생리일 + 280일 = 40주)
+                val dueDate = menstrualDate.plusDays(280)
                 val dueDateString = dueDate.format(DateTimeFormatter.ISO_LOCAL_DATE)
 
-                println("📅 임신 정보 계산:")
+                println("📅 임신 정보 계산 (네겔레 법칙):")
                 println("  - 마지막 생리일: $menstrualDate")
-                println("  - 생리 주기: ${cycleLength}일")
-                println("  - 계산된 배란일: $ovulationDate")
-                println("  - 계산된 예정일: $dueDate (배란일 + 266일)")
-                println("  - 임신 주차: $calculatedWeek")
+                println("  - 오늘: $today")
+                println("  - 경과 일수: ${daysSinceLastPeriod}일")
+                println("  - 계산된 예정일: $dueDate (생리일 + 280일)")
+                println("  - 임신 주차: ${calculatedWeek}주 (${daysSinceLastPeriod}일 ÷ 7 + 1)")
 
                 _state.value = _state.value.copy(
                     calculatedPregnancyWeek = calculatedWeek,

@@ -45,6 +45,7 @@ fun CoupleProfileScreen(
 
     // HomeViewModel도 함께 사용하여 프로필 업데이트 시 동기화
     val homeViewModel: HomeViewModel = hiltViewModel()
+    val currentPregnancyDay by homeViewModel.currentPregnancyDay.collectAsState()
 
     // 프로필 업데이트 완료 감지하여 HomeViewModel 새로고침
     LaunchedEffect(state.momProfile, state.isLoading) {
@@ -218,7 +219,7 @@ fun CoupleProfileScreen(
                     )
                     Text(
                         text = state.momProfile?.let { profile ->
-                            "${profile.currentDay}일 (${profile.pregnancyWeek}주)"
+                            "${currentPregnancyDay}일 (${profile.pregnancyWeek}주)"
                         } ?: "정보 없음",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,

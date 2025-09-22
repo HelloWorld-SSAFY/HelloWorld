@@ -185,13 +185,14 @@ fun MainNavigation(
 
                 val homeViewModel: HomeViewModel = hiltViewModel()
                 val momProfile by homeViewModel.momProfile.collectAsState()
+                val currentPregnancyDay by homeViewModel.currentPregnancyDay.collectAsState()
 
                 DiaryBoardScreen(
                     navController = navController,
                     diaryType = diaryType,
                     day = day,
                     pregnancyWeek = momProfile.pregnancyWeek,
-                    pregnancyDay = momProfile.currentDay
+                    pregnancyDay = currentPregnancyDay
                 )
             }
 

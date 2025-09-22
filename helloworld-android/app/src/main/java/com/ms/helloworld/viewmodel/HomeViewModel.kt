@@ -7,6 +7,7 @@ import com.ms.helloworld.dto.response.MomProfile
 import com.ms.helloworld.dto.response.MemberProfile
 import com.ms.helloworld.repository.CalendarRepository
 import com.ms.helloworld.repository.MomProfileRepository
+import com.ms.helloworld.util.TokenManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,7 +20,8 @@ import javax.inject.Inject
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val momProfileRepository: MomProfileRepository,
-    private val calendarRepository: CalendarRepository
+    private val calendarRepository: CalendarRepository,
+    private val tokenManager: TokenManager
 ) : ViewModel() {
 
     private val viewModelId = System.currentTimeMillis().toString().takeLast(4)
@@ -55,22 +57,45 @@ class HomeViewModel @Inject constructor(
     private val _menstrualDate = MutableStateFlow<String?>(null)
     val menstrualDate: StateFlow<String?> = _menstrualDate.asStateFlow()
 
+    private val _currentPregnancyDay = MutableStateFlow<Int>(1)
+    val currentPregnancyDay: StateFlow<Int> = _currentPregnancyDay.asStateFlow()
+
     // 임시 테스트용 - API 호출이 실패할 경우 기본값 설정
     private fun setTestGender() {
         println("🧪 HomeViewModel($viewModelId) - 테스트용 성별 설정: FEMALE")
         _userGender.value = "FEMALE" // 임시로 여성으로 설정
     }
 
-    // TODO: SharedPreferences나 DataStore에서 실제 사용자 정보 가져오기
-    private fun getCoupleId(): Long {
-        // 임시로 하드코딩, 실제로는 로그인된 사용자의 커플 ID를 가져와야 함
-        return 1L
+    private fun getCoupleId(): Long? {
+        return tokenManager.getCoupleId()
     }
 
     init {
-        loadMomProfile()
-        loadUserGender()
-        loadCurrentMonthEvents()
+        // 순차적 초기화: 사용자 정보 → 커플 정보 → 기타 데이터
+        initializeSequentially()
+    }
+
+    private fun initializeSequentially() {
+        viewModelScope.launch {
+            try {
+                println("🚀 HomeViewModel($viewModelId) - 순차적 초기화 시작")
+
+                // 1단계: 기본 사용자 정보 로드
+                loadUserGender()
+
+                // 2단계: 커플 정보 로드 (사용자 정보 로드 완료 후)
+                // loadUserGender()에서 loadCoupleInfo()가 호출됨
+
+                // 3단계: 기타 데이터 로드 (병렬로 실행 가능)
+                loadMomProfile()
+                loadCurrentMonthEvents()
+
+                println("🚀 HomeViewModel($viewModelId) - 순차적 초기화 완료")
+            } catch (e: Exception) {
+                println("💥 HomeViewModel($viewModelId) - 초기화 실패: ${e.message}")
+                e.printStackTrace()
+            }
+        }
     }
     
     private fun loadMomProfile() {
@@ -109,30 +134,91 @@ class HomeViewModel @Inject constructor(
                 val userInfo = momProfileRepository.getUserInfo()
                 println("🚻 HomeViewModel($viewModelId) - 전체 사용자 정보: $userInfo")
                 println("🚻 HomeViewModel($viewModelId) - member 정보: ${userInfo.member}")
-                println("🚻 HomeViewModel($viewModelId) - couple 정보: ${userInfo.couple}")
 
                 val gender = userInfo.member.gender
                 val userId = userInfo.member.id
-                val coupleId = userInfo.couple?.id
-                val menstrualDate = userInfo.couple?.menstrualDate
 
                 println("🚻 HomeViewModel($viewModelId) - 원본 성별: $gender")
                 println("🚻 HomeViewModel($viewModelId) - 사용자 ID: $userId")
-                println("🚻 HomeViewModel($viewModelId) - 커플 ID: $coupleId")
-                println("🚻 HomeViewModel($viewModelId) - 생리일: $menstrualDate")
 
                 _userGender.value = gender
                 _userId.value = userId
-                _coupleId.value = coupleId
-                _menstrualDate.value = menstrualDate
 
-                println("🚻 HomeViewModel($viewModelId) - StateFlow 저장 완료")
+                // 커플 정보는 별도 API에서 가져오기
+                loadCoupleInfo()
+
+                println("🚻 HomeViewModel($viewModelId) - 기본 사용자 정보 저장 완료")
             } catch (e: Exception) {
                 println("💥 HomeViewModel - loadUserGender 예외: ${e.message}")
                 e.printStackTrace()
                 // API 호출 실패 시 임시로 테스트 성별 설정
                 setTestGender()
             }
+        }
+    }
+
+    private fun loadCoupleInfo() {
+        viewModelScope.launch {
+            try {
+                println("🚀 HomeViewModel($viewModelId) - loadCoupleInfo 시작")
+                val response = momProfileRepository.getCoupleDetailInfo()
+
+                if (response.isSuccessful) {
+                    val coupleDetail = response.body()
+                    if (coupleDetail != null) {
+                        val coupleId = coupleDetail.couple.id
+                        val menstrualDate = coupleDetail.couple.menstrualDate
+
+                        println("🚻 HomeViewModel($viewModelId) - 커플 상세 정보:")
+                        println("  - 커플 ID: $coupleId")
+                        println("  - 생리일: $menstrualDate")
+
+                        _coupleId.value = coupleId
+                        _menstrualDate.value = menstrualDate
+
+                        // 현재 임신 일수 계산 (네겔레 법칙)
+                        calculateCurrentPregnancyDay(menstrualDate)
+
+                        println("🚻 HomeViewModel($viewModelId) - 커플 정보 저장 완료")
+                    } else {
+                        println("❌ HomeViewModel($viewModelId) - 커플 상세 정보가 null")
+                    }
+                } else {
+                    println("❌ HomeViewModel($viewModelId) - 커플 상세 API 실패: ${response.code()}")
+                }
+            } catch (e: Exception) {
+                println("💥 HomeViewModel - loadCoupleInfo 예외: ${e.message}")
+                e.printStackTrace()
+            }
+        }
+    }
+
+    private fun calculateCurrentPregnancyDay(menstrualDate: String?) {
+        try {
+            if (menstrualDate.isNullOrEmpty()) {
+                println("❌ HomeViewModel($viewModelId) - 생리일이 null이므로 임신 일수 계산 건너뜀")
+                return
+            }
+
+            val lmpDate = LocalDate.parse(menstrualDate)
+            val today = LocalDate.now()
+
+            // 네겔레 법칙: 마지막 생리 첫날부터 현재까지의 날짜 차이
+            val daysBetween = java.time.temporal.ChronoUnit.DAYS.between(lmpDate, today).toInt()
+            val pregnancyDays = daysBetween  // 날짜 차이만 사용
+
+            _currentPregnancyDay.value = pregnancyDays.coerceAtLeast(1)
+
+            println("🧮 HomeViewModel($viewModelId) - 임신 일수 계산 (네겔레 법칙):")
+            println("  - 마지막 생리일: $lmpDate")
+            println("  - 오늘: $today")
+            println("  - 날짜 차이: ${daysBetween}일")
+            println("  - 임신 일수: ${pregnancyDays}일차")
+            println("  - 임신 주수: ${pregnancyDays / 7.0}주 → ${(pregnancyDays / 7) + 1}주차")
+
+        } catch (e: Exception) {
+            println("💥 HomeViewModel($viewModelId) - 임신 일수 계산 실패: ${e.message}")
+            _currentPregnancyDay.value = 1
         }
     }
 
@@ -144,8 +230,14 @@ class HomeViewModel @Inject constructor(
                 val from = "${currentYearMonth}-01T00:00:00Z"
                 val to = "${currentYearMonth}-${lastDayOfMonth.toString().padStart(2, '0')}T23:59:59Z"
 
+                val coupleId = getCoupleId()
+                if (coupleId == null) {
+                    println("❌ HomeViewModel($viewModelId) - coupleId가 토큰에서 추출되지 않음")
+                    return@launch
+                }
+
                 val result = calendarRepository.getEvents(
-                    coupleId = getCoupleId(),
+                    coupleId = coupleId,
                     from = from,
                     to = to
                 )
