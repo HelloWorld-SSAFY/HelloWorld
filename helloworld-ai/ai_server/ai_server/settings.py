@@ -178,7 +178,7 @@ SPECTACULAR_SETTINGS = {
     "VERSION": "v0.2.1",
 
     # 전역 보안 요구 OFF → 각 API에서 헤더 파라미터로 입력
-    "SECURITY": [{"X-App-Token": []}],
+    "SECURITY": [{"bearerAuth": []},{"AppToken": []},],
 
     "SERVERS": [
         {"url": "/ai", "description": "via gateway"},
@@ -188,16 +188,18 @@ SPECTACULAR_SETTINGS = {
     # securitySchemes은 유지(원하면 Authorize로도 사용 가능)
     "COMPONENTS": {
         "securitySchemes": {
+            # X-App-Token 필요하다면 남기고,
             "AppToken": {
                 "type": "apiKey",
                 "in": "header",
                 "name": "X-App-Token",
             },
-            # ★ 추가: access_token(Bearer) 입력용
-            "AccessToken": {
+
+            # Bearer JWT
+            "bearerAuth": {
                 "type": "http",
                 "scheme": "bearer",
-                "bearerFormat": "JWT"
+                "bearerFormat": "JWT",
             },
         }
     },

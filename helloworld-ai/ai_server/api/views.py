@@ -82,10 +82,26 @@ def _user_ref_from_request(request: HttpRequest, fallback: Optional[str]) -> Opt
     return (str(cid).strip() if cid else fallback)
 
 def _access_token_from_request(request: HttpRequest) -> Optional[str]:
-    """필요 시 외부 API 호출에 쓸 액세스 토큰 꺼내기(스웨거 입력용)"""
-    return (request.headers.get("X-Access-Token")
-            or request.META.get("HTTP_X_ACCESS_TOKEN")
-            or None)
+    """
+    외부 API 호출에 사용할 액세스 토큰 추출.
+    - Swagger 가이드는 `Authentication: Bearer <token>` 사용
+    - 서버는 Authorization/Authentication 둘 다 인식(+ 과거 호환 X-Access-Token)
+    반환값은 'Bearer '를 뗀 순수 토큰 문자열.
+    """
+    raw = (
+        request.headers.get("Authentication")
+        or request.headers.get("Authorization")
+        or request.META.get("HTTP_AUTHENTICATION")
+        or request.META.get("HTTP_AUTHORIZATION")
+        or request.headers.get("X-Access-Token")               # backward compat
+        or request.META.get("HTTP_X_ACCESS_TOKEN")             # backward compat
+    )
+    if not raw:
+        return None
+    raw = str(raw).strip()
+    if raw.lower().startswith("bearer "):
+        return raw[7:].strip()
+    return raw
 
 def _require_user_ref(request: HttpRequest, fallback: Optional[str]):
     uref = _user_ref_from_request(request, fallback)
@@ -168,13 +184,15 @@ COUPLE_ID_PARAM = OpenApiParameter(
     required=False,
     description="Gateway가 주입하는 커플 ID. 제공되면 user_ref로 사용합니다.",
 )
-ACCESS_TOKEN_PARAM = OpenApiParameter(
-    name="X-Access-Token",
+AUTH_HEADER_PARAM = OpenApiParameter(
+    name="Authentication",
     type=OpenApiTypes.STR,
     location=OpenApiParameter.HEADER,
     required=False,
-    description="메인서버 등 외부 API 호출이 필요할 때 전달하는 액세스 토큰(선택)."
+    description="메인서버/게이트웨이 통과용 액세스 토큰. 예) **Bearer eyJ...**  (서버는 Authorization/Authentication 둘 다 인식)",
 )
+# Backward-compat for modules still importing ACCESS_TOKEN_PARAM
+ACCESS_TOKEN_PARAM = AUTH_HEADER_PARAM
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 공통 Serializer  (user_ref → required=False 로 완화)
@@ -707,7 +725,7 @@ def _run_places_delivery(*, session: RecommendationSession, user_ref: str, ctx: 
 # ──────────────────────────────────────────────────────────────────────────────
 class TelemetryView(APIView):
     @extend_schema(
-        parameters=[APP_TOKEN_PARAM, COUPLE_ID_PARAM, ACCESS_TOKEN_PARAM],
+        parameters=[APP_TOKEN_PARAM, COUPLE_ID_PARAM, AUTH_HEADER_PARAM],
         request=TelemetryIn,
         responses={
             200: PolymorphicProxySerializer(
@@ -747,7 +765,7 @@ class TelemetryView(APIView):
         if missing:
             return missing
 
-        # 필요 시 토큰 꺼내 쓰세요
+        # 필요 시 토큰 꺼내 쓰세요 (Bearer 제거된 순수 토큰 문자열)
         _ = _access_token_from_request(request)
 
         result = _detector.handle_telemetry(
@@ -860,7 +878,7 @@ class TelemetryView(APIView):
 # ──────────────────────────────────────────────────────────────────────────────
 class FeedbackView(APIView):
     @extend_schema(
-        parameters=[APP_TOKEN_PARAM, COUPLE_ID_PARAM, ACCESS_TOKEN_PARAM],
+        parameters=[APP_TOKEN_PARAM, COUPLE_ID_PARAM, AUTH_HEADER_PARAM],
         request=FeedbackIn,
         responses={200: FeedbackOut},
         tags=["feedback"],
@@ -1027,7 +1045,7 @@ def _upsert_steps_baseline_records(*, user_ref: str, d, records: list[dict]) -> 
 
 class StepsBaselineImportView(APIView):
     @extend_schema(
-        parameters=[APP_TOKEN_PARAM, COUPLE_ID_PARAM, ACCESS_TOKEN_PARAM],
+        parameters=[APP_TOKEN_PARAM, COUPLE_ID_PARAM, AUTH_HEADER_PARAM],
         request=StepsBaselineImportIn,
         responses={200: inline_serializer("StepsBaselineImportOut", {
             "ok": serializers.BooleanField(),
@@ -1060,7 +1078,7 @@ class StepsBaselineImportView(APIView):
 # ──────────────────────────────────────────────────────────────────────────────
 class StepsCheckView(APIView):
     @extend_schema(
-        parameters=[APP_TOKEN_PARAM, COUPLE_ID_PARAM, ACCESS_TOKEN_PARAM],
+        parameters=[APP_TOKEN_PARAM, COUPLE_ID_PARAM, AUTH_HEADER_PARAM],
         request=StepsCheckIn,
         responses={
             200: PolymorphicProxySerializer(
@@ -1199,7 +1217,7 @@ class StepsCheckView(APIView):
 # ──────────────────────────────────────────────────────────────────────────────
 class PlacesView(APIView):
     @extend_schema(
-        parameters=[APP_TOKEN_PARAM, COUPLE_ID_PARAM, ACCESS_TOKEN_PARAM],
+        parameters=[APP_TOKEN_PARAM, COUPLE_ID_PARAM, AUTH_HEADER_PARAM],
         request=PlacesIn,
         responses={200: PlacesOut},
         tags=["places"],
@@ -1410,7 +1428,7 @@ def _derive_trimester(week: Optional[int]) -> Optional[int]:
 
 class RecommendView(APIView):
     @extend_schema(
-        parameters=[APP_TOKEN_PARAM, COUPLE_ID_PARAM, ACCESS_TOKEN_PARAM],
+        parameters=[APP_TOKEN_PARAM, COUPLE_ID_PARAM, AUTH_HEADER_PARAM],
         request=RecommendIn,
         responses={200: RecommendOut},
         tags=["recommend"],
