@@ -75,7 +75,6 @@ public class GatewayRedisAuthFilter implements GlobalFilter {
 
                                     var mutated = exchange.getRequest().mutate();
                                     mutated.headers(h -> {
-                                        h.remove("Authorization");
                                         h.add("X-Internal-User-Id", memberId);
                                         if (coupleId != null) h.add("X-Internal-Couple-Id", coupleId);
                                         if (role != null)     h.add("X-Internal-Role", role);
