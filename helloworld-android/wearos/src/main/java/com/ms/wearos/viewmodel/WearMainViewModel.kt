@@ -1,8 +1,10 @@
 package com.ms.wearos.viewmodel
 
+import android.content.Context
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.android.gms.wearable.Wearable
 import com.ms.wearos.dto.request.FetalMovementRequest
 import com.ms.wearos.dto.request.HealthDataRequest
 import com.ms.wearos.dto.request.LaborDataRequest
@@ -15,6 +17,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
 data class WearMainUiState(
@@ -69,6 +72,75 @@ class WearMainViewModel @Inject constructor(
             !isValid -> "토큰 만료됨"
             accessToken != null -> "토큰 유효 (${accessToken.take(10)}...)"
             else -> "토큰 상태 불명"
+        }
+    }
+
+    /**
+     * 폰에 토큰 요청 메시지 전송
+     */
+    fun requestTokenFromPhone(context: Context) {
+        viewModelScope.launch {
+            try {
+                Log.d(TAG, "폰에 토큰 요청 시작...")
+                val messageClient = Wearable.getMessageClient(context)
+                val nodeClient = Wearable.getNodeClient(context)
+
+                val nodes = nodeClient.connectedNodes.await()
+                Log.d(TAG, "연결된 폰 노드: ${nodes.size}개")
+
+                if (nodes.isEmpty()) {
+                    Log.w(TAG, "연결된 폰이 없습니다")
+                    _uiState.value = _uiState.value.copy(
+                        errorMessage = "폰과 연결되지 않았습니다"
+                    )
+                    return@launch
+                }
+
+                // 모든 연결된 노드에 토큰 요청 메시지 전송
+                nodes.forEach { node ->
+                    messageClient.sendMessage(
+                        node.id,
+                        "/request_token", // 토큰 요청 경로
+                        ByteArray(0)
+                    ).await()
+
+                    Log.d(TAG, "폰(${node.displayName})에 토큰 요청 전송 완료")
+                }
+
+            } catch (e: Exception) {
+                Log.e(TAG, "토큰 요청 실패", e)
+                _uiState.value = _uiState.value.copy(
+                    errorMessage = "토큰 요청 실패: ${e.message}"
+                )
+            }
+        }
+    }
+
+    /**
+     * 앱 시작시 자동으로 토큰 상태 확인 및 요청
+     */
+    fun initializeTokenState(context: Context) {
+        viewModelScope.launch {
+            // 현재 토큰 상태 확인
+            val hasValidToken = tokenManager.isTokenValid()
+
+            if (!hasValidToken) {
+                Log.d(TAG, "유효한 토큰이 없음 - 폰에 토큰 요청")
+                requestTokenFromPhone(context)
+
+                // 토큰 요청 후 잠시 대기
+                kotlinx.coroutines.delay(2000)
+
+                // 다시 토큰 상태 확인
+                val tokenReceived = tokenManager.isTokenValid()
+                if (tokenReceived) {
+                    Log.d(TAG, "토큰 수신 완료")
+                } else {
+                    Log.w(TAG, "토큰 수신 실패 - 사용자에게 안내 필요")
+                }
+            } else {
+                Log.d(TAG, "유효한 토큰 이미 있음")
+            }
         }
     }
 

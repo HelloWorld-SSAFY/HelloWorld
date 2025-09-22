@@ -166,7 +166,7 @@ class HomeViewModel @Inject constructor(
                 if (response.isSuccessful) {
                     val coupleDetail = response.body()
                     if (coupleDetail != null) {
-                        val coupleId = coupleDetail.couple.id
+                        val coupleId = coupleDetail.couple.coupleId
                         val menstrualDate = coupleDetail.couple.menstrualDate
 
                         println("🚻 HomeViewModel($viewModelId) - 커플 상세 정보:")

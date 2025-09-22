@@ -162,7 +162,7 @@ class OnboardingViewModel @Inject constructor(
                     println("  - 닉네임: ${userInfo.member.nickname}")
                     println("  - 현재 커플 상태: ${if (userInfo.couple != null) "커플 있음" else "커플 없음"}")
                     if (userInfo.couple != null) {
-                        println("  - 커플 ID: ${userInfo.couple?.id}")
+                        println("  - 커플 ID: ${userInfo.couple?.coupleId}")
                         println("  - userAId: ${userInfo.couple?.userAId}")
                         println("  - userBId: ${userInfo.couple?.userBId}")
                     }

@@ -1,137 +1,154 @@
 package com.ms.helloworld.repository
 
 import android.util.Log
-import com.ms.helloworld.dto.request.SocialLoginRequest
+import com.google.gson.JsonSyntaxException
 import com.ms.helloworld.dto.request.GoogleLoginRequest
 import com.ms.helloworld.dto.request.RefreshTokenRequest
 import com.ms.helloworld.dto.response.LoginResponse
-import com.ms.helloworld.dto.response.RefreshTokenResponse
+import com.ms.helloworld.dto.response.TokenRefreshResponse
 import com.ms.helloworld.network.api.AuthApi
+import retrofit2.HttpException
+import java.io.EOFException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private const val TAG = "싸피_AuthRepository"
+private const val TAG = "AuthRepository"
+
 @Singleton
 class AuthRepository @Inject constructor(
     private val authApi: AuthApi,
     private val fcmRepository: FcmRepository
 ) {
+
     suspend fun socialLogin(request: GoogleLoginRequest): LoginResponse? {
         return try {
-            Log.d(TAG, "Making API call to socialLogin")
-            Log.d(TAG, "Target URL will be: BASE_URL/user/api/auth/google")
-            Log.d(TAG, "Request provider: Google")
-            Log.d(TAG, "Request token length: ${request.idToken.length}")
-            Log.d(TAG, "Request token starts with: ${request.idToken.take(50)}...")
-            Log.d(TAG, "Full request body: {\"idToken\":\"${request.idToken.take(100)}...\"}")
-
-            // JSON 직렬화 확인
-            val gson = com.google.gson.Gson()
-            val jsonBody = gson.toJson(request)
-            Log.d(TAG, "Gson serialized body: ${jsonBody.take(200)}...")
+            Log.d(TAG, "소셜 로그인 API 호출 시작")
+            Log.d(TAG, "Provider: Google")
+            Log.d(TAG, "Token length: ${request.idToken.length}")
 
             val response = authApi.socialLogin(request)
-            Log.d(TAG, "API response received: $response")
-            Log.d(TAG, "Response accessToken: ${response?.accessToken}")
-            Log.d(TAG, "Response refreshToken: ${response?.refreshToken}")
 
-            // 로그인 성공 시 FCM 토큰 등록
-            response?.let {
-                Log.d(TAG, "로그인 성공 - FCM 토큰 등록 시작")
+            if (response != null) {
+                Log.d(TAG, "소셜 로그인 성공")
+                Log.d(TAG, "MemberId: ${response.memberId}")
+                Log.d(TAG, "AccessToken 존재: ${response.accessToken.isNotBlank()}")
+                Log.d(TAG, "RefreshToken 존재: ${response.refreshToken.isNotBlank()}")
+
+                // FCM 토큰 등록
                 fcmRepository.registerTokenAsync(platform = "ANDROID")
-            }
 
-            response
+                response
+            } else {
+                Log.e(TAG, "소셜 로그인 응답이 null")
+                null
+            }
         } catch (e: Exception) {
-            Log.e(TAG, "API call failed", e)
-            Log.e(TAG, "Exception message: ${e.message}")
-            Log.e(TAG, "Exception type: ${e.javaClass.simpleName}")
-
-            if (e is retrofit2.HttpException) {
-                try {
-                    val errorBody = e.response()?.errorBody()?.string()
-                    Log.e(TAG, "HTTP Error Code: ${e.code()}")
-                    Log.e(TAG, "HTTP Error Body: $errorBody")
-                } catch (ioException: Exception) {
-                    Log.e(TAG, "Failed to read error body: ${ioException.message}")
-                }
-            }
+            Log.e(TAG, "소셜 로그인 실패: ${e.javaClass.simpleName} - ${e.message}")
+            logDetailedError(e)
             null
         }
     }
 
-    suspend fun refreshToken(refreshToken: String): RefreshTokenResponse? {
+    suspend fun refreshToken(refreshToken: String): TokenRefreshResponse? {
         return try {
-            Log.d(TAG, "Making API call to refreshToken")
-            Log.d(TAG, "Target URL will be: BASE_URL/api/auth/refresh")
-            Log.d(TAG, "Refresh token length: ${refreshToken.length}")
-            Log.d(TAG, "Refresh token starts with: ${refreshToken.take(50)}...")
+            Log.d(TAG, "토큰 갱신 API 호출 시작")
+            Log.d(TAG, "RefreshToken 길이: ${refreshToken.length}")
 
-            val request = RefreshTokenRequest(refreshToken = refreshToken)
+            val response = authApi.refreshToken(RefreshTokenRequest(refreshToken))
 
-            // JSON 직렬화 확인
-            val gson = com.google.gson.Gson()
-            val jsonBody = gson.toJson(request)
-            Log.d(TAG, "Gson serialized body: ${jsonBody.take(200)}...")
+            Log.d(TAG, "토큰 갱신 응답 상태: ${response.code()}")
 
-            val response = authApi.refreshToken(request)
-            Log.d(TAG, "Refresh API response received: $response")
-            Log.d(TAG, "New accessToken: ${response?.accessToken}")
-            Log.d(TAG, "New refreshToken: ${response?.refreshToken}")
-
-            response
-        } catch (e: Exception) {
-            Log.e(TAG, "Refresh token API call failed", e)
-            Log.e(TAG, "Exception message: ${e.message}")
-            Log.e(TAG, "Exception type: ${e.javaClass.simpleName}")
-
-            if (e is retrofit2.HttpException) {
-                try {
-                    val errorBody = e.response()?.errorBody()?.string()
-                    Log.e(TAG, "HTTP Error Code: ${e.code()}")
-                    Log.e(TAG, "HTTP Error Body: $errorBody")
-
-                    // 401, 403 등은 토큰이 만료되었거나 유효하지 않음을 의미
-                    when (e.code()) {
-                        401 -> Log.e(TAG, "Unauthorized - Refresh token expired or invalid")
-                        403 -> Log.e(TAG, "Forbidden - Refresh token not allowed")
-                        404 -> Log.e(TAG, "Not Found - Refresh endpoint not found")
-                        500 -> Log.e(TAG, "Internal Server Error")
+            when {
+                response.isSuccessful -> {
+                    val body = response.body()
+                    if (body != null) {
+                        Log.d(TAG, "토큰 갱신 성공")
+                        Log.d(TAG, "새 AccessToken 존재: ${body.accessToken.isNotBlank()}")
+                        Log.d(TAG, "새 RefreshToken 존재: ${body.refreshToken?.isNotBlank() ?: false}")
+                        body
+                    } else {
+                        Log.e(TAG, "토큰 갱신 응답 본문이 null")
+                        null
                     }
-                } catch (ioException: Exception) {
-                    Log.e(TAG, "Failed to read error body: ${ioException.message}")
+                }
+                response.code() == 401 -> {
+                    Log.e(TAG, "토큰 만료 또는 유효하지 않은 토큰 (401)")
+                    null
+                }
+                response.code() == 403 -> {
+                    Log.e(TAG, "토큰 갱신 권한 없음 (403)")
+                    null
+                }
+                else -> {
+                    Log.e(TAG, "토큰 갱신 실패: HTTP ${response.code()}")
+                    logErrorBody(response.errorBody()?.string())
+                    null
                 }
             }
+        } catch (e: SocketTimeoutException) {
+            Log.e(TAG, "토큰 갱신 타임아웃")
+            null
+        } catch (e: UnknownHostException) {
+            Log.e(TAG, "토큰 갱신 네트워크 연결 실패")
+            null
+        } catch (e: EOFException) {
+            Log.e(TAG, "토큰 갱신 서버 응답 없음 (EOF)")
+            null
+        } catch (e: JsonSyntaxException) {
+            Log.e(TAG, "토큰 갱신 JSON 파싱 실패", e)
+            null
+        } catch (e: HttpException) {
+            Log.e(TAG, "토큰 갱신 HTTP 오류: ${e.code()}")
+            logErrorBody(e.response()?.errorBody()?.string())
+            null
+        } catch (e: Exception) {
+            Log.e(TAG, "토큰 갱신 중 예상치 못한 오류: ${e.javaClass.simpleName} - ${e.message}")
             null
         }
     }
 
     suspend fun logout(): Boolean {
         return try {
-            Log.d(TAG, "Making API call to logout")
-            Log.d(TAG, "Target URL will be: BASE_URL/user/auth/logout")
+            Log.d(TAG, "로그아웃 API 호출 시작")
 
             val response = authApi.logout()
 
-            Log.d(TAG, "Logout API response code: ${response.code()}")
-            Log.d(TAG, "Logout successful: ${response.isSuccessful}")
+            Log.d(TAG, "로그아웃 응답 상태: ${response.code()}")
 
-            response.isSuccessful
+            val isSuccessful = response.isSuccessful
+            Log.d(TAG, "로그아웃 ${if (isSuccessful) "성공" else "실패"}")
+
+            isSuccessful
         } catch (e: Exception) {
-            Log.e(TAG, "Logout API call failed", e)
-            Log.e(TAG, "Exception message: ${e.message}")
-            Log.e(TAG, "Exception type: ${e.javaClass.simpleName}")
-
-            if (e is retrofit2.HttpException) {
-                try {
-                    val errorBody = e.response()?.errorBody()?.string()
-                    Log.e(TAG, "HTTP Error Code: ${e.code()}")
-                    Log.e(TAG, "HTTP Error Body: $errorBody")
-                } catch (ioException: Exception) {
-                    Log.e(TAG, "Failed to read error body: ${ioException.message}")
-                }
-            }
+            Log.e(TAG, "로그아웃 실패: ${e.javaClass.simpleName} - ${e.message}")
+            logDetailedError(e)
             false
+        }
+    }
+
+    private fun logDetailedError(exception: Exception) {
+        when (exception) {
+            is HttpException -> {
+                Log.e(TAG, "HTTP 오류 코드: ${exception.code()}")
+                logErrorBody(exception.response()?.errorBody()?.string())
+            }
+            is SocketTimeoutException -> {
+                Log.e(TAG, "요청 타임아웃")
+            }
+            is UnknownHostException -> {
+                Log.e(TAG, "네트워크 연결 실패 - 인터넷 연결을 확인하세요")
+            }
+            else -> {
+                Log.e(TAG, "기타 오류: ${exception.message}")
+            }
+        }
+    }
+
+    private fun logErrorBody(errorBody: String?) {
+        if (!errorBody.isNullOrBlank()) {
+            Log.e(TAG, "오류 응답 본문: $errorBody")
         }
     }
 }
