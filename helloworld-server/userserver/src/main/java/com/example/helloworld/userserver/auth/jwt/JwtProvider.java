@@ -10,6 +10,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
+import java.nio.charset.StandardCharsets;
+import java.security.NoSuchAlgorithmException;
 import java.util.Date;
 
 @Component
@@ -26,12 +28,17 @@ public class JwtProvider {
             @Value("${jwt.access.expire}") long accessExpire,
             @Value("${jwt.refresh.secret}") String refreshSecretB64,
             @Value("${jwt.refresh.expire}") long refreshExpire
-    ) {
-        this.accessKey = Keys.hmacShaKeyFor(Decoders.BASE64.decode(accessSecretB64));
-        this.refreshKey = Keys.hmacShaKeyFor(Decoders.BASE64.decode(refreshSecretB64));
+    ) throws NoSuchAlgorithmException {
+        this.accessKey  = Keys.hmacShaKeyFor(accessSecretB64.getBytes(StandardCharsets.UTF_8));
+        this.refreshKey = Keys.hmacShaKeyFor(refreshSecretB64.getBytes(StandardCharsets.UTF_8));
         this.accessTokenMillis = accessExpire;
         this.refreshTokenMillis = refreshExpire;
+        var md = java.security.MessageDigest.getInstance("SHA-256");
+        String fpA = java.util.HexFormat.of().formatHex(md.digest(accessKey.getEncoded()));
+        String fpR = java.util.HexFormat.of().formatHex(md.digest(refreshKey.getEncoded()));
+        System.out.println("[JWT] accessKey fp=" + fpA + " refreshKey fp=" + fpR);
     }
+
 
     public String issueAccessToken(Long memberId) {
         long now = System.currentTimeMillis();
