@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'corsheaders',
 ]
 
+
 # ---- 미들웨어 ---------------------------------------------------------------
 MIDDLEWARE = [
     'django_prometheus.middleware.PrometheusBeforeMiddleware',
