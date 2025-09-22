@@ -18,6 +18,7 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun ProfileSection(
     momProfile: MomProfile,
+    currentPregnancyDay: Int = 1, // 기본값은 1, 실제로는 HomeViewModel에서 전달받은 값 사용
     modifier: Modifier = Modifier,
     onClick: () -> Unit = {}
 ) {
@@ -44,7 +45,7 @@ fun ProfileSection(
                 color = Color.Gray
             )
             Text(
-                text = "${momProfile.currentDay}일째 (${momProfile.pregnancyWeek}주차)",
+                text = "${currentPregnancyDay}일째 (${momProfile.pregnancyWeek}주차)",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Medium
             )

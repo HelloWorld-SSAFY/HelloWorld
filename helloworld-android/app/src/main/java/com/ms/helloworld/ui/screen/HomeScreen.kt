@@ -36,6 +36,7 @@ fun HomeScreen(
     val momProfile by viewModel.momProfile.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val calendarEvents by viewModel.calendarEvents.collectAsState()
+    val currentPregnancyDay by viewModel.currentPregnancyDay.collectAsState()
 
     // 캘린더 이벤트 변경 감지
     LaunchedEffect(calendarEvents) {
@@ -93,6 +94,7 @@ fun HomeScreen(
                 // 데이터가 있으면 항상 표시 (백그라운드 새로고침 중에도)
                 ProfileSection(
                     momProfile = momProfile,
+                    currentPregnancyDay = currentPregnancyDay,
                     onClick = {
                         navController.navigate(Screen.CoupleProfileScreen.route)
                     }

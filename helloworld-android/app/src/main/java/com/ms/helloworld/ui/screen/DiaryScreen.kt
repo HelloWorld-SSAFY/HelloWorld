@@ -70,18 +70,22 @@ fun DiaryScreen(
     val backgroundColor = Color(0xFFF5F5F5)
     val state by viewModel.state.collectAsStateWithLifecycle()
     val homeState by actualHomeViewModel.momProfile.collectAsState()
+    val currentPregnancyDay by actualHomeViewModel.currentPregnancyDay.collectAsState()
+    val coupleId by actualHomeViewModel.coupleId.collectAsState()
+    val menstrualDate by actualHomeViewModel.menstrualDate.collectAsState()
 
-    // 실제 임신 정보 사용
+    // 실제 임신 정보 사용 (currentPregnancyDay를 우선 사용)
     val currentWeek = homeState?.let { profile ->
-        println("📊 DiaryScreen - MomProfile 데이터: 주차=${profile.pregnancyWeek}, 계산된일차=${profile.currentDay}, 닉네임=${profile.nickname}")
+        println("📊 DiaryScreen - MomProfile 데이터: 주차=${profile.pregnancyWeek}, 기존currentDay=${profile.currentDay}, 닉네임=${profile.nickname}")
+        println("📊 DiaryScreen - HomeViewModel currentPregnancyDay: ${currentPregnancyDay}")
         println("📊 DiaryScreen - homeState 객체 해시: ${profile.hashCode()}")
         PregnancyWeek(
             week = profile.pregnancyWeek,
-            dayCount = profile.currentDay
+            dayCount = currentPregnancyDay  // HomeViewModel의 정확한 계산값 사용
         )
     } ?: run {
         println("⚠️ DiaryScreen - homeState가 null, 기본값 사용")
-        PregnancyWeek(week = 1, dayCount = 1)
+        PregnancyWeek(week = 1, dayCount = currentPregnancyDay)
     }
 
     // API에서 받은 주간 일기 상태를 기존 형식으로 변환
@@ -111,11 +115,24 @@ fun DiaryScreen(
         condition = "좋음"
     )
 
+    // HomeViewModel의 실제 데이터를 DiaryViewModel에 전달
+    LaunchedEffect(menstrualDate) {
+        val actualMenstrualDate = menstrualDate
+        if (actualMenstrualDate != null) {
+            println("📝 DiaryScreen - DiaryViewModel에 LMP 날짜 전달: menstrualDate=$actualMenstrualDate")
+            viewModel.setLmpDate(actualMenstrualDate)
+        }
+    }
+
     // HomeViewModel에서 임신 주차가 업데이트될 때 DiaryViewModel 새로고침
-    LaunchedEffect(homeState?.pregnancyWeek) {
+    LaunchedEffect(homeState?.pregnancyWeek, menstrualDate) {
         homeState?.let { profile ->
-            println("🔄 DiaryScreen - 임신 주차 변경 감지: ${profile.pregnancyWeek}주차")
-            viewModel.loadWeeklyDiaries(profile.pregnancyWeek)
+            val actualMenstrualDate = menstrualDate
+            if (actualMenstrualDate != null) {
+                println("🔄 DiaryScreen - 임신 주차 변경 감지: ${profile.pregnancyWeek}주차")
+                viewModel.setLmpDate(actualMenstrualDate)
+                viewModel.loadWeeklyDiaries(profile.pregnancyWeek)
+            }
         }
     }
 

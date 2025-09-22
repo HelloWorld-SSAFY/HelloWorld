@@ -1,6 +1,8 @@
 package com.ms.helloworld.ui.screen
 
 import android.annotation.SuppressLint
+import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -47,14 +49,17 @@ data class DailyDiary(
 @Composable
 fun DiaryDetailScreen(
     navController: NavHostController,
-    initialDay: Int = 1
+    initialDay: Int = -1  // -1은 현재 날짜 사용을 의미
 ) {
     val backgroundColor = Color(0xFFF5F5F5)
 
-    // HomeViewModel에서 임신 주차 정보 가져오기
+    // HomeViewModel에서 모든 데이터 가져오기
     val homeViewModel: HomeViewModel = hiltViewModel()
     val momProfile by homeViewModel.momProfile.collectAsState()
     val userGender by homeViewModel.userGender.collectAsState()
+    val coupleId by homeViewModel.coupleId.collectAsState()
+    val menstrualDate by homeViewModel.menstrualDate.collectAsState()
+    val currentPregnancyDay by homeViewModel.currentPregnancyDay.collectAsState()
 
     // 디버깅을 위한 로그
     LaunchedEffect(userGender) {
@@ -70,44 +75,68 @@ fun DiaryDetailScreen(
     // 현재 주차의 총 일수 (1주 = 7일)
     val totalDaysInWeek = 7
 
-    // 현재 주차의 시작일과 끝일 계산
+    // 실제 임신 일수는 HomeViewModel의 currentPregnancyDay 사용
+    val actualDayNumber = if (initialDay == -1) {
+        // 기본값: 현재 실제 임신 일수 사용 (1은 로딩 중 상태이므로 제외)
+        if (currentPregnancyDay > 1) currentPregnancyDay else 1
+    } else {
+        // 특정 일수가 지정된 경우 해당 값 사용
+        initialDay
+    }
+
+    // 현재 주차의 시작일과 끝일 계산 (UI 표시용)
     val weekStartDay = (momProfile.pregnancyWeek - 1) * 7 + 1
     val weekEndDay = momProfile.pregnancyWeek * 7
 
-    // 현재 선택된 날 (주차 내에서의 상대적 위치)
-    var currentDayInWeek by remember { mutableStateOf(initialDay.coerceIn(1, totalDaysInWeek)) }
+    // 현재 선택된 주차 내 위치 (UI 표시용)
+    var currentDayInWeek by remember { mutableStateOf(1) }
 
-    // 실제 임신 일수 계산 (전체 임신 기간에서의 절대적 위치)
-    val actualDayNumber = weekStartDay + currentDayInWeek - 1
-
-    // TODO: SharedPreferences나 DataStore에서 실제 사용자 정보 가져오기
-    val getCoupleId = { 1L } // 임시로 하드코딩
-    val getLmpDate = { "2025-02-02" } // 임시로 하드코딩 (스웨거와 동일)
-
-    // 일별 일기 데이터 로드
+    // actualDayNumber가 업데이트되면 currentDayInWeek도 업데이트
     LaunchedEffect(actualDayNumber) {
+        if (actualDayNumber > 1) {
+            currentDayInWeek = ((actualDayNumber - 1) % 7) + 1
+        }
+    }
+
+
+    // HomeViewModel의 실제 데이터를 DiaryViewModel에 전달
+    LaunchedEffect(menstrualDate) {
+        val actualMenstrualDate = menstrualDate
+        if (actualMenstrualDate != null) {
+            println("📝 DiaryDetailScreen - DiaryViewModel에 LMP 날짜 전달: menstrualDate=$actualMenstrualDate")
+            diaryViewModel.setLmpDate(actualMenstrualDate)
+        }
+    }
+
+    // 실제 데이터 사용
+    val getCoupleId = { coupleId ?: 0L } // coupleId 사용
+    val getLmpDate = { menstrualDate ?: "2025-02-02" } // menstrualDate 사용
+
+    // 일별 일기 데이터 로드 - currentPregnancyDay 변경 시 재로드
+    LaunchedEffect(currentPregnancyDay, coupleId, menstrualDate) {
         // day API 호출: calendar/diary/day
         println("📆 DiaryDetailScreen - 일별 일기 로드")
+        println("  - initialDay: $initialDay")
+        println("  - currentPregnancyDay: $currentPregnancyDay")
+        println("  - currentDayInWeek: $currentDayInWeek")
         println("  - actualDayNumber: ${actualDayNumber}일차")
         println("  - pregnancyWeek: ${momProfile.pregnancyWeek}주차")
-        println("  - currentDayInWeek: $currentDayInWeek")
+        println("  - weekStartDay: $weekStartDay")
+        println("  - weekEndDay: $weekEndDay")
+        println("🔍 DiaryDetailScreen - API 파라미터:")
         println("  - coupleId: ${getCoupleId()}")
+        println("  - day: $actualDayNumber")
         println("  - lmpDate: ${getLmpDate()}")
 
-        // 임시 테스트: 작은 day 값으로 테스트
-        val testDay = if (actualDayNumber > 100) {
-            (actualDayNumber % 280) + 1 // 임신 기간 내로 조정
+        // currentPregnancyDay가 유효한 값(1보다 큰 값)일 때만 API 호출
+        if (actualDayNumber > 1 && coupleId != null && menstrualDate != null) {
+            diaryViewModel.loadDiariesByDay(
+                day = actualDayNumber,
+                lmpDate = getLmpDate()
+            )
         } else {
-            actualDayNumber
+            println("⏳ DiaryDetailScreen - 데이터 로딩 대기 중 (currentPregnancyDay: $currentPregnancyDay)")
         }
-
-        println("📝 임시 테스트 - 원본 day: $actualDayNumber, 조정된 day: $testDay")
-
-        diaryViewModel.loadDiariesByDay(
-            coupleId = getCoupleId(),
-            day = testDay,
-            lmpDate = getLmpDate()
-        )
     }
 
     // 화면이 다시 나타날 때 새로고침 (일기 등록 후 돌아올 때)
@@ -116,13 +145,16 @@ fun DiaryDetailScreen(
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
                 println("🔄 DiaryDetailScreen - 화면 복귀, 일기 새로고침")
+                println("  - actualDayNumber: $actualDayNumber")
 
-                // 일별 일기 조회
-                diaryViewModel.loadDiariesByDay(
-                    coupleId = getCoupleId(),
-                    day = actualDayNumber,
-                    lmpDate = getLmpDate()
-                )
+                if (actualDayNumber > 0) {
+                    // 일별 일기 조회
+                    diaryViewModel.loadDiariesByDay(
+                        coupleId = getCoupleId(),
+                        day = actualDayNumber,
+                        lmpDate = getLmpDate()
+                    )
+                }
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -210,18 +242,37 @@ fun DiaryDetailScreen(
                 .padding(start = 16.dp, end = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // 일자 네비게이션
-            DayNavigationHeader(
-                currentDay = actualDayNumber,
-                currentDayInWeek = currentDayInWeek,
-                totalDaysInWeek = totalDaysInWeek,
-                onPreviousDay = {
-                    if (currentDayInWeek > 1) currentDayInWeek--
-                },
-                onNextDay = {
-                    if (currentDayInWeek < totalDaysInWeek) currentDayInWeek++
-                }
-            )
+            // 디버깅: UI 렌더링 시점의 값들 확인
+            LaunchedEffect(actualDayNumber, currentPregnancyDay) {
+                println("🎨 DiaryDetailScreen UI 렌더링:")
+                println("  - actualDayNumber: $actualDayNumber")
+                println("  - currentPregnancyDay: $currentPregnancyDay")
+                println("  - currentDayInWeek: $currentDayInWeek")
+                println("  - initialDay: $initialDay")
+                println("  - momProfile.pregnancyWeek: ${momProfile.pregnancyWeek}")
+            }
+
+            // 일자 네비게이션 (데이터 로딩 완료 후 표시)
+            if (currentPregnancyDay > 1) {
+                DayNavigationHeader(
+                    currentDay = actualDayNumber,
+                    currentDayInWeek = currentDayInWeek,
+                    totalDaysInWeek = totalDaysInWeek,
+                    onPreviousDay = {
+                        if (currentDayInWeek > 1) currentDayInWeek--
+                    },
+                    onNextDay = {
+                        if (currentDayInWeek < totalDaysInWeek) currentDayInWeek++
+                    }
+                )
+            } else {
+                // 로딩 중 표시
+                Text(
+                    text = "데이터 로딩 중...",
+                    modifier = Modifier.padding(16.dp),
+                    color = Color.Gray
+                )
+            }
 
             // 출산일기 섹션
             DiarySection(

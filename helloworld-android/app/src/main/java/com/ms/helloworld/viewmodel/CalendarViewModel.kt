@@ -6,6 +6,7 @@ import com.ms.helloworld.dto.request.CalendarCreateRequest
 import com.ms.helloworld.dto.request.CalendarUpdateRequest
 import com.ms.helloworld.dto.response.CalendarEventResponse
 import com.ms.helloworld.repository.CalendarRepository
+import com.ms.helloworld.util.TokenManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -26,22 +27,16 @@ data class CalendarState(
 
 @HiltViewModel
 class CalendarViewModel @Inject constructor(
-    private val calendarRepository: CalendarRepository
+    private val calendarRepository: CalendarRepository,
+    private val tokenManager: TokenManager
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(CalendarState())
     val state: StateFlow<CalendarState> = _state.asStateFlow()
 
-    // TODO: SharedPreferences나 DataStore에서 실제 사용자 정보 가져오기
-    private fun getCoupleId(): Long {
-        // 임시로 하드코딩, 실제로는 로그인된 사용자의 커플 ID를 가져와야 함
-        return 1L
-    }
+    private fun getCoupleId(): Long? = tokenManager.getCoupleId()
 
-    private fun getWriterId(): Long {
-        // 임시로 하드코딩, 실제로는 로그인된 사용자의 ID를 가져와야 함
-        return 1L
-    }
+    private fun getWriterId(): String? = tokenManager.getCurrentUserId()
 
     init {
         loadEventsForCurrentMonth()
@@ -77,9 +72,20 @@ class CalendarViewModel @Inject constructor(
                     orderNo = orderNo
                 )
 
+                val coupleId = getCoupleId()
+                val writerId = getWriterId()
+
+                if (coupleId == null || writerId == null) {
+                    _state.value = _state.value.copy(
+                        isLoading = false,
+                        errorMessage = "사용자 인증 정보를 찾을 수 없습니다"
+                    )
+                    return@launch
+                }
+
                 val result = calendarRepository.createEvent(
-                    coupleId = getCoupleId(),
-                    writerId = getWriterId(),
+                    coupleId = coupleId,
+                    writerId = writerId.toLongOrNull() ?: 0L,
                     request = request
                 )
 
@@ -242,8 +248,17 @@ class CalendarViewModel @Inject constructor(
                 val from = "${yearMonth}-01T00:00:00Z"
                 val to = "${yearMonth}-${lastDayOfMonth.toString().padStart(2, '0')}T23:59:59Z"
 
+                val coupleId = getCoupleId()
+                if (coupleId == null) {
+                    _state.value = _state.value.copy(
+                        isLoading = false,
+                        errorMessage = "사용자 인증 정보를 찾을 수 없습니다"
+                    )
+                    return@launch
+                }
+
                 val result = calendarRepository.getEvents(
-                    coupleId = getCoupleId(),
+                    coupleId = coupleId,
                     from = from,
                     to = to
                 )

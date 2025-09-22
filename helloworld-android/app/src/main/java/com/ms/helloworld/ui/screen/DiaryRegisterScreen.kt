@@ -62,31 +62,36 @@ fun DiaryRegisterScreen(
     val userId by homeViewModel.userId.collectAsState()
     val coupleId by homeViewModel.coupleId.collectAsState()
     val menstrualDate by homeViewModel.menstrualDate.collectAsState()
+    val currentPregnancyDay by homeViewModel.currentPregnancyDay.collectAsState()
 
-    // TODO: SharedPreferences나 DataStore에서 실제 사용자 정보 가져오기
-    val getCoupleId = { coupleId ?: 1L } // coupleId 사용, fallback으로 1L
+    val getCoupleId = { coupleId ?: 0L } // coupleId 사용
     val getLmpDate = {
-        menstrualDate ?: "2025-02-02" // couple 데이터의 menstrualDate 사용
+        menstrualDate ?: "2025-05-15" // couple 데이터의 menstrualDate 사용
     }
 
-    // 날짜 계산 (임신 일수 -> 실제 날짜)
+    // 날짜 계산 (임신 일수 -> 실제 날짜) - 네겔레 법칙 사용
     val targetDate = remember(day) {
-        val lmpDate = LocalDate.parse(getLmpDate())
-        val actualDate = lmpDate.plusDays(day.toLong() - 1) // day는 1부터 시작하므로 -1
+        val lmpDateString = getLmpDate()
+        val lmpDate = LocalDate.parse(lmpDateString)
+
+        // 네겔레 법칙: 마지막 생리일 + (day-1)일
+        val actualDate = lmpDate.plusDays((day - 1).toLong())
         actualDate.format(DateTimeFormatter.ofPattern("yyyy년 MM월 dd일"))
     }
 
     val targetDateForApi = remember(day) {
         val lmpDateString = getLmpDate()
         val lmpDate = LocalDate.parse(lmpDateString)
-        val actualDate = lmpDate.plusDays(day.toLong() - 1)
+
+        // 네겔레 법칙: 마지막 생리일 + (day-1)일
+        val actualDate = lmpDate.plusDays((day - 1).toLong())
         val result = actualDate.toString() // yyyy-MM-dd 형식
 
-        println("📅 targetDate 계산:")
+        println("📅 targetDate 계산 (네겔레 법칙):")
         println("  - day: $day")
         println("  - lmpDateString: $lmpDateString")
         println("  - lmpDate: $lmpDate")
-        println("  - plusDays: ${day.toLong() - 1}")
+        println("  - plusDays: ${day - 1}")
         println("  - actualDate: $actualDate")
         println("  - result: $result")
 
@@ -110,6 +115,16 @@ fun DiaryRegisterScreen(
                 navController.popBackStack()
             }
             isSubmitting = false
+        }
+    }
+
+    // HomeViewModel의 실제 데이터를 DiaryViewModel에 전달
+    LaunchedEffect(coupleId, menstrualDate) {
+        val actualCoupleId = coupleId
+        val actualMenstrualDate = menstrualDate
+        if (actualCoupleId != null && actualMenstrualDate != null) {
+            println("📝 DiaryRegisterScreen - DiaryViewModel에 실제 데이터 전달: coupleId=$actualCoupleId, menstrualDate=$actualMenstrualDate")
+            diaryViewModel.setCoupleInfo(actualCoupleId, actualMenstrualDate)
         }
     }
 
@@ -264,8 +279,7 @@ fun DiaryRegisterScreen(
                                 content = diaryContent,
                                 targetDate = targetDateForApi,
                                 authorRole = authorRole,
-                                authorId = userId ?: 1L, // fallback
-                                coupleId = coupleId ?: 1L // fallback
+                                authorId = userId ?: 0L
                             )
                         }
                     }
