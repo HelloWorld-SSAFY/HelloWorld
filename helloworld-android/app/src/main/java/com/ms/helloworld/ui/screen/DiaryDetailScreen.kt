@@ -108,8 +108,7 @@ fun DiaryDetailScreen(
         }
     }
 
-    // 실제 데이터 사용
-    val getCoupleId = { coupleId ?: 0L } // coupleId 사용
+    // coupleId는 서버에서 토큰으로 자동 처리됨
     val getLmpDate = { menstrualDate ?: "2025-02-02" } // menstrualDate 사용
 
     // 일별 일기 데이터 로드 - currentPregnancyDay 변경 시 재로드
@@ -124,7 +123,7 @@ fun DiaryDetailScreen(
         println("  - weekStartDay: $weekStartDay")
         println("  - weekEndDay: $weekEndDay")
         println("🔍 DiaryDetailScreen - API 파라미터:")
-        println("  - coupleId: ${getCoupleId()}")
+        println("  - coupleId: 토큰에서 자동 처리")
         println("  - day: $actualDayNumber")
         println("  - lmpDate: ${getLmpDate()}")
 

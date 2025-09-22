@@ -7,7 +7,6 @@ import com.ms.helloworld.dto.response.MomProfile
 import com.ms.helloworld.dto.response.MemberProfile
 import com.ms.helloworld.repository.CalendarRepository
 import com.ms.helloworld.repository.MomProfileRepository
-import com.ms.helloworld.util.TokenManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,8 +19,7 @@ import javax.inject.Inject
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val momProfileRepository: MomProfileRepository,
-    private val calendarRepository: CalendarRepository,
-    private val tokenManager: TokenManager
+    private val calendarRepository: CalendarRepository
 ) : ViewModel() {
 
     private val viewModelId = System.currentTimeMillis().toString().takeLast(4)
@@ -66,9 +64,6 @@ class HomeViewModel @Inject constructor(
         _userGender.value = "FEMALE" // 임시로 여성으로 설정
     }
 
-    private fun getCoupleId(): Long? {
-        return tokenManager.getCoupleId()
-    }
 
     init {
         // 순차적 초기화: 사용자 정보 → 커플 정보 → 기타 데이터
@@ -230,14 +225,7 @@ class HomeViewModel @Inject constructor(
                 val from = "${currentYearMonth}-01T00:00:00Z"
                 val to = "${currentYearMonth}-${lastDayOfMonth.toString().padStart(2, '0')}T23:59:59Z"
 
-                val coupleId = getCoupleId()
-                if (coupleId == null) {
-                    println("❌ HomeViewModel($viewModelId) - coupleId가 토큰에서 추출되지 않음")
-                    return@launch
-                }
-
                 val result = calendarRepository.getEvents(
-                    coupleId = coupleId,
                     from = from,
                     to = to
                 )

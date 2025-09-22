@@ -64,7 +64,7 @@ fun DiaryRegisterScreen(
     val menstrualDate by homeViewModel.menstrualDate.collectAsState()
     val currentPregnancyDay by homeViewModel.currentPregnancyDay.collectAsState()
 
-    val getCoupleId = { coupleId ?: 0L } // coupleId 사용
+    // coupleId는 서버에서 토큰으로 자동 처리됨
     val getLmpDate = {
         menstrualDate ?: "2025-05-15" // couple 데이터의 menstrualDate 사용
     }
@@ -74,8 +74,8 @@ fun DiaryRegisterScreen(
         val lmpDateString = getLmpDate()
         val lmpDate = LocalDate.parse(lmpDateString)
 
-        // 네겔레 법칙: 마지막 생리일 + (day-1)일
-        val actualDate = lmpDate.plusDays((day - 1).toLong())
+        // 네겔레 법칙: 마지막 생리일 + day일 (day일차는 LMP + day일)
+        val actualDate = lmpDate.plusDays(day.toLong())
         actualDate.format(DateTimeFormatter.ofPattern("yyyy년 MM월 dd일"))
     }
 
@@ -83,8 +83,8 @@ fun DiaryRegisterScreen(
         val lmpDateString = getLmpDate()
         val lmpDate = LocalDate.parse(lmpDateString)
 
-        // 네겔레 법칙: 마지막 생리일 + (day-1)일
-        val actualDate = lmpDate.plusDays((day - 1).toLong())
+        // 네겔레 법칙: 마지막 생리일 + day일 (day일차는 LMP + day일)
+        val actualDate = lmpDate.plusDays(day.toLong())
         val result = actualDate.toString() // yyyy-MM-dd 형식
 
         println("📅 targetDate 계산 (네겔레 법칙):")
@@ -265,7 +265,7 @@ fun DiaryRegisterScreen(
                             println("📝 DiaryRegisterScreen - lmpDate: ${getLmpDate()}")
                             println("📝 DiaryRegisterScreen - menstrualDate raw: $menstrualDate")
                             println("📝 DiaryRegisterScreen - 계산 검증:")
-                            println("   생리일 + (day-1) = ${getLmpDate()} + ${day-1} = $targetDateForApi")
+                            println("   생리일 + day = ${getLmpDate()} + $day = $targetDateForApi")
                             println("📝 디버깅: HomeViewModel 상태 확인")
                             println("   - userGender: $userGender")
                             println("   - userId: $userId (expected: not null)")

@@ -165,10 +165,10 @@ class DiaryRepository @Inject constructor(
         }
     }
 
-    suspend fun getDiariesByWeek(coupleId: Long, week: Int, lmpDate: String): Result<DiaryListResponse> {
+    suspend fun getDiariesByWeek(week: Int, lmpDate: String): Result<DiaryListResponse> {
         return try {
-            Log.d(TAG, "📅 주차별 일기 조회 - coupleId: $coupleId, week: $week, lmpDate: $lmpDate")
-            val response = diaryApi.getDiariesByWeek(coupleId, week, lmpDate)
+            Log.d(TAG, "📅 주차별 일기 조회 - week: $week, lmpDate: $lmpDate")
+            val response = diaryApi.getDiariesByWeek(week, lmpDate)
             val contentSize = response.content?.size ?: 0
             Log.d(TAG, "✅ 주차별 일기 조회 성공: ${contentSize}개 (content null: ${response.content == null})")
             Result.success(response)
@@ -178,20 +178,17 @@ class DiaryRepository @Inject constructor(
         }
     }
 
-    suspend fun getDiariesByDay(coupleId: Long, day: Int, lmpDate: String): Result<DiaryListResponse> {
+    suspend fun getDiariesByDay(day: Int, lmpDate: String): Result<DiaryListResponse> {
         return try {
             Log.d(TAG, "📆 일별 일기 조회 시작")
-            Log.d(TAG, "  - coupleId: $coupleId")
             Log.d(TAG, "  - day: $day")
             Log.d(TAG, "  - lmpDate: $lmpDate")
             Log.d(TAG, "🌐 API 호출: GET calendar/diary/day")
-            Log.d(TAG, "🔗 Full URL: calendar/diary/day?coupleId=$coupleId&day=$day&lmpDate=$lmpDate")
             Log.d(TAG, "📋 Request parameters:")
-            Log.d(TAG, "  - coupleId: $coupleId (type: ${coupleId.javaClass.simpleName})")
             Log.d(TAG, "  - day: $day (type: ${day.javaClass.simpleName})")
             Log.d(TAG, "  - lmpDate: '$lmpDate' (type: ${lmpDate.javaClass.simpleName})")
 
-            val response = diaryApi.getDiariesByDay(coupleId, day, lmpDate)
+            val response = diaryApi.getDiariesByDay(day, lmpDate)
 
             val contentSize = response.content?.size ?: 0
             Log.d(TAG, "✅ 일별 일기 조회 성공!")
