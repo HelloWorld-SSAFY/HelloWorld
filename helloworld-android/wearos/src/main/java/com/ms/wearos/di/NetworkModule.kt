@@ -19,7 +19,7 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
 
-    private const val BASE_URL = "http://j13d204.p.ssafy.io:80"
+    private const val BASE_URL = "https://j13d204.p.ssafy.io:80"
 
     // HTTP 로깅 인터셉터
     @Provides

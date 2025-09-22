@@ -1,14 +1,18 @@
 package com.ms.helloworld.ui.screen
 
 import android.widget.Toast
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -19,6 +23,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import com.ms.helloworld.R
 import com.ms.helloworld.navigation.Screen
+import com.ms.helloworld.ui.theme.BaseColor
+import com.ms.helloworld.ui.theme.MainColor
 import com.ms.helloworld.viewmodel.LoginViewModel
 
 @Composable
@@ -29,16 +35,9 @@ fun LoginScreen(
     val context = LocalContext.current
     val state by viewModel.state.collectAsState()
 
-    // 앱 시작 시 토큰 체크 및 자동 로그인
-    LaunchedEffect(Unit) {
-        println("🚀 LoginScreen 시작 - 토큰 체크")
-        viewModel.checkAutoLogin(navController)
-    }
-
     // 수동 로그인 성공 시 화면 이동
     LaunchedEffect(state.loginSuccess) {
         if (state.loginSuccess) {
-            println("✅ 수동 로그인 성공")
             viewModel.handleLoginSuccess(navController)
         }
     }
@@ -50,10 +49,11 @@ fun LoginScreen(
             viewModel.clearError()
         }
     }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.White),
+            .background(BaseColor),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -66,16 +66,18 @@ fun LoginScreen(
             Spacer(modifier = Modifier.weight(1f))
 
             // Todo: Lottie 애니메이션 추가 예정
-            Text(
-                text = "Lottie 애니메이션 배경",
-                fontSize = 18.sp,
-                color = Color.Black,
-                fontWeight = FontWeight.Normal
+            Image(
+                painter = painterResource(id = R.drawable.helloworld_logo),
+                contentDescription = "HelloWorld Logo",
+                modifier = Modifier
+                    .fillMaxWidth(0.60f)
+                    .aspectRatio(1f)
+                    .clip(CircleShape),
+                contentScale = ContentScale.Crop
             )
 
             Spacer(modifier = Modifier.weight(1f))
 
-            // 버튼들
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -92,7 +94,7 @@ fun LoginScreen(
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.outlinedButtonColors(
                         containerColor = Color.White,
-                        contentColor = Color.Black
+                        contentColor = Color.Black,
                     ),
                     border = androidx.compose.foundation.BorderStroke(
                         1.dp,
@@ -109,61 +111,11 @@ fun LoginScreen(
                             tint = Color.Unspecified,
                         )
                         Spacer(modifier = Modifier.width(10.dp))
-                        if (state.isLoading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                color = Color.Black,
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            Text(
-                                text = "Google로 로그인",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Normal
-                            )
-                        }
-                    }
-
-                }
-
-                // Kakao 로그인 버튼
-                Button(
-                    onClick = {
-//                        viewModel.signInWithKakao(context)
-                    },
-                    enabled = !state.isLoading,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFFDE404),
-                        contentColor = Color.Black
-                    )
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ){
-                        Icon(
-                            painter = painterResource(id = R.drawable.ic_kakao_logo),
-                            contentDescription = "Kakao Logo",
-                            tint = Color.Unspecified,
+                        Text(
+                            text = "Google로 로그인",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Normal
                         )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        if (state.isLoading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                color = Color.Black,
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            Text(
-                                text = "Kakao로 로그인",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Normal
-                            )
-                        }
                     }
 
                 }

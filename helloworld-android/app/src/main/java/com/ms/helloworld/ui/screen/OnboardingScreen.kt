@@ -98,16 +98,16 @@ fun OnboardingScreens(
                 com.ms.helloworld.model.OnboardingStatus.BASIC_COMPLETED -> {
                     // 중간 단계부터 시작
                     initialPageIndex = viewModel.getResumePageIndex(result)
-                    println("📍 중간 단계부터 시작: 페이지 $initialPageIndex")
+                    println("중간 단계부터 시작: 페이지 $initialPageIndex")
                 }
                 com.ms.helloworld.model.OnboardingStatus.NOT_STARTED -> {
                     // 처음부터 시작
                     initialPageIndex = 0
-                    println("🆕 처음부터 온보딩 시작")
+                    println("처음부터 온보딩 시작")
                 }
             }
         } catch (e: Exception) {
-            println("❌ 온보딩 상태 체크 실패: ${e.message}")
+            println("온보딩 상태 체크 실패: ${e.message}")
             initialPageIndex = 0
         } finally {
             isStatusChecked = true

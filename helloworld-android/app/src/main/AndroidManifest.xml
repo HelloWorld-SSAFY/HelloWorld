@@ -43,7 +43,7 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.HelloWorld"
+        android:theme="@style/Theme.HelloWorld.Splash"
         tools:targetApi="31">
 
         <!-- Wearable 앱 연결 메타데이터 추가 -->
@@ -55,7 +55,7 @@
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"
-            android:theme="@style/Theme.HelloWorld">
+            android:theme="@style/Theme.HelloWorld.Splash">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
