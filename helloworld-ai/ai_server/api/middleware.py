@@ -8,6 +8,7 @@ ALLOW_PREFIXES = (
     "/favicon.ico",
     "/swagger",
     "/schema",
+    "/metrics",
 )
 ALLOW_EXACT = {"/v1/healthz"}  # 헬스체크는 토큰 없이 허용
 
