@@ -124,7 +124,6 @@ fun DiaryRegisterScreen(
         val actualMenstrualDate = menstrualDate
         if (actualCoupleId != null && actualMenstrualDate != null) {
             println("📝 DiaryRegisterScreen - DiaryViewModel에 실제 데이터 전달: coupleId=$actualCoupleId, menstrualDate=$actualMenstrualDate")
-            diaryViewModel.setCoupleInfo(actualCoupleId, actualMenstrualDate)
         }
     }
 

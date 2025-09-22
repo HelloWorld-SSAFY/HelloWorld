@@ -150,7 +150,6 @@ fun DiaryDetailScreen(
                 if (actualDayNumber > 0) {
                     // 일별 일기 조회
                     diaryViewModel.loadDiariesByDay(
-                        coupleId = getCoupleId(),
                         day = actualDayNumber,
                         lmpDate = getLmpDate()
                     )
