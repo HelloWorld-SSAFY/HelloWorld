@@ -12,6 +12,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -128,36 +129,40 @@ public class DiaryService {
 
     /** 6.3 일기 작성 */
     @Transactional
-    public Long create(CreateDiaryRequest req) {
+    public Long create(CreateDiaryRequest req,Long coupleId, Long authorId, String authorRole) {
         LocalDate entry = LocalDate.parse(req.getEntryDate(), DAY);
         ZonedDateTime startOfDay = entry.atStartOfDay(ZONE);
 
-        boolean dup = diaryRepository.existsByCoupleIdAndCreatedAtBetween(
-                req.getCoupleId(), startOfDay, startOfDay.plusDays(1));
-        if (dup) throw new IllegalStateException("해당 날짜 일기가 이미 존재합니다.");
 
-        Diary d = Diary.builder()
-                .coupleId(req.getCoupleId())
-                .authorId(req.getAuthorId())
-                .authorRole("female".equalsIgnoreCase(req.getAuthorRole()) ?
-                        Diary.AuthorRole.FEMALE : Diary.AuthorRole.MALE)
+        // 하루에 하나의 일기만 작성 가능 (기존 로직 유지)
+        boolean isDuplicate = diaryRepository.existsByCoupleIdAndCreatedAtBetween(
+                coupleId, startOfDay, startOfDay.plusDays(1));
+        if (isDuplicate) {
+            throw new IllegalStateException("해당 날짜에 이미 작성된 일기가 있습니다.");
+        }
+
+        Diary diary = Diary.builder()
+                .coupleId(coupleId) // 신뢰할 수 있는 인증 정보 사용
+                .authorId(authorId) // 신뢰할 수 있는 인증 정보 사용
+                .authorRole(Diary.AuthorRole.valueOf(authorRole.toUpperCase())) // 신뢰할 수 있는 인증 정보 사용
                 .diaryTitle(req.getDiaryTitle())
                 .diaryContent(req.getDiaryContent())
                 .createdAt(startOfDay)
                 .targetDate(req.getTargetDate())
                 .build();
 
-        d = diaryRepository.save(d);
+        diaryRepository.save(diary);
 
-        if (req.getImageUrl() != null && !req.getImageUrl().isBlank()) {
-            DiaryPhoto p = DiaryPhoto.builder()
-                    .diary(d)
+        // 이미지 처리 로직
+        if (StringUtils.hasText(req.getImageUrl())) {
+            DiaryPhoto photo = DiaryPhoto.builder()
+                    .diary(diary)
                     .imageUrl(req.getImageUrl())
                     .isUltrasound(false)
                     .build();
-            diaryPhotoRepository.save(p);
+            diaryPhotoRepository.save(photo);
         }
-        return d.getDiaryId();
+        return diary.getDiaryId();
     }
 
     /** 6.4 일기 수정 (이미지 포함) */
