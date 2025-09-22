@@ -57,10 +57,20 @@ public class CoupleController {
     public ResponseEntity<CoupleWithUsersResponse> getMyCoupleDetail(
             @AuthenticationPrincipal InternalPrincipal principal
     ) {
+        log.info("Principal received: {}", principal);
+
+        if (principal == null) {
+            log.error("Principal is null - authentication failed");
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+        }
+
         var auth = requireAuth(principal);
 
         try {
             CoupleWithUsersResponse response = coupleService.getMyCoupleWithUsers(auth.memberId());
+
+            log.info("Couple detail retrieved for user: {}, couple: {}",
+                    auth.memberId(), auth.coupleId());
 
             // 민감 정보 마스킹 (파트너의 의료 정보 등)
             response = maskSensitiveData(response, auth);
@@ -68,6 +78,7 @@ public class CoupleController {
             log.info("Couple detail retrieved for user: {}, couple: {}",
                     auth.memberId(), auth.coupleId());
 
+            log.info("Returning successful response");
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             log.error("Failed to get couple detail for user {}: {}", auth.memberId(), e.getMessage());
