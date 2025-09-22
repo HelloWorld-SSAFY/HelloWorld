@@ -29,6 +29,7 @@ public class GatewayRedisAuthFilter implements GlobalFilter {
     private final AntPathMatcher matcher = new AntPathMatcher();
     private final List<String> skipPaths;
 
+    
     public GatewayRedisAuthFilter(
             ReactiveStringRedisTemplate redis,
             @Value("${gateway.hmac-secret}") String secret,
