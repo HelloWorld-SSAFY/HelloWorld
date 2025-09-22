@@ -22,9 +22,9 @@ public class UserInfoAuthenticationFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
 
-        String userId = request.getHeader("X-USER-ID");
-        String coupleIdStr = request.getHeader("X-COUPLE-ID");
-        String genderHeader = request.getHeader("X-ROLE");
+        String userId = request.getHeader("X-Internal-User-Id");
+        String coupleIdStr = request.getHeader("X-Internal-Couple-Id");
+        String genderHeader = request.getHeader("X-Internal-Role");
 
         if (StringUtils.hasText(userId) && StringUtils.hasText(genderHeader)) {
             try {
