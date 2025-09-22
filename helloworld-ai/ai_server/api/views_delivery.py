@@ -14,8 +14,13 @@ from drf_spectacular.utils import (
 # ✅ 단일 소스: recommend_delivery 만 사용
 from api.models import RecommendationDelivery as RecommendDelivery
 
-# 공용 인증 유틸 재사용
-from api.views import _assert_app_token, APP_TOKEN_PARAM
+# 공용 인증/헤더 유틸 재사용
+from api.views import (
+    _assert_app_token,
+    _require_user_ref,          # ← 헤더(X-Couple-Id) 우선으로 user_ref 결정
+    APP_TOKEN_PARAM,
+    COUPLE_ID_PARAM,            # ← Swagger에 X-Couple-Id 노출
+)
 
 
 # ───────────── 유틸 ─────────────
@@ -61,6 +66,7 @@ class DeliveryItem(serializers.Serializer):
     rank = serializers.IntegerField()
     score = serializers.FloatField(required=False, allow_null=True)
     created_at = serializers.CharField()
+    reason = serializers.CharField(required=False, allow_blank=True)  # ← reason 포함
     meta = serializers.JSONField(required=False)
 
 class DeliveryOut(serializers.Serializer):
@@ -102,6 +108,7 @@ def _serialize_media_from_recommend(items):
             "rank": getattr(r, "rank", i),
             "score": getattr(r, "score", None),
             "created_at": r.created_at.isoformat(),
+            "reason": getattr(r, "reason", None) or snap.get("reason"),
             "meta": _first(getattr(r, "meta", None), getattr(c, "meta", None), snap.get("meta"), {}) or {},
         })
     return out
@@ -179,8 +186,11 @@ class _RecommendDeliveryBase(APIView):
     @extend_schema(
         parameters=[
             APP_TOKEN_PARAM,
-            OpenApiParameter("user_ref", OpenApiTypes.STR, OpenApiParameter.QUERY, required=True,
-                             description="유저 식별자(e.g. u1)"),
+            COUPLE_ID_PARAM,  # ← 헤더로 user_ref 전달 가능(우선)
+            OpenApiParameter(
+                "user_ref", OpenApiTypes.STR, OpenApiParameter.QUERY, required=False,
+                description="유저 식별자. 헤더 X-Couple-Id가 있으면 그 값을 우선 사용합니다."
+            ),
             OpenApiParameter("limit", OpenApiTypes.INT, OpenApiParameter.QUERY, required=False,
                              description="반환 개수(기본 3, 1~5)"),
             OpenApiParameter("session_id", OpenApiTypes.STR, OpenApiParameter.QUERY, required=False,
@@ -208,9 +218,11 @@ class _RecommendDeliveryBase(APIView):
         if bad:
             return bad
 
-        user_ref = request.query_params.get("user_ref")
-        if not user_ref:
-            return Response({"ok": False, "error": "MISSING_USER_REF"}, status=400)
+        # 헤더(X-Couple-Id) 우선 → 없으면 쿼리의 user_ref 사용
+        user_ref_qs = request.query_params.get("user_ref")
+        user_ref, missing = _require_user_ref(request, user_ref_qs)
+        if missing:
+            return missing
 
         # 안전 파싱/클램핑
         try:
@@ -242,7 +254,7 @@ class _RecommendDeliveryBase(APIView):
         if not _enforce_ttl(qs, ttl_min):
             return Response({"ok": False, "error": "DELIVERY_EXPIRED", "category": self.CATEGORY}, status=404)
 
-        # 4) 정렬 (rank > created_at desc) — 필드 없으면 안전하게 fallback
+        # 4) 정렬 (rank > score > created_at) — 필드 없으면 안전하게 fallback
         if _has_field(RecommendDelivery, "rank"):
             order_by = ["rank", "-created_at"]
         elif _has_field(RecommendDelivery, "score"):

@@ -5,6 +5,7 @@ Django settings for ai_server project.
 from pathlib import Path
 import os
 from dotenv import load_dotenv
+from corsheaders.defaults import default_headers
 
 # ---- env 로드 ---------------------------------------------------------------
 load_dotenv()  # ai_server/.env
@@ -154,7 +155,11 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # ---- CORS / DRF -------------------------------------------------------------
 CORS_ALLOW_ALL_ORIGINS = True  # 개발용. 운영에서는 False + 화이트리스트 권장
-
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    "x-app-token",
+    "x-access-token",
+    "x-couple-id",
+]
 REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
