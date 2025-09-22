@@ -9,7 +9,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
+import javax.inject.Singleton
 
+@Singleton
 class FcmRepository @Inject constructor(
     private val api: FcmApi
 ) {
@@ -28,6 +30,15 @@ class FcmRepository @Inject constructor(
             } catch (e: Exception) {
                 Log.e("FCM", "토큰 등록 중 예외", e)
             }
+        }
+    }
+
+    suspend fun unregisterToken(): Boolean {
+        return try {
+            val response = api.unregisterFcmToken()
+            response.isSuccessful
+        } catch (e: Exception) {
+            false
         }
     }
 }

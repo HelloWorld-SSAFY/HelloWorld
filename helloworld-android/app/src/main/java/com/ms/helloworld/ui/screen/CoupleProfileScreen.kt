@@ -18,6 +18,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -26,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
+import com.ms.helloworld.navigation.Screen
 import com.ms.helloworld.ui.components.CustomTopAppBar
 import com.ms.helloworld.ui.components.ProfileEditDialog
 import com.ms.helloworld.viewmodel.CoupleProfileViewModel
@@ -57,6 +59,19 @@ fun CoupleProfileScreen(
         }
     }
 
+    // 로그아웃 완료 감지
+    LaunchedEffect(state.memberProfile, state.isLoading) {
+        if (!state.isLoading &&
+            state.memberProfile == null &&
+            state.momProfile == null &&
+            state.coupleProfile == null) {
+            // 모든 상태가 초기화되었으면 로그인 화면으로
+            navController.navigate(Screen.LoginScreen.route) {
+                popUpTo(0) { inclusive = true }
+            }
+        }
+    }
+
     var showInviteCodeBottomSheet by remember { mutableStateOf(false) }
     var showProfileEditDialog by remember { mutableStateOf(false) }
     val bottomSheetState = rememberModalBottomSheetState()
@@ -65,6 +80,8 @@ fun CoupleProfileScreen(
     val isPartnerConnected = state.isPartnerConnected
     val shouldShowInviteCode = state.memberProfile?.gender?.uppercase() == "FEMALE" // 여성만 초대 코드 생성
     val currentUserGender = state.memberProfile?.gender?.uppercase() // 현재 사용자 성별
+
+    val context = LocalContext.current
 
         Column(
             modifier = Modifier
@@ -295,7 +312,7 @@ fun CoupleProfileScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
                 MenuItemWithArrow("로그아웃") {
-                    // TODO: 로그아웃 처리
+                    viewModel.signOut(context)
                 }
                 Spacer(modifier = Modifier.height(16.dp))
                 MenuItemWithArrow("회원탈퇴") {

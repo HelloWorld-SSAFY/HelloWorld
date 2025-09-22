@@ -13,14 +13,7 @@ import com.google.android.gms.wearable.PutDataRequest
 import com.google.android.gms.wearable.Wearable
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
-// Kakao 관련 import 임시 주석 처리
-// import com.kakao.sdk.auth.model.OAuthToken
-// import com.kakao.sdk.common.model.ClientError
-// import com.kakao.sdk.common.model.ClientErrorCause
-// import com.kakao.sdk.user.UserApiClient
-import com.ms.helloworld.dto.request.SocialLoginRequest
 import com.ms.helloworld.dto.request.GoogleLoginRequest
-import com.ms.helloworld.dto.response.LoginResponse
 import com.ms.helloworld.repository.AuthRepository
 import com.ms.helloworld.util.TokenManager
 import com.ms.helloworld.repository.MomProfileRepository
@@ -40,7 +33,8 @@ data class LoginState(
     val isLoggedIn: Boolean = false,
     val errorMessage: String? = null,
     val loginSuccess: Boolean = false,
-    val userGender: String? = null
+    val userGender: String? = null,
+    val isAutoLoginChecked: Boolean = false
 )
 
 @HiltViewModel
@@ -62,6 +56,12 @@ class LoginViewModel @Inject constructor(
     }
 
     fun signInWithGoogle(context: Context) {
+        // 이미 로그인된 상태면 중복 실행 방지
+        if (_state.value.isLoggedIn) {
+            Log.d(TAG, "이미 로그인된 상태입니다.")
+            return
+        }
+
         viewModelScope.launch {
             try {
                 _state.value = _state.value.copy(isLoading = true, errorMessage = null)
@@ -116,6 +116,8 @@ class LoginViewModel @Inject constructor(
                         accessToken = loginResponse.accessToken,
                         refreshToken = loginResponse.refreshToken
                     )
+                    Log.d(TAG, "저장된 accessToken 확인: ${tokenManager.getAccessToken()}")
+                    Log.d(TAG, "저장된 refreshToken 확인: ${tokenManager.getRefreshToken()}")
 
                     // WearOS로 토큰 전송
                     sendTokenToWearOS(context, loginResponse.accessToken, loginResponse.refreshToken)
@@ -125,13 +127,14 @@ class LoginViewModel @Inject constructor(
                         isLoading = false,
                         isLoggedIn = true,
                         loginSuccess = true,
-                        userGender = loginResponse.gender
+                        userGender = loginResponse.gender,
+                        isAutoLoginChecked = true
                     )
                     Log.d(TAG, "Google login successful")
                 } else {
                     _state.value = _state.value.copy(
                         isLoading = false,
-                        errorMessage = "서버 로그인에 실패했습니다."
+                        errorMessage = "로그인 실패. 잠시 후 다시 시도해주세요."
                     )
                 }
 
@@ -161,32 +164,6 @@ class LoginViewModel @Inject constructor(
                 _state.value = _state.value.copy(
                     isLoading = false,
                     errorMessage = "로그인 중 오류가 발생했습니다: ${e.message}"
-                )
-            }
-        }
-    }
-
-    // 로그아웃 기능 추가
-    fun signOut(context: Context) {
-        viewModelScope.launch {
-            try {
-                Log.d(TAG, "Starting logout process...")
-
-                // 로컬 토큰 삭제
-                tokenManager.clearTokens()
-
-                // WearOS에서 토큰 제거
-                removeTokenFromWearOS(context)
-
-                // 상태 초기화
-                _state.value = LoginState()
-
-                Log.d(TAG, "Logout completed successfully")
-
-            } catch (e: Exception) {
-                Log.e(TAG, "Logout error", e)
-                _state.value = _state.value.copy(
-                    errorMessage = "로그아웃 중 오류가 발생했습니다: ${e.message}"
                 )
             }
         }
@@ -227,146 +204,6 @@ class LoginViewModel @Inject constructor(
         }
     }
 
-    private suspend fun removeTokenFromWearOS(context: Context) {
-        try {
-            Log.d(TAG, "Removing tokens from WearOS...")
-            val dataClient = Wearable.getDataClient(context)
-            val nodeClient = Wearable.getNodeClient(context)
-
-            // 연결된 노드 확인
-            val nodes = nodeClient.connectedNodes.await()
-            Log.d(TAG, "Connected nodes for token removal: ${nodes.size}")
-
-            val putDataMapRequest = PutDataMapRequest.create(TOKEN_PATH).apply {
-                dataMap.putString(ACCESS_TOKEN_KEY, "")
-                dataMap.putString(REFRESH_TOKEN_KEY, "")
-                dataMap.putLong(TIMESTAMP_KEY, System.currentTimeMillis())
-            }
-
-            val putDataRequest: PutDataRequest = putDataMapRequest.asPutDataRequest()
-            putDataRequest.setUrgent()
-
-            val result = dataClient.putDataItem(putDataRequest).await()
-            Log.d(TAG, "Tokens removed from WearOS successfully - URI: ${result.uri}")
-
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to remove tokens from WearOS", e)
-        }
-    }
-
-    fun signInWithKakao(context: Context) {
-        // Kakao 로그인 임시 비활성화
-        _state.value = _state.value.copy(
-            isLoading = false,
-            errorMessage = "카카오 로그인은 현재 준비 중입니다."
-        )
-
-        /*
-        viewModelScope.launch {
-            try {
-                _state.value = _state.value.copy(isLoading = true, errorMessage = null)
-
-                // 카카오톡 설치 여부 확인
-                if (UserApiClient.instance.isKakaoTalkLoginAvailable(context)) {
-                    // 카카오톡으로 로그인
-                    loginWithKakaoTalk(context)
-                } else {
-                    // 카카오 계정으로 로그인
-                    loginWithKakaoAccount(context)
-                }
-
-            } catch (e: Exception) {
-                Log.e(TAG, "Kakao login error", e)
-                _state.value = _state.value.copy(
-                    isLoading = false,
-                    errorMessage = "카카오 로그인 중 오류가 발생했습니다: ${e.message}"
-                )
-            }
-        }
-        */
-    }
-
-    /*
-    // Kakao 관련 메서드들 임시 주석 처리
-    private fun loginWithKakaoTalk(context: Context) {
-        UserApiClient.instance.loginWithKakaoTalk(context) { token, error ->
-            if (error != null) {
-                Log.e(TAG, "카카오톡 로그인 실패", error)
-
-                // 사용자가 카카오톡 설치 후 디바이스 권한 요청 화면에서 로그인을 취소한 경우
-                if (error is ClientError && error.reason == ClientErrorCause.Cancelled) {
-                    _state.value = _state.value.copy(
-                        isLoading = false,
-                        errorMessage = "카카오 로그인이 취소되었습니다."
-                    )
-                } else {
-                    // 카카오톡에 연결된 카카오계정이 없는 경우, 카카오계정으로 로그인 시도
-                    loginWithKakaoAccount(context)
-                }
-            } else if (token != null) {
-                Log.d(TAG, "카카오톡 로그인 성공: ${token.accessToken.take(20)}...")
-                handleKakaoLoginSuccess(token)
-            }
-        }
-    }
-
-    private fun loginWithKakaoAccount(context: Context) {
-        UserApiClient.instance.loginWithKakaoAccount(context) { token, error ->
-            if (error != null) {
-                Log.e(TAG, "카카오 계정 로그인 실패", error)
-                _state.value = _state.value.copy(
-                    isLoading = false,
-                    errorMessage = "카카오 로그인에 실패했습니다: ${error.message}"
-                )
-            } else if (token != null) {
-                Log.d(TAG, "카카오 계정 로그인 성공: ${token.accessToken.take(20)}...")
-                handleKakaoLoginSuccess(token)
-            }
-        }
-    }
-
-    private fun handleKakaoLoginSuccess(token: OAuthToken) {
-        viewModelScope.launch {
-            try {
-                // Spring Boot 서버로 소셜 로그인 요청
-                val loginRequest = SocialLoginRequest(
-                    provider = "kakao",
-                    token = token.accessToken
-                )
-
-                val loginResponse = authRepository.socialLogin(loginRequest)
-
-                if (loginResponse != null) {
-                    // JWT 토큰 저장
-                    tokenManager.saveTokens(
-                        accessToken = loginResponse.accessToken,
-                        refreshToken = loginResponse.refreshToken
-                    )
-
-                    _state.value = _state.value.copy(
-                        isLoading = false,
-                        isLoggedIn = true,
-                        loginSuccess = true
-                    )
-                    Log.d(TAG, "Kakao login successful")
-                } else {
-                    _state.value = _state.value.copy(
-                        isLoading = false,
-                        errorMessage = "서버 로그인에 실패했습니다."
-                    )
-                }
-
-            } catch (e: Exception) {
-                Log.e(TAG, "Kakao server login error", e)
-                _state.value = _state.value.copy(
-                    isLoading = false,
-                    errorMessage = "서버 연동 중 오류가 발생했습니다: ${e.message}"
-                )
-            }
-        }
-    }
-    */
-
     fun clearError() {
         _state.value = _state.value.copy(errorMessage = null)
     }
@@ -375,46 +212,23 @@ class LoginViewModel @Inject constructor(
         _state.value = _state.value.copy(loginSuccess = false)
     }
 
-    // 앱 시작 시 자동 로그인 체크
-    fun checkAutoLogin(navController: NavHostController) {
-        viewModelScope.launch {
-            try {
-                val accessToken = tokenManager.getAccessToken()
-
-                if (accessToken.isNullOrBlank()) {
-                    println("🔑 토큰 없음 → 로그인 UI 표시")
-                    return@launch
-                }
-
-                println("🔑 토큰 있음 → 온보딩 상태 체크")
-                val result = momProfileRepository.checkOnboardingStatus()
-
-                navigateBasedOnOnboardingStatus(result, navController)
-
-            } catch (e: Exception) {
-                println("❌ 자동 로그인 체크 실패: ${e.message}")
-                // 토큰이 유효하지 않을 수 있으므로 삭제
-                try {
-                    tokenManager.clearTokens()
-                } catch (clearException: Exception) {
-                    println("토큰 삭제 실패: ${clearException.message}")
-                }
-            }
-        }
-    }
-
     // 수동 로그인 성공 후 처리
     fun handleLoginSuccess(navController: NavHostController) {
+        // 이미 처리된 경우 중복 실행 방지
+        if (!_state.value.loginSuccess) {
+            return
+        }
+
         viewModelScope.launch {
             try {
                 clearLoginSuccess()
-                println("🔍 로그인 성공 후 온보딩 상태 체크")
+                println("로그인 성공 후 온보딩 상태 체크")
                 val result = momProfileRepository.checkOnboardingStatus()
 
                 navigateBasedOnOnboardingStatus(result, navController)
 
             } catch (e: Exception) {
-                println("❌ 온보딩 상태 체크 실패 → 온보딩 화면으로 이동")
+                println("온보딩 상태 체크 실패 → 온보딩 화면으로 이동")
                 navController.navigate(Screen.OnboardingScreens.route) {
                     popUpTo(Screen.LoginScreen.route) { inclusive = true }
                 }
@@ -429,19 +243,16 @@ class LoginViewModel @Inject constructor(
     ) {
         when (result.status) {
             OnboardingStatus.FULLY_COMPLETED -> {
-                println("✅ 온보딩 완료됨 → 홈으로 이동")
                 navController.navigate(Screen.HomeScreen.route) {
                     popUpTo(Screen.LoginScreen.route) { inclusive = true }
                 }
             }
             OnboardingStatus.BASIC_COMPLETED -> {
-                println("📝 온보딩 미완료 → 온보딩 화면으로 이동")
                 navController.navigate(Screen.OnboardingScreens.route) {
                     popUpTo(Screen.LoginScreen.route) { inclusive = true }
                 }
             }
             OnboardingStatus.NOT_STARTED -> {
-                println("🆕 새로운 사용자 → 온보딩 화면으로 이동")
                 navController.navigate(Screen.OnboardingScreens.route) {
                     popUpTo(Screen.LoginScreen.route) { inclusive = true }
                 }

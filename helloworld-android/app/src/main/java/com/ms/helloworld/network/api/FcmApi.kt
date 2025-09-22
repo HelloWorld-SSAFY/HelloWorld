@@ -12,4 +12,6 @@ interface FcmApi {
         @Body body: FcmRegisterRequest
     ): Response<Unit> // 200 OK, body 없음
 
+    @POST("user/api/fcm/unregister")
+    suspend fun unregisterFcmToken(): Response<Unit> // 200 OK, body 없음
 }

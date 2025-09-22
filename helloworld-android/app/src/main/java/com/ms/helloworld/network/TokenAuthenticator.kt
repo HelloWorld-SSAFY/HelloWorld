@@ -1,6 +1,7 @@
 package com.ms.helloworld.network
 
 import android.util.Log
+import com.ms.helloworld.dto.request.RefreshTokenRequest
 import com.ms.helloworld.network.api.AuthApi
 import com.ms.helloworld.util.TokenManager
 import kotlinx.coroutines.runBlocking
@@ -13,11 +14,6 @@ import okhttp3.Route
 import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
-
-// 토큰 갱신 요청 데이터 클래스
-data class RefreshTokenRequest(
-    val refreshToken: String
-)
 
 private const val TAG = "싸피_TokenAuthenticator"
 @Singleton

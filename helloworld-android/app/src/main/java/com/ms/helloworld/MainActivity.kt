@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.systemBars
@@ -16,6 +17,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.lifecycle.lifecycleScope
@@ -64,7 +66,13 @@ class MainActivity : ComponentActivity() {
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        setTheme(R.style.Theme_HelloWorld)
+
         super.onCreate(savedInstanceState)
+
+        // 시스템 스플래시 제거
+        val splashScreen = installSplashScreen()
+        splashScreen.setKeepOnScreenCondition { false }
 
         healthConnectManager = HealthConnectManager(this)
 
@@ -81,6 +89,8 @@ class MainActivity : ComponentActivity() {
 
         // 앱 시작시 권한 확인 및 요청
         checkAndRequestPermissions()
+
+        enableEdgeToEdge()
 
         setContent {
             // 알림 권한 요청

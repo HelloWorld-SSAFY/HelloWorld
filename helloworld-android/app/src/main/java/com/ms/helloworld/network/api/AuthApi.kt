@@ -1,10 +1,10 @@
 package com.ms.helloworld.network.api
 
-import com.ms.helloworld.dto.request.SocialLoginRequest
 import com.ms.helloworld.dto.request.GoogleLoginRequest
+import com.ms.helloworld.dto.request.RefreshTokenRequest
 import com.ms.helloworld.dto.response.LoginResponse
 import com.ms.helloworld.dto.response.RefreshTokenResponse
-import com.ms.helloworld.network.RefreshTokenRequest
+import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.Headers
 import retrofit2.http.POST
@@ -23,4 +23,7 @@ interface AuthApi {
     suspend fun refreshToken(
         @Body request: RefreshTokenRequest
     ): RefreshTokenResponse
+
+    @POST("user/auth/logout")
+    suspend fun logout(): Response<Unit>
 }

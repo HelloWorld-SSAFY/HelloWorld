@@ -32,6 +32,7 @@ import com.ms.helloworld.ui.screen.HealthStatusScreen
 import com.ms.helloworld.ui.screen.HealthRegisterScreen
 import com.ms.helloworld.ui.screen.DiaryBoardScreen
 import com.ms.helloworld.ui.screen.NotificationScreen
+import com.ms.helloworld.ui.screen.SplashScreen
 
 @Composable
 fun MainNavigation(
@@ -83,13 +84,17 @@ fun MainNavigation(
 
         NavHost(
             navController = navController,
-            startDestination = Screen.LoginScreen.route,
+            startDestination = Screen.SplashScreen.route,
             modifier = Modifier.padding(innerPadding),
             enterTransition = { EnterTransition.None },
             exitTransition = { ExitTransition.None },
             popEnterTransition = { EnterTransition.None },
             popExitTransition = { ExitTransition.None }
         ) {
+            composable(Screen.SplashScreen.route) {
+                SplashScreen(navController)
+            }
+
             composable(Screen.LoginScreen.route) {
                 LoginScreen(navController)
             }
