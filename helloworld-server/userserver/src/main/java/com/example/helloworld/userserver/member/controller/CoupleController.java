@@ -32,6 +32,7 @@ public class CoupleController {
             @RequestHeader(value = "Authorization", required = false) String authz
     ) {
         Long uid = resolveMemberId(internalUserId, authz);
+
         return ResponseEntity.ok(coupleService.getMyCoupleWithUsers(uid));
     }
 
