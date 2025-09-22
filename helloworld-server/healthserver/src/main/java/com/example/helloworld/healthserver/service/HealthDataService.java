@@ -73,6 +73,12 @@ public class HealthDataService {
 //    }
 
 
+
+
+
+
+
+
     @Transactional
     public GetResponse create(Long coupleId, CreateRequest req) {
         HealthData hd = HealthData.builder()
@@ -134,33 +140,56 @@ public class HealthDataService {
 //        return new HrDailyStatsResponse(items);
 //    }
 
+
+
+    //
     @Transactional(readOnly = true)
-    public BucketResponse hrDailyBuckets(Long coupleId, LocalDate date) {
-        if (date == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "date is required (YYYY-MM-DD)");
-
-        ZoneId zone = ZoneId.of(appZone);
-        Instant fromI = date.atStartOfDay(zone).toInstant();
-        Instant toI   = date.plusDays(1).atStartOfDay(zone).toInstant();
-
-        Map<Integer, Stat> map = new HashMap<>();
-        for (Object[] r : repo.aggregateHeartRateBuckets(coupleId, fromI, toI)) {
-            int bucket = ((Number) r[0]).intValue();                  // 0..5
-            Double avg = r[1] != null ? ((Number) r[1]).doubleValue() : null;
-            Double std = r[2] != null ? ((Number) r[2]).doubleValue() : null;
-            Long cnt   = r[3] != null ? ((Number) r[3]).longValue()   : 0L;
-            map.put(bucket, new Stat(avg, std, cnt));
+    public GlobalDailyStatsResponse getGlobalDailyStats(LocalDate date) {
+        if (date == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "date is required (YYYY-MM-DD)");
         }
 
-        var items = java.util.stream.IntStream.range(0, 6)
-                .mapToObj(b -> {
-                    String range = String.format("%02d-%02d", b * 4, b * 4 + 4);
-                    Stat s = map.getOrDefault(b, Stat.EMPTY);
-                    return new BucketResponse.Item(range, s.avg(), s.std(), s.cnt());
-                })
-                .toList();
+        ZoneId zone = ZoneId.of(appZone);
+        Instant from = date.atStartOfDay(zone).toInstant();
+        Instant to = date.plusDays(1).atStartOfDay(zone).toInstant();
 
-        return new BucketResponse(date, items);
+        List<HealthDataRepository.GlobalDailyBucketStats> results = repo.aggregateGlobalDailyBuckets(from, to);
+
+        List<StatsRow> finalRows = new ArrayList<>();
+        for (HealthDataRepository.GlobalDailyBucketStats row : results) {
+            String userRef = "c" + row.getCoupleId();
+
+            // 1. Heart Rate - Average
+            finalRows.add(new StatsRow(
+                    userRef, date, "hr", "avg",
+                    row.getAvgHr0(), row.getAvgHr1(), row.getAvgHr2(),
+                    row.getAvgHr3(), row.getAvgHr4(), row.getAvgHr5()
+            ));
+            // 2. Heart Rate - Standard Deviation
+            finalRows.add(new StatsRow(
+                    userRef, date, "hr", "stddev",
+                    row.getStdHr0(), row.getStdHr1(), row.getStdHr2(),
+                    row.getStdHr3(), row.getStdHr4(), row.getStdHr5()
+            ));
+            // 3. Stress - Average
+            finalRows.add(new StatsRow(
+                    userRef, date, "stress", "avg",
+                    row.getAvgSt0(), row.getAvgSt1(), row.getAvgSt2(),
+                    row.getAvgSt3(), row.getAvgSt4(), row.getAvgSt5()
+            ));
+            // 4. Stress - Standard Deviation
+            finalRows.add(new StatsRow(
+                    userRef, date, "stress", "stddev",
+                    row.getStdSt0(), row.getStdSt1(), row.getStdSt2(),
+                    row.getStdSt3(), row.getStdSt4(), row.getStdSt5()
+            ));
+        }
+
+        return new GlobalDailyStatsResponse(finalRows);
     }
+
+
+
 
     private record Stat(Double avg, Double std, Long cnt) {
         static final Stat EMPTY = new Stat(null, null, 0L);

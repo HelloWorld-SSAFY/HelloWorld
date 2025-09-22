@@ -50,14 +50,6 @@ public class WearableHealthController {
         return ResponseEntity.ok(healthService.getById(coupleId, healthId));
     }
 
-    @Operation(summary = "하루 4시간 버킷 통계", description = "쿼리 date=YYYY-MM-DD (KST). 심박수 45≤x<150만 포함.")
-    @GetMapping("/daily-buckets")
-    public ResponseEntity<HealthDtos.BucketResponse> dailyBuckets(
-            @RequestParam Long coupleId,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date
-    ) {
-        return ResponseEntity.ok(healthService.hrDailyBuckets(coupleId, date));
-    }
 
 //    @Operation(summary = "걸음수 누적 평균(전기간)", description = "구간: 00-12, 00-16. steps>0만 포함.")
 //    @GetMapping("/overall-cumulative-avg")
@@ -66,4 +58,13 @@ public class WearableHealthController {
 //    ) {
 //        return ResponseEntity.ok(healthService.overallCumulativeAvg(coupleId));
 //    }
+
+
+    @Operation(summary = "전체 커플 일간 버킷 통계", description = "지정된 날짜(KST)의 모든 커플에 대한 심박수/스트레스 통계를 4시간 단위로 집계하여 피벗된 형태로 반환합니다.")
+    @GetMapping("/daily-buckets")
+    public ResponseEntity<HealthDtos.GlobalDailyStatsResponse> getGlobalDailyStats(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date
+    ) {
+        return ResponseEntity.ok(healthService.getGlobalDailyStats(date));
+    }
 }
