@@ -1,12 +1,16 @@
 package com.example.helloworld.calendar_diary_server.controller;
 
 
+import com.example.helloworld.calendar_diary_server.config.security.UserPrincipal;
 import com.example.helloworld.calendar_diary_server.dto.*;
+import com.example.helloworld.calendar_diary_server.entity.Diary;
+import com.example.helloworld.calendar_diary_server.repository.DiaryRepository;
 import com.example.helloworld.calendar_diary_server.service.DiaryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
@@ -15,12 +19,17 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Map;
+
+
 
 @Tag(name = "Diary", description = "일기 API")
 @RestController
@@ -38,16 +47,11 @@ public class DiaryController {
     )
 
     public ResponseEntity<WeekResult> getByWeek(
-            @Parameter(description = "커플 ID", example = "1")
-            @RequestParam Long coupleId,
-
-            @Parameter(description = "임신 주차(1..40)", example = "2")
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal userPrincipal,
             @RequestParam @Min(1) @Max(40) int week,
-
-            @Parameter(description = "LMP(마지막 생리일). ISO 날짜(YYYY-MM-DD)",
-                    schema = @Schema(type = "string", format = "date", example = "2025-01-10"))
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate lmpDate
     ) {
+        Long coupleId = getCoupleIdFromPrincipal(userPrincipal);
         return ResponseEntity.ok(diaryApiService.getByWeek(coupleId, week, lmpDate));
     }
 
@@ -57,16 +61,11 @@ public class DiaryController {
             description = "임신 day일차(1..280)를 LMP 기준으로 특정 날짜로 변환해 해당 커플의 다이어리를 반환합니다. 응답에 해당 주차도 함께 포함됩니다."
     )
     public ResponseEntity<DayResult> getByDay(
-            @Parameter(description = "커플 ID", example = "1")
-            @RequestParam Long coupleId,
-
-            @Parameter(description = "임신 일차(1..280)", example = "4")
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal userPrincipal,
             @RequestParam @Min(1) @Max(280) int day,
-
-            @Parameter(description = "LMP(마지막 생리일). ISO 날짜(YYYY-MM-DD)",
-                    schema = @Schema(type = "string", format = "date", example = "2025-01-10"))
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate lmpDate
     ) {
+        Long coupleId = getCoupleIdFromPrincipal(userPrincipal);
         return ResponseEntity.ok(diaryApiService.getByDay(coupleId, day, lmpDate));
     }
 
@@ -79,9 +78,11 @@ public class DiaryController {
             - 결과: 대표 이미지(있으면 1장)만 포함
             """)
     @GetMapping
-    public ResponseEntity<?> list(@RequestParam Long coupleId,
+    public ResponseEntity<?> list(@AuthenticationPrincipal UserPrincipal userPrincipal,
                                   @RequestParam(defaultValue = "0") int page,
                                   @RequestParam(defaultValue = "20") int size) {
+        Long coupleId = userPrincipal.getCoupleId();// 토큰 기반의 안전한 coupleId 사용
+
         Page<DiaryListItemDto> entries = diaryApiService.list(coupleId, PageRequest.of(page, size));
         return ResponseEntity.ok(Map.of("entries", entries.getContent()));
     }
@@ -95,15 +96,19 @@ public class DiaryController {
 
     /** 6.3 일기 작성 */
     @Operation(summary = "일기 작성",
-            description = """
-            일기를 새로 작성합니다.
-            - null이면 안 되는 필드: entryDate, diaryTitle, diaryContent, coupleId, authorId, authorRole
-            - null 허용: imageUrl
-            """)
+           description = "새로운 일정을 생성합니다. 인증된 사용자의 토큰을 기반으로 coupleId와 writerId가 자동으로 설정됩니다."
+            )
     @PostMapping
-    public ResponseEntity<?> create(@Validated @RequestBody CreateDiaryRequest req) {
-        Long id = diaryApiService.create(req);
-        return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("diary_id", String.valueOf(id)));
+    //  Controller로부터 신뢰할 수 있는 정보를 받도록 시그니처 변경
+    public ResponseEntity<Map<String, String>> create(
+            @Valid @RequestBody CreateDiaryRequest req,
+           @AuthenticationPrincipal UserPrincipal userPrincipal
+    ) {
+        Long coupleId = getCoupleIdFromPrincipal(userPrincipal);
+        // 서비스에 신뢰할 수 있는 인증 정보(coupleId, userId, role)를 함께 전달
+        // 서비스에 신뢰할 수 있는 인증 정보(coupleId, userId, role)를 함께 전달
+        Long newDiaryId = diaryApiService.create(req, coupleId, userPrincipal.getUserId(), userPrincipal.getAuthorRole());
+        return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("diaryId", String.valueOf(newDiaryId)));
     }
 
     /** 6.4 일기 수정(이미지까지 수정) */
@@ -131,9 +136,21 @@ public class DiaryController {
     /** 6.6 일기 사진 전체 조회(주마등용) */
     @Operation(summary = "일기 사진 전체 조회(주마등용)")
     @GetMapping("/photos")
-    public ResponseEntity<List<DiaryPhotoDto>> allPhotos(@RequestParam Long coupleId) {
+    public ResponseEntity<List<DiaryPhotoDto>> allPhotos(@AuthenticationPrincipal UserPrincipal userPrincipal
+    ) {
+        Long coupleId = getCoupleIdFromPrincipal(userPrincipal);
         return ResponseEntity.ok(diaryApiService.allPhotos(coupleId));
     }
 
 
+        /* UserPrincipal에서 coupleId를 추출하고, null일 경우 예외를 던지는 헬퍼 메소드
+     */
+    private Long getCoupleIdFromPrincipal(UserPrincipal userPrincipal) {
+        Long coupleId = userPrincipal.getCoupleId();
+        if (coupleId == null) {
+            // 커플이 아닌 사용자가 커플 기능에 접근 시 에러 발생
+            throw new AccessDeniedException("커플 정보가 없어 해당 기능에 접근할 수 없습니다.");
+        }
+        return coupleId;
+    }
 }

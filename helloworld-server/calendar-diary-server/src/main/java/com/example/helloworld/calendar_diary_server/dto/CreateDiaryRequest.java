@@ -22,10 +22,12 @@ public class CreateDiaryRequest {
     private String imageUrl;              // null 허용
 
     // 인증 컨텍스트에서 채운다고 해도, 여기선 명시
-    @NotNull
-    private Long coupleId;
-    @NotNull private Long authorId;
-    @NotBlank private String authorRole;  // "father" | "mother"
+
+    //jwt헤더정보로 읽어옮.
+//    @NotNull
+//    private Long coupleId;
+//    @NotNull private Long authorId;
+//    @NotBlank private String authorRole;  // "father" | "mother"
 
     @NotNull private LocalDate targetDate;
 

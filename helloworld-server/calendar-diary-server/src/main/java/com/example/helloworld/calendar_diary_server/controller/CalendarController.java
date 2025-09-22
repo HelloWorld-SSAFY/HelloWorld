@@ -1,6 +1,7 @@
 package com.example.helloworld.calendar_diary_server.controller;
 
 
+import com.example.helloworld.calendar_diary_server.config.security.UserPrincipal;
 import com.example.helloworld.calendar_diary_server.dto.CalendarEventDto;
 import com.example.helloworld.calendar_diary_server.dto.CalendarRequestDto;
 import com.example.helloworld.calendar_diary_server.service.CalendarService;
@@ -18,6 +19,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
@@ -33,13 +36,15 @@ public class CalendarController {
     // 일정 생성
     @Operation(
             summary = "일정 생성",
-            description = "커플 ID와 작성자 ID를 쿼리스트링으로 전달하고, 본문에는 일정 정보를 담아 새 일정을 생성합니다."
+            description =  "새로운 일정을 생성합니다. 인증된 사용자의 토큰을 기반으로 coupleId와 writerId가 자동으로 설정됩니다."
     )
     @PostMapping
     public ResponseEntity<Map<String, String>> createEvent(
-            @RequestParam Long coupleId,
-            @RequestParam Long writerId,
+            @AuthenticationPrincipal UserPrincipal userPrincipal,
             @RequestBody CalendarRequestDto request) {
+
+        Long coupleId = getCoupleIdFromPrincipal(userPrincipal);
+        Long writerId = userPrincipal.getUserId();
 
         CalendarEventDto dto = calendarService.createEvent(coupleId, writerId, request);
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -86,9 +91,11 @@ public class CalendarController {
     @Operation(
             summary = "일정 조회(전체/조건)",
             description = """
-                    - 쿼리 파라미터를 **안 주면 전체 조회**(unpaged).
-                    - coupleId, from, to를 주면 조건 조회.
-                    - page, size를 주면 페이징.
+                    인증된 사용자의 커플 ID를 기준으로 일정 목록을 조회합니다.
+                    - `from`, `to`: 특정 기간 내의 일정을 조회합니다. (ISO 8601 형식, 예: `2023-10-27T10:00:00Z`)
+                    - `page`, `size`: 결과를 페이징하여 조회합니다. (예: `page=0&size=20`)
+                    - `sort`: 결과를 정렬합니다. (예: `sort=startAt,asc`)
+                    - 모든 쿼리 파라미터는 선택사항입니다.
                     """,
             responses = {
                     @ApiResponse(responseCode = "200",
@@ -98,7 +105,7 @@ public class CalendarController {
     )
     @GetMapping("/events")
     public Page<CalendarEventDto> getEvents(
-            @RequestParam(required = false) Long coupleId,
+            @AuthenticationPrincipal UserPrincipal userPrincipal,
             @RequestParam(required = false) Instant from,
             @RequestParam(required = false) Instant to,
             @RequestParam(required = false) Integer page,
@@ -111,7 +118,18 @@ public class CalendarController {
                 size == null ? 20 : size,
                 Sort.by(Sort.Order.asc("startAt"), Sort.Order.asc("eventId"))
         );
-
+        Long coupleId = getCoupleIdFromPrincipal(userPrincipal);
         return calendarService.getAllEvents(coupleId, from, to, pageable);
+}
+
+    /**
+     * UserPrincipal에서 coupleId를 추출하고, null일 경우 예외를 던지는 헬퍼 메소드
+     */
+    private Long getCoupleIdFromPrincipal(UserPrincipal userPrincipal) {
+        Long coupleId = userPrincipal.getCoupleId();
+        if (coupleId == null) {
+            throw new AccessDeniedException("커플 정보가 없어 해당 기능에 접근할 수 없습니다.");
+        }
+        return coupleId;
     }
 }
