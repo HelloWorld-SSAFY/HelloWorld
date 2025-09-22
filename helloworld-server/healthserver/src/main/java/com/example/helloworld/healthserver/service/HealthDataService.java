@@ -1,8 +1,8 @@
 package com.example.helloworld.healthserver.service;
 
-import com.example.helloworld.healthserver.alarm.dto.AiResponse;
-import com.example.helloworld.healthserver.alarm.dto.AiTelemetryRequest;
-import com.example.helloworld.healthserver.alarm.service.AiClient;
+import com.example.helloworld.healthserver.client.AiServerClient;
+import com.example.helloworld.healthserver.alarm.service.FcmService;
+import com.example.helloworld.healthserver.config.UserPrincipal;
 import com.example.helloworld.healthserver.dto.HealthDtos;
 import com.example.helloworld.healthserver.dto.HealthDtos.*;
 import com.example.helloworld.healthserver.entity.HealthData;
@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.*;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 @Service
@@ -23,43 +24,53 @@ public class HealthDataService {
 
     private final HealthDataRepository repo;
 
-    private final AiClient aiClient;
+    private final AiServerClient aiServerClient;
+    private final FcmService fcmService;
 
     @Value("${app.zone:Asia/Seoul}")
     private String appZone;
 
     /** 프론트 /api/wearable 진입점: DB 저장 후 AI 호출, AI 응답을 그대로 리턴 */
+    private static final Set<String> ANOMALY_MODES = Set.of("RESTRICT", "EMERGENCY");
+
     @Transactional
-    public AiResponse createAndEvaluate(Long coupleId, HealthDtos.CreateRequest req) {
-        // 1) DB 저장 (date nullable이면 now() 대체)
-        Instant dt = Optional.ofNullable(req.date()).orElse(Instant.now());
-        HealthData saved = repo.save(
-                HealthData.builder()
-                        .coupleId(coupleId)
-                        .date(dt)
-                        .stress(req.stress())
-                        .heartrate(req.heartrate())
-                        .build()
-        );
+    public AiServerClient.AnomalyResponse createAndCheckHealthData(UserPrincipal user, HealthDtos.CreateRequest req) {
+        // 1. DB에 데이터 저장
+        Instant timestamp = req.date() != null ? req.date() : Instant.now();
+        HealthData healthData = HealthData.builder()
+                .coupleId(user.getCoupleId())
+                .date(timestamp)
+                .stress(req.stress())
+                .heartrate(req.heartrate())
+                .build();
+        repo.save(healthData);
 
-        // 2) AI 요청 바디 구성 (stress: Integer → 0~1.0 스케일)
-        Map<String,Object> metrics = new HashMap<>();
-        if (req.heartrate() != null) metrics.put("hr", req.heartrate());
-        if (req.stress() != null) {
-            double s = req.stress();
-            metrics.put("stress", (s > 1.0) ? s / 100.0 : s);
+        // 2. AI 서버에 분석 요청
+        String userRef = "u" + user.getUserId();
+        String isoTimestamp = timestamp.atZone(ZoneId.of("Asia/Seoul")).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+
+        AiServerClient.Metrics metrics = new AiServerClient.Metrics(req.heartrate(), req.stress());
+        AiServerClient.TelemetryRequest telemetryRequest = new AiServerClient.TelemetryRequest(userRef, isoTimestamp, metrics);
+
+        AiServerClient.AnomalyResponse anomalyResponse = aiServerClient.checkTelemetry(telemetryRequest);
+
+        // 3. 이상 징후 시 비동기 FCM 알림 전송
+        if (anomalyResponse != null && ANOMALY_MODES.contains(anomalyResponse.mode().toUpperCase())) {
+            //fcmService.sendEmergencyNotification(user.getUserId(), user.getCoupleId(), req.heartrate());
+            fcmService.sendEmergencyNotification(user.getUserId(), req.heartrate());
         }
-        String ts = OffsetDateTime.ofInstant(dt, ZoneId.of(appZone)).toString();
 
-        AiTelemetryRequest aiReq = new AiTelemetryRequest("c" + coupleId, ts, metrics);
-
-        // 3) 백엔드 내부에서 AI 서버 호출 (POST /api/health/telemetry)
-        AiResponse ai = aiClient.postTelemetry(aiReq);
-
-
-        // 5) 프론트에는 AI 응답 그대로 반환
-        return ai;
+        // 4. AI 서버 응답 반환
+        return anomalyResponse;
     }
+
+    // ✨ 보안 강화 예시: coupleId를 파라미터로 받아 소유권 검증
+//    @Transactional(readOnly = true)
+//    public HealthDtos.GetResponse getById(Long coupleId, Long healthId) {
+//        var hd = repo.findByHealthIdAndCoupleId(healthId, coupleId)
+//                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Record not found"));
+//        return new HealthDtos.GetResponse(hd.getHealthId(), hd.getDate(), hd.getStress(), hd.getHeartrate());
+//    }
 
 
     @Transactional

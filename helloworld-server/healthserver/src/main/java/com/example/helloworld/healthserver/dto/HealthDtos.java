@@ -11,7 +11,7 @@ public final class HealthDtos {
     // 생성 요청 (전부 nullable 허용)
     public record CreateRequest(
             Instant date,
-            Integer stress,
+            Double stress,
             Integer heartrate
     ) {}
 
@@ -19,7 +19,7 @@ public final class HealthDtos {
     public record GetResponse(
             @JsonProperty("health_id") Long healthId,
             Instant date,
-            Integer stress,
+            Double stress,
             Integer heartrate
     ) {}
 

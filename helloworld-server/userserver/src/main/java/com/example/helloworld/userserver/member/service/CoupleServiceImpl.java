@@ -116,6 +116,8 @@ public class CoupleServiceImpl implements CoupleService {
         );
     }
 
+
+
     @Transactional(readOnly = true)
     @Override
     public CoupleWithUsersResponse getMyCoupleWithUsers(Long memberId) {

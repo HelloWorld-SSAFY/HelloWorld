@@ -32,7 +32,7 @@ public class HealthData {
     private Instant date;                  // 측정 시각 (nullable 허용)
 
     @Column(name = "stress")
-    private Integer stress;                // 스트레스 (nullable)
+    private Double stress;                // 스트레스 (nullable)
 
     @Column(name = "heartrate")
     private Integer heartrate;             // 심박수 (nullable)

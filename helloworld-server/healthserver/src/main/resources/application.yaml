@@ -14,5 +14,15 @@ spring:
 
 
 ai:
-  base-url: http://ai-server:8080
+  server:
+    base-url: http://aiserver-svc:8000
   telemetry-path: /api/health/telemetry
+
+
+userserver:
+  base-url: http://userserver-svc:8080
+
+
+
+fcm:
+  service-account-file:firebase-service-account.json
