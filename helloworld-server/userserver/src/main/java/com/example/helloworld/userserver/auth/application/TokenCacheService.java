@@ -142,26 +142,61 @@ public class TokenCacheService {
      * - used after user registers and coupleId becomes available.
      * - returns true if updated, false if token entry not found.
      */
-    public boolean updateTokenFields(String accessToken, Long coupleId, String role) {
-        String hash = TokenHashes.sha256B64(accessToken);
-        String key = tokenKey(hash);
-        try {
-            String json = redis.opsForValue().get(key);
-            if (json == null) return false;
-            ObjectNode node = (ObjectNode) om.readTree(json);
-            if (coupleId != null) node.put("coupleId", String.valueOf(coupleId));
-            else node.putNull("coupleId");
-            if (role != null) node.put("role", role);
-            else node.putNull("role");
+//    public boolean updateTokenFields(String accessToken, Long coupleId, String role) {
+//        String hash = TokenHashes.sha256B64(accessToken);
+//        String key = tokenKey(hash);
+//        try {
+//            String json = redis.opsForValue().get(key);
+//            if (json == null) return false;
+//            ObjectNode node = (ObjectNode) om.readTree(json);
+//            if (coupleId != null) node.put("coupleId", String.valueOf(coupleId));
+//            else node.putNull("coupleId");
+//            if (role != null) node.put("role", role);
+//            else node.putNull("role");
+//
+//            // preserve existing ttl
+//            Long ttlSec = redis.getExpire(key);
+//            if (ttlSec == null || ttlSec <= 0) ttlSec = MAX_CACHE_TTL_SECONDS;
+//            redis.opsForValue().set(key, node.toString(), Duration.ofSeconds(ttlSec));
+//            return true;
+//        } catch (Exception e) {
+//            log.warn("Failed to update token fields for hash {}: {}", hash, e.getMessage());
+//            return false;
+//        }
+//    }
 
-            // preserve existing ttl
-            Long ttlSec = redis.getExpire(key);
-            if (ttlSec == null || ttlSec <= 0) ttlSec = MAX_CACHE_TTL_SECONDS;
-            redis.opsForValue().set(key, node.toString(), Duration.ofSeconds(ttlSec));
-            return true;
+
+    public int updateAllTokensForMember(Long memberId, Long coupleId, String role) {
+        String setKey = userTokensKey(memberId);              // user_tokens:{memberId}
+        try {
+            Set<String> hashes = redis.opsForSet().members(setKey);
+            if (hashes == null || hashes.isEmpty()) return 0;
+
+            int updated = 0;
+            for (String hash : hashes) {
+                String tkKey = tokenKey(hash);                // token:{hash}
+                String json = redis.opsForValue().get(tkKey);
+                if (json == null) continue;
+
+                ObjectNode node = (ObjectNode) om.readTree(json);
+
+                // 전달된 값으로 upsert
+                if (coupleId != null) node.put("coupleId", String.valueOf(coupleId));
+                else node.putNull("coupleId");
+
+                if (role != null) node.put("role", role);
+                else node.putNull("role");
+
+                Long ttlSec = redis.getExpire(tkKey);
+                if (ttlSec == null || ttlSec <= 0) ttlSec = MAX_CACHE_TTL_SECONDS;
+
+                redis.opsForValue().set(tkKey, node.toString(), Duration.ofSeconds(ttlSec));
+                updated++;
+            }
+            return updated;
         } catch (Exception e) {
-            log.warn("Failed to update token fields for hash {}: {}", hash, e.getMessage());
-            return false;
+            log.warn("Failed to update tokens for memberId={}: {}", memberId, e.getMessage());
+            return 0;
         }
     }
 

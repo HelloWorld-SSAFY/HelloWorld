@@ -31,7 +31,6 @@ public class Couple {
 
     @Column(name = "pregnancy_week")
     private Integer pregnancyWeek;
-
     @Column(name = "due_date")
     private Timestamp dueDate;
 

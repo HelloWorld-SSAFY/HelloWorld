@@ -81,6 +81,8 @@ public class GatewayRedisAuthFilter implements GlobalFilter {
                                         if (role != null)     h.add("X-Internal-Role", role);
                                         h.add("X-Internal-Ts",  ts);
                                         h.add("X-Internal-Sig", sig);
+
+                                        h.add("X-Internal-Token-Hash", hash);
                                     });
                                     return chain.filter(exchange.mutate().request(mutated.build()).build());
                                 } catch (Exception e) {
