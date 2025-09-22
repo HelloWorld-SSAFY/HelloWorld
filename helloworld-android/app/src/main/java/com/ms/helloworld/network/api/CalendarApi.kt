@@ -34,7 +34,6 @@ interface CalendarApi {
 
     @GET("calendar/calendar/events")
     suspend fun getEvents(
-        @Query("coupleId") coupleId: Long? = null,
         @Query("from") from: String? = null,
         @Query("to") to: String? = null,
         @Query("page") page: Int? = null,

@@ -51,10 +51,4 @@ class TokenManager @Inject constructor(
     fun hasTokens(): Boolean {
         return !getAccessToken().isNullOrBlank() && !getRefreshToken().isNullOrBlank()
     }
-
-    // 커플 ID 추출
-    fun getCoupleId(token: String? = null): Long? {
-        val targetToken = token ?: getAccessToken() ?: return null
-        return getPayload(targetToken)?.optLong("coupleId")?.takeIf { it > 0 }
-    }
 }
