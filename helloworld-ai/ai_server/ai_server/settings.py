@@ -41,8 +41,7 @@ INSTALLED_APPS = [
 # ---- 미들웨어 ---------------------------------------------------------------
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
-    'api.middleware.app_token_mw',
-
+    # 'api.middleware.app_token_mw',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
