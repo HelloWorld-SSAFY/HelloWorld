@@ -41,7 +41,7 @@ INSTALLED_APPS = [
 # ---- 미들웨어 ---------------------------------------------------------------
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
-    # 'api.middleware.app_token_mw',
+    'api.middleware.app_token_mw',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -183,7 +183,13 @@ SPECTACULAR_SETTINGS = {
                 "type": "apiKey",
                 "in": "header",
                 "name": "X-App-Token",
-            }
+            },
+            # ★ 추가: access_token(Bearer) 입력용
+            "AccessToken": {
+                "type": "http",
+                "scheme": "bearer",
+                "bearerFormat": "JWT"
+            },
         }
     },
 
