@@ -3,9 +3,19 @@ from datetime import timedelta
 from django.utils import timezone
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework import serializers
+
+# Swagger
+from drf_spectacular.utils import (
+    extend_schema, extend_schema_view,
+    OpenApiParameter, OpenApiTypes, inline_serializer
+)
 
 # ✅ 단일 소스: recommend_delivery 만 사용
 from api.models import RecommendationDelivery as RecommendDelivery
+
+# 공용 인증 유틸 재사용
+from api.views import _assert_app_token, APP_TOKEN_PARAM
 
 
 # ───────────── 유틸 ─────────────
@@ -31,12 +41,42 @@ def _has_field(model_cls, name: str) -> bool:
 
 
 # ───────────── 직렬화 ─────────────
+class DeliveryItem(serializers.Serializer):
+    # MEDIA 공통
+    delivery_id = serializers.CharField()
+    content_id = serializers.IntegerField(required=False)
+    title = serializers.CharField(required=False)
+    url = serializers.URLField(required=False, allow_blank=True)
+    thumbnail = serializers.URLField(required=False, allow_blank=True)
+    duration_sec = serializers.IntegerField(required=False, allow_null=True)
+    provider = serializers.CharField(required=False, allow_blank=True)
+    # OUTING 전용
+    place_id = serializers.IntegerField(required=False)
+    lat = serializers.FloatField(required=False)
+    lng = serializers.FloatField(required=False)
+    address = serializers.CharField(required=False, allow_blank=True)
+    place_category = serializers.CharField(required=False, allow_blank=True)
+    weather_gate = serializers.CharField(required=False, allow_blank=True)
+    # 공통
+    rank = serializers.IntegerField()
+    score = serializers.FloatField(required=False, allow_null=True)
+    created_at = serializers.CharField()
+    meta = serializers.JSONField(required=False)
+
+class DeliveryOut(serializers.Serializer):
+    ok = serializers.BooleanField()
+    category = serializers.CharField()
+    session_id = serializers.CharField()
+    count = serializers.IntegerField()
+    deliveries = DeliveryItem(many=True)
+
+
 def _serialize_media_from_recommend(items):
     """ MUSIC / MEDITATION / YOGA → recommend_delivery에서 바로 직렬화 """
     out = []
     for i, r in enumerate(items, start=1):
-        c = getattr(r, "content", None)           # 있으면 사용
-        snap = getattr(r, "snapshot", None) or {} # 추천 시 스냅샷 저장했다면 사용
+        c = getattr(r, "content", None)            # 있으면 사용
+        snap = getattr(r, "snapshot", None) or {}  # 추천 시 스냅샷 저장했다면 사용
 
         out.append({
             "delivery_id": _first(getattr(r, "external_id", None), f"content:{r.id}"),
@@ -71,7 +111,7 @@ def _serialize_outing_from_recommend(items):
     """ OUTING → recommend_delivery에서만 직렬화 (조인/다른 테이블 전혀 안 씀) """
     out = []
     for i, r in enumerate(items, start=1):
-        c = getattr(r, "content", None)           # 있을 수도 있음
+        c = getattr(r, "content", None)            # 있을 수도 있음
         snap = getattr(r, "snapshot", None) or {}
 
         # place/위치 계열 필드는 r → c → snapshot 순으로 관대하게 매핑
@@ -136,15 +176,54 @@ class _RecommendDeliveryBase(APIView):
             .first()
         )
 
+    @extend_schema(
+        parameters=[
+            APP_TOKEN_PARAM,
+            OpenApiParameter("user_ref", OpenApiTypes.STR, OpenApiParameter.QUERY, required=True,
+                             description="유저 식별자(e.g. u1)"),
+            OpenApiParameter("limit", OpenApiTypes.INT, OpenApiParameter.QUERY, required=False,
+                             description="반환 개수(기본 3, 1~5)"),
+            OpenApiParameter("session_id", OpenApiTypes.STR, OpenApiParameter.QUERY, required=False,
+                             description="특정 세션으로 한정 조회"),
+            OpenApiParameter("ttl_min", OpenApiTypes.INT, OpenApiParameter.QUERY, required=False,
+                             description="최신 노출 TTL(분) — 세션 생성 시간이 TTL 밖이면 404"),
+        ],
+        responses={
+            200: DeliveryOut,
+            404: inline_serializer("DeliveryNotFound", {"ok": serializers.BooleanField(),
+                                                        "error": serializers.CharField(),
+                                                        "category": serializers.CharField()}),
+            401: inline_serializer("AuthErr", {"ok": serializers.BooleanField(),
+                                               "error": serializers.CharField()}),
+            400: inline_serializer("BadReq", {"ok": serializers.BooleanField(),
+                                              "error": serializers.CharField()}),
+        },
+        tags=["delivery"],
+        summary="최근 세션의 전달물 조회",
+        operation_id="getDeliveryBase",
+    )
     def get(self, request):
+        # 🔐 토큰 검사
+        bad = _assert_app_token(request)
+        if bad:
+            return bad
+
         user_ref = request.query_params.get("user_ref")
         if not user_ref:
             return Response({"ok": False, "error": "MISSING_USER_REF"}, status=400)
 
-        limit      = int(request.query_params.get("limit", 3))
+        # 안전 파싱/클램핑
+        try:
+            limit = int(request.query_params.get("limit", 3))
+        except Exception:
+            limit = 3
+        limit = max(1, min(5, limit))
+
         session_id = request.query_params.get("session_id")
-        ttl_min_q  = request.query_params.get("ttl_min")
-        ttl_min    = int(ttl_min_q) if ttl_min_q else None
+        try:
+            ttl_min = int(request.query_params.get("ttl_min")) if request.query_params.get("ttl_min") else None
+        except Exception:
+            ttl_min = None
 
         # 1) 세션 결정 (user_ref + category 스코프 고정)
         chosen_session_id = session_id or self._latest_session_for_category(user_ref)
@@ -163,7 +242,7 @@ class _RecommendDeliveryBase(APIView):
         if not _enforce_ttl(qs, ttl_min):
             return Response({"ok": False, "error": "DELIVERY_EXPIRED", "category": self.CATEGORY}, status=404)
 
-        # 4) 정렬 (rank > score > created_at) — 필드 없으면 안전하게 fallback
+        # 4) 정렬 (rank > created_at desc) — 필드 없으면 안전하게 fallback
         if _has_field(RecommendDelivery, "rank"):
             order_by = ["rank", "-created_at"]
         elif _has_field(RecommendDelivery, "score"):
@@ -185,18 +264,30 @@ class _RecommendDeliveryBase(APIView):
 
 
 # ───────────── 카테고리 뷰 ─────────────
+@extend_schema_view(
+    get=extend_schema(summary="MUSIC 전달물 조회", operation_id="getDeliveryMusic")
+)
 class MusicDeliveryView(_RecommendDeliveryBase):
     CATEGORY = "MUSIC"
     SERIALIZER_FN = staticmethod(_serialize_media_from_recommend)
 
+@extend_schema_view(
+    get=extend_schema(summary="MEDITATION 전달물 조회", operation_id="getDeliveryMeditation")
+)
 class MeditationDeliveryView(_RecommendDeliveryBase):
     CATEGORY = "MEDITATION"
     SERIALIZER_FN = staticmethod(_serialize_media_from_recommend)
 
+@extend_schema_view(
+    get=extend_schema(summary="YOGA 전달물 조회", operation_id="getDeliveryYoga")
+)
 class YogaDeliveryView(_RecommendDeliveryBase):
     CATEGORY = "YOGA"
     SERIALIZER_FN = staticmethod(_serialize_media_from_recommend)
 
+@extend_schema_view(
+    get=extend_schema(summary="OUTING 전달물 조회", operation_id="getDeliveryOuting")
+)
 class OutingDeliveryView(_RecommendDeliveryBase):
     CATEGORY = "OUTING"
     SERIALIZER_FN = staticmethod(_serialize_outing_from_recommend)

@@ -169,14 +169,15 @@ SPECTACULAR_SETTINGS = {
     "TITLE": "임산부 헬스케어 API",
     "VERSION": "v0.2.1",
 
-    # 전역 보안/서버 — 그대로 유지
-    "SECURITY": [{"AppToken": []}],
+    # 전역 보안 요구 OFF → 각 API에서 헤더 파라미터로 입력
+    "SECURITY": [],
+
     "SERVERS": [
         {"url": "/ai", "description": "via gateway"},
         {"url": "/",  "description": "in-cluster direct"},
     ],
 
-    # securitySchemes에 AppToken 정의(Authorize 버튼이 X-App-Token을 인식)
+    # securitySchemes은 유지(원하면 Authorize로도 사용 가능)
     "COMPONENTS": {
         "securitySchemes": {
             "AppToken": {
