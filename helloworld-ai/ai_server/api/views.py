@@ -1,6 +1,8 @@
 import os
+import re
 import json
 import uuid
+import requests
 from math import radians, cos, sin, asin, sqrt
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
@@ -93,6 +95,63 @@ def _require_user_ref(request: HttpRequest, fallback: Optional[str]):
 
 def _now_kst() -> datetime:
     return datetime.now(tz=KST)
+
+# === 외부 메인서버 게이트웨이(간단 버전): steps overall avg ==================
+def _slot_for(ts_kst: datetime) -> str:
+    """KST 시각 기준으로 00-12 / 00-16 슬롯을 반환"""
+    h = ts_kst.hour
+    return "00-12" if h < 12 else "00-16"
+
+def _parse_couple_id(request: HttpRequest, user_ref: Optional[str]) -> Optional[int]:
+    """X-Couple-Id 우선, 없으면 user_ref의 말미 숫자를 couple_id로 추정(u7 -> 7)"""
+    cid = request.headers.get("X-Couple-Id") or request.META.get("HTTP_X_COUPLE_ID")
+    if cid:
+        try:
+            return int(str(cid).strip())
+        except Exception:
+            pass
+    if user_ref:
+        m = re.search(r"(\d+)$", str(user_ref))
+        if m:
+            try:
+                return int(m.group(1))
+            except Exception:
+                pass
+    return None
+
+def _fetch_steps_overall_avg(*, couple_id: int, slot: str, access_token: Optional[str]) -> Optional[float]:
+    """
+    GET {MAIN_BASE_URL}/health/api/steps/overall-cumulative-avg?coupleId=7
+    응답 예: {"records":[{"hour_range":"00-12","avg_steps":...}, {"hour_range":"00-16","avg_steps":...}]}
+    """
+    base = (os.getenv("MAIN_BASE_URL") or "https://j13d204.p.ssafy.io").rstrip("/")
+    token = (access_token or os.getenv("MAIN_ACCESS_TOKEN", "").strip())
+    if not token:
+        log.info("external baseline skipped: missing access token")
+        return None
+    try:
+        r = requests.get(
+            f"{base}/health/api/steps/overall-cumulative-avg",
+            headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+            params={"coupleId": couple_id},
+            timeout=12,
+        )
+    except Exception as e:
+        log.warning("external baseline HTTP error: %s", e)
+        return None
+    if r.status_code != 200:
+        log.info("external baseline non-200: %s %s", r.status_code, r.text[:180])
+        return None
+    data = r.json() or {}
+    for rec in data.get("records", []):
+        if rec.get("hour_range") == slot:
+            for key in ("avg_steps", "avg", "avg_value"):
+                if rec.get(key) is not None:
+                    try:
+                        return float(rec[key])
+                    except Exception:
+                        pass
+    return None
 
 # ── 스웨거: 모든 API에 노출할 공통 헤더 파라미터 (Healthz 제외)
 APP_TOKEN_PARAM = OpenApiParameter(
@@ -958,7 +1017,7 @@ class StepsBaselineImportView(APIView):
         return Response({"ok": True, "saved_buckets": saved})
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Steps Check
+# Steps Check (외부 평균 우선 사용 + DB 폴백)
 # ──────────────────────────────────────────────────────────────────────────────
 class StepsCheckView(APIView):
     @extend_schema(
@@ -976,9 +1035,13 @@ class StepsCheckView(APIView):
             )
         },
         tags=["steps"],
-        summary="Compare cum_steps to stored average; restrict if gap ≥ threshold(기본 500)",
+        summary="Compare cum_steps to external average (fallback: stored); restrict if gap ≥ threshold(기본 500)",
         operation_id="postStepsCheck",
-        description="입력으로 user_ref/ts/cum_steps/lat/lng를 받고, 저장된 평균(cum_mu)과 비교해 (avg - cum_steps) ≥ THRESHOLD(기본 500) 이면 OUTING을 내부 추천하여 recommend_delivery에 저장합니다(응답엔 미포함).",
+        description=(
+            "입력으로 user_ref/ts/cum_steps/lat/lng를 받고, **메인서버 overall-cumulative-avg(00-12/00-16)**를 우선 조회해 비교합니다. "
+            "외부 실패 시 저장된 평균(cum_mu)로 폴백. (avg - cum_steps) ≥ THRESHOLD(기본 500)이면 OUTING을 내부 추천하여 "
+            "recommend_delivery에 저장합니다(응답엔 미포함)."
+        ),
     )
     def post(self, request: HttpRequest):
         bad = _assert_app_token(request)
@@ -993,7 +1056,7 @@ class StepsCheckView(APIView):
         if missing:
             return missing
 
-        _ = _access_token_from_request(request)
+        access_token = _access_token_from_request(request)
 
         user_ctx: Dict[str, Any] = {"lat": float(d["lat"]), "lng": float(d["lng"])}
         if d.get("max_distance_km") is not None:
@@ -1011,21 +1074,40 @@ class StepsCheckView(APIView):
             ts_kst = ts.astimezone(KST)
         except Exception:
             ts_kst = ts
+
+        slot = _slot_for(ts_kst)
+
+        # 외부 기준치 우선
+        couple_id_for_external = _parse_couple_id(request, user_ref)
+        external_avg = None
+        if couple_id_for_external is not None:
+            external_avg = _fetch_steps_overall_avg(
+                couple_id=couple_id_for_external, slot=slot, access_token=access_token
+            )
+
+        # DB 폴백(일별 버킷 평균)
         hour = ts_kst.hour
         bucket = hour // 4
-
-        baseline = UserStepsTodStatsDaily.objects.filter(
-            user_ref=user_ref,
-            d=ts_kst.date(),
-            bucket=bucket,
-        ).first()
+        baseline = None
+        if external_avg is None:
+            baseline = UserStepsTodStatsDaily.objects.filter(
+                user_ref=user_ref,
+                d=ts_kst.date(),
+                bucket=bucket,
+            ).first()
 
         cum_steps = int(d["cum_steps"])
 
-        if not baseline or baseline.cum_mu is None:
+        # 기준 평균 선택
+        if external_avg is not None:
+            avg = float(external_avg)
+            source = "external"
+        elif baseline and baseline.cum_mu is not None:
+            avg = float(baseline.cum_mu or 0.0)
+            source = "stored"
+        else:
             return Response({"ok": True, "anomaly": False, "mode": "normal"})
 
-        avg = float(baseline.cum_mu or 0.0)
         gap = max(0.0, avg - float(cum_steps))
 
         if gap >= float(STEPS_GAP_THRESHOLD):
@@ -1057,7 +1139,7 @@ class StepsCheckView(APIView):
             except Exception:
                 log.exception("steps_low places delivery failed (user=%s)", user_ref)
 
-            reasons = [f"avg({avg:.0f}) - cum_steps({cum_steps}) = {int(gap)} ≥ {STEPS_GAP_THRESHOLD} @bucket{bucket}"]
+            reasons = [f"avg({avg:.0f}) - cum_steps({cum_steps}) = {int(gap)} ≥ {STEPS_GAP_THRESHOLD} @{slot if source=='external' else f'bucket{bucket}'} (src:{source})"]
             resp = {
                 "ok": True,
                 "anomaly": True,
