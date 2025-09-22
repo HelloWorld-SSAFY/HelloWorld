@@ -11,3 +11,8 @@ spring:
     config:
       uri: http://configserver-svc:8888
       enabled: true
+
+
+ai:
+  base-url: http://ai-server:8080
+  telemetry-path: /api/health/telemetry

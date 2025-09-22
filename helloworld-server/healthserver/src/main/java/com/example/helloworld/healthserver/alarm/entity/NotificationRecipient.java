@@ -1,7 +1,11 @@
-package com.example.helloworld.userserver.alarm.dto;
+package com.example.helloworld.healthserver.alarm.entity;
 
 import jakarta.persistence.*;
-import lombok.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+
 import java.sql.Timestamp;
 import java.time.Instant;
 

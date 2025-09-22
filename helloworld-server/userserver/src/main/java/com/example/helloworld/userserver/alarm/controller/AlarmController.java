@@ -1,8 +1,8 @@
 package com.example.helloworld.userserver.alarm.controller;
 
-import com.example.helloworld.userserver.alarm.dto.Notification;
-import com.example.helloworld.userserver.alarm.presentation.AlarmCreateRequest;
-import com.example.helloworld.userserver.alarm.presentation.AlarmQueuedResponse;
+import com.example.helloworld.userserver.alarm.entity.Notification;
+import com.example.helloworld.userserver.alarm.dto.AlarmCreateRequest;
+import com.example.helloworld.userserver.alarm.dto.AlarmQueuedResponse;
 import com.example.helloworld.userserver.alarm.security.AuthUserResolver;
 import com.example.helloworld.userserver.alarm.service.AlarmService;
 import jakarta.validation.Valid;

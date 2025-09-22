@@ -1,6 +1,6 @@
-package com.example.helloworld.userserver.alarm.persistence;
+package com.example.helloworld.healthserver.alarm.repository;
 
-import com.example.helloworld.userserver.alarm.entity.DeviceToken;
+import com.example.helloworld.healthserver.alarm.entity.DeviceToken;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.transaction.annotation.Transactional;
 

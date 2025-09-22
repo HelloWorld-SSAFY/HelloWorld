@@ -1,4 +1,4 @@
-package com.example.helloworld.userserver.alarm.presentation;
+package com.example.helloworld.userserver.alarm.dto;
 
 import jakarta.validation.constraints.*;
 import java.time.Instant;

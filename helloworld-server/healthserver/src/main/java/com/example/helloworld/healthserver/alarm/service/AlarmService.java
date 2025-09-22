@@ -1,20 +1,24 @@
-package com.example.helloworld.userserver.alarm.service;
+package com.example.helloworld.healthserver.alarm.service;
 
-import com.example.helloworld.userserver.alarm.entity.Notification;
-import com.example.helloworld.userserver.alarm.entity.NotificationRecipient;
-import com.example.helloworld.userserver.alarm.persistence.NotificationRecipientRepository;
-import com.example.helloworld.userserver.alarm.persistence.NotificationRepository;
-import com.example.helloworld.userserver.alarm.dto.AlarmCreateRequest;
-import com.example.helloworld.userserver.member.entity.Couple;
-import com.example.helloworld.userserver.member.persistence.CoupleRepository;
-import com.example.helloworld.userserver.notif.FcmClient;
-import com.example.helloworld.userserver.notif.TokenResolver;
+import com.example.helloworld.healthserver.alarm.dto.AlarmCreateRequest;
+import com.example.helloworld.healthserver.alarm.entity.Notification;
+import com.example.helloworld.healthserver.alarm.entity.NotificationRecipient;
+import com.example.helloworld.healthserver.alarm.repository.NotificationRecipientRepository;
+import com.example.helloworld.healthserver.alarm.repository.NotificationRepository;
+import com.example.helloworld.healthserver.member.entity.Couple;
+import com.example.helloworld.healthserver.member.persistence.CoupleRepository;
+import com.example.helloworld.healthserver.notif.FcmClient;
+import com.example.helloworld.healthserver.notif.TokenResolver;
 import com.google.firebase.messaging.FirebaseMessagingException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 import java.sql.Timestamp;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor

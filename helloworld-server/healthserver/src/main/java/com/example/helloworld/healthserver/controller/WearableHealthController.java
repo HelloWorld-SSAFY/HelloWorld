@@ -21,15 +21,15 @@ public class WearableHealthController {
 
     private final HealthDataService healthService;
 
-    @Operation(summary = "헬스데이터 생성")
-    @PostMapping
-    public ResponseEntity<HealthDtos.GetResponse> create(
-            @RequestParam Long coupleId,
-            @Valid @RequestBody HealthDtos.CreateRequest req
-    ) {
-        var res = healthService.create(coupleId, req);
-        return ResponseEntity.created(URI.create("/api/wearable/" + res.healthId())).body(res);
-    }
+//    @Operation(summary = "헬스데이터 생성")
+//    @PostMapping
+//    public ResponseEntity<HealthDtos.GetResponse> create(
+//            @RequestParam Long coupleId,
+//            @Valid @RequestBody HealthDtos.CreateRequest req
+//    ) {
+//        var res = healthService.create(coupleId, req);
+//        return ResponseEntity.created(URI.create("/api/wearable/" + res.healthId())).body(res);
+//    }
 
     @Operation(summary = "헬스데이터 단건 조회")
     @GetMapping("/{healthId}")

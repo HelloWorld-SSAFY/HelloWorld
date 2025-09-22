@@ -1,5 +1,9 @@
 package com.example.helloworld.healthserver.service;
 
+import com.example.helloworld.healthserver.alarm.dto.AiResponse;
+import com.example.helloworld.healthserver.alarm.dto.AiTelemetryRequest;
+import com.example.helloworld.healthserver.alarm.service.AiClient;
+import com.example.helloworld.healthserver.dto.HealthDtos;
 import com.example.helloworld.healthserver.dto.HealthDtos.*;
 import com.example.helloworld.healthserver.entity.HealthData;
 import com.example.helloworld.healthserver.persistence.HealthDataRepository;
@@ -11,10 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.*;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @Service
 @RequiredArgsConstructor
@@ -22,8 +23,44 @@ public class HealthDataService {
 
     private final HealthDataRepository repo;
 
+    private final AiClient aiClient;
+
     @Value("${app.zone:Asia/Seoul}")
     private String appZone;
+
+    /** 프론트 /api/wearable 진입점: DB 저장 후 AI 호출, AI 응답을 그대로 리턴 */
+    @Transactional
+    public AiResponse createAndEvaluate(Long coupleId, HealthDtos.CreateRequest req) {
+        // 1) DB 저장 (date nullable이면 now() 대체)
+        Instant dt = Optional.ofNullable(req.date()).orElse(Instant.now());
+        HealthData saved = repo.save(
+                HealthData.builder()
+                        .coupleId(coupleId)
+                        .date(dt)
+                        .stress(req.stress())
+                        .heartrate(req.heartrate())
+                        .build()
+        );
+
+        // 2) AI 요청 바디 구성 (stress: Integer → 0~1.0 스케일)
+        Map<String,Object> metrics = new HashMap<>();
+        if (req.heartrate() != null) metrics.put("hr", req.heartrate());
+        if (req.stress() != null) {
+            double s = req.stress();
+            metrics.put("stress", (s > 1.0) ? s / 100.0 : s);
+        }
+        String ts = OffsetDateTime.ofInstant(dt, ZoneId.of(appZone)).toString();
+
+        AiTelemetryRequest aiReq = new AiTelemetryRequest("c" + coupleId, ts, metrics);
+
+        // 3) 백엔드 내부에서 AI 서버 호출 (POST /api/health/telemetry)
+        AiResponse ai = aiClient.postTelemetry(aiReq);
+
+
+        // 5) 프론트에는 AI 응답 그대로 반환
+        return ai;
+    }
+
 
     @Transactional
     public GetResponse create(Long coupleId, CreateRequest req) {
