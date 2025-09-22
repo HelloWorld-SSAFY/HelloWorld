@@ -12,7 +12,7 @@ public class OpenApiConfig {
 
         return new io.swagger.v3.oas.models.OpenAPI()
                 .info(new io.swagger.v3.oas.models.info.Info()
-                        .title("calendar API")
+                        .title("Calendar API")
                         .version("v1")
                         .description("calendar API"))
                 // Gateway 아래로 붙는 베이스 경로 지정 (예: /user)

@@ -12,9 +12,9 @@ public class OpenApiConfig {
 
         return new io.swagger.v3.oas.models.OpenAPI()
                 .info(new io.swagger.v3.oas.models.info.Info()
-                        .title("weekly API")
+                        .title("Weekly API")
                         .version("v1")
-                        .description("Weekly API"))
+                        .description("weekly API"))
                 // Gateway 아래로 붙는 베이스 경로 지정 (예: /user)
                 .servers(java.util.List.of(new io.swagger.v3.oas.models.servers.Server().url("/weekly")))
                 // 보안 스키마 + 글로벌 적용
