@@ -3,6 +3,7 @@ package com.ms.helloworld.util
 import android.content.Context
 import android.util.Log
 import androidx.work.*
+import dagger.hilt.android.qualifiers.ApplicationContext
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.temporal.ChronoUnit
@@ -12,7 +13,7 @@ import javax.inject.Singleton
 
 @Singleton
 class StepsWorkScheduler @Inject constructor(
-    private val context: Context
+    @ApplicationContext private val context: Context
 ) {
     companion object {
         private const val TAG = "StepsWorkScheduler"
