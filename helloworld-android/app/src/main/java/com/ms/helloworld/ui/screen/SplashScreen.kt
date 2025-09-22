@@ -1,20 +1,17 @@
 package com.ms.helloworld.ui.screen
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
+import com.airbnb.lottie.compose.*
 import com.ms.helloworld.R
 import com.ms.helloworld.navigation.Screen
 import com.ms.helloworld.viewmodel.SplashViewModel
@@ -63,14 +60,25 @@ fun SplashScreen(
             .background(Color(0XFFF3EDDE)),
         contentAlignment = Alignment.Center
     ) {
-        Image(
-            painter = painterResource(id = R.drawable.helloworld_logo),
-            contentDescription = "HelloWorld Logo",
+        // Lottie 애니메이션 사용
+        val composition by rememberLottieComposition(LottieCompositionSpec.RawRes(R.raw.splashlottie))
+
+        var isPlaying by remember { mutableStateOf(true) }
+
+        val progress by animateLottieCompositionAsState(
+            composition = composition,
+            isPlaying = isPlaying,
+            iterations = LottieConstants.IterateForever,
+            speed = 0.2f,
+            cancellationBehavior = LottieCancellationBehavior.OnIterationFinish
+        )
+
+        LottieAnimation(
+            composition = composition,
+            progress = { progress },
             modifier = Modifier
-                .fillMaxWidth(0.42f)
-                .aspectRatio(1f)
-                .clip(CircleShape),
-            contentScale = ContentScale.Crop
+                .size(400.dp)
+
         )
     }
 }

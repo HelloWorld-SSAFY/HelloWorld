@@ -1,18 +1,14 @@
 package com.ms.helloworld.ui.screen
 
 import android.widget.Toast
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -21,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
+import com.airbnb.lottie.compose.*
 import com.ms.helloworld.R
 import com.ms.helloworld.navigation.Screen
 import com.ms.helloworld.ui.theme.BaseColor
@@ -63,20 +60,33 @@ fun LoginScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(32.dp)
         ) {
-            Spacer(modifier = Modifier.weight(1f))
-
-            // Todo: Lottie 애니메이션 추가 예정
-            Image(
-                painter = painterResource(id = R.drawable.helloworld_logo),
-                contentDescription = "HelloWorld Logo",
+            // Lottie 애니메이션을 Box로 감싸서 절대 위치 지정
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth(0.60f)
-                    .aspectRatio(1f)
-                    .clip(CircleShape),
-                contentScale = ContentScale.Crop
-            )
+                    .fillMaxWidth()
+                    .weight(2.5f),
+                contentAlignment = Alignment.Center
+            ) {
+                val composition by rememberLottieComposition(LottieCompositionSpec.RawRes(R.raw.splashlottie))
 
-            Spacer(modifier = Modifier.weight(1f))
+                var isPlaying by remember { mutableStateOf(true) }
+
+                val progress by animateLottieCompositionAsState(
+                    composition = composition,
+                    isPlaying = isPlaying,
+                    iterations = LottieConstants.IterateForever,
+                    speed = 0.25f,
+                    clipSpec = LottieClipSpec.Frame(min = 0, max = 10),
+                    cancellationBehavior = LottieCancellationBehavior.OnIterationFinish
+                )
+
+                LottieAnimation(
+                    composition = composition,
+                    progress = { progress },
+                    modifier = Modifier
+                        .size(400.dp)
+                )
+            }
 
             Column(
                 modifier = Modifier.fillMaxWidth(),
