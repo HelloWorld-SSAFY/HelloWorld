@@ -117,7 +117,9 @@ fun OnboardingScreens(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            CircularProgressIndicator()
+            CircularProgressIndicator(
+                color = MainColor
+            )
         }
         return
     }

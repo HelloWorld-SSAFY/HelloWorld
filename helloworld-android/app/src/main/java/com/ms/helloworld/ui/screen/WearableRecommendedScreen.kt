@@ -23,6 +23,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.navigation.NavHostController
 import com.ms.helloworld.navigation.Screen
 import com.ms.helloworld.ui.components.CustomTopAppBar
+import com.ms.helloworld.ui.theme.MainColor
 
 @SuppressLint("NewApi")
 @Composable
@@ -174,7 +175,7 @@ fun CircularProgressChart(
             CircularProgressIndicator(
                 progress = percentage / 100f,
                 modifier = Modifier.fillMaxSize(),
-                color = color,
+                color = MainColor,
                 strokeWidth = 6.dp,
                 strokeCap = StrokeCap.Round,
                 trackColor = Color(0xFFE0E0E0)

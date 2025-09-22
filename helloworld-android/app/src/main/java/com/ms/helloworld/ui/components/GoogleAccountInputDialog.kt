@@ -18,6 +18,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.ms.helloworld.ui.theme.MainColor
 
 @Composable
 fun GoogleAccountInputDialog(
@@ -133,7 +134,7 @@ fun GoogleAccountInputDialog(
                             if (isLoading) {
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(16.dp),
-                                    color = Color.White,
+                                    color = MainColor,
                                     strokeWidth = 2.dp
                                 )
                             } else {

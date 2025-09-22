@@ -41,6 +41,7 @@ import com.ms.helloworld.dto.response.CalendarEventResponse
 import com.ms.helloworld.ui.components.AddCalendarEventDialog
 import com.ms.helloworld.ui.components.CustomTopAppBar
 import com.ms.helloworld.ui.components.EventDetailDialog
+import com.ms.helloworld.ui.theme.MainColor
 import com.ms.helloworld.viewmodel.CalendarViewModel
 import java.text.SimpleDateFormat
 import java.time.LocalDate
@@ -354,7 +355,7 @@ fun CalendarScreen(
                                 .height(200.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            CircularProgressIndicator(color = Color(0xFF6200EE))
+                            CircularProgressIndicator(color = MainColor)
                         }
                     }
                 } else {

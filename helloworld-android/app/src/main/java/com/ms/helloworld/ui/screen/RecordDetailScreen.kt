@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import kotlinx.coroutines.launch
 import com.ms.helloworld.ui.components.CustomTopAppBar
+import com.ms.helloworld.ui.theme.MainColor
 
 
 // 데이터 클래스들
@@ -198,7 +199,7 @@ fun RecordDetailScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator(color = Color(0xFFFF6B9D))
+                    CircularProgressIndicator(color = MainColor)
                 }
             } else {
                 // HorizontalPager로 스와이프 가능한 탭 내용
