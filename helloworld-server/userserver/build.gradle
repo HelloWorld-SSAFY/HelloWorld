@@ -14,11 +14,9 @@ java {
 	}
 }
 
-
 repositories {
 	mavenCentral()
 }
-
 
 ext {
     set('springCloudVersion', "2025.0.0")
@@ -30,7 +28,6 @@ dependencies {
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 //    implementation 'org.springframework.cloud:spring-cloud-starter-netflix-eureka-client'
     implementation "org.springframework.boot:spring-boot-starter-oauth2-resource-server"
-
 
     implementation 'org.springframework.boot:spring-boot-starter-web'
     compileOnly 'org.projectlombok:lombok'
@@ -82,6 +79,7 @@ dependencyManagement {
 tasks.named('test') {
 	useJUnitPlatform()
 }
+
 
 tasks.named('bootJar') {
     archiveFileName = 'app.jar'
