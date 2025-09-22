@@ -259,7 +259,7 @@ class TelemetryEmergencyResp(serializers.Serializer):
     ok = serializers.BooleanField(default=True)
     anomaly = serializers.BooleanField(default=True)
     risk_level = serializers.ChoiceField(choices=["critical"])
-    mode = serializers.ChoiceField(choices=["emergency"])
+    mode = serializers.CharField()
     reasons = serializers.ListField(child=serializers.CharField())
     action = ActionSerializer()
     safe_templates = SafeTemplateSerializer(many=True)
@@ -277,7 +277,7 @@ class TelemetryCooldownResp(serializers.Serializer):
 # ──────────────────────────────────────────────────────────────────────────────
 class StepsCheckIn(serializers.Serializer):
     user_ref = serializers.CharField(required=False)
-    ts = serializers.DateTimeField(help_text="KST 권장, 12:00/16:00/20:00 호출")
+    ts = serializers.DateTimeField(help_text="KST 권장, 12:00/16:00 호출")
     cum_steps = serializers.IntegerField(min_value=0, help_text="동시간대 누적 걸음수")
     lat = serializers.FloatField(help_text="사용자 현재 위도 (필수)")
     lng = serializers.FloatField(help_text="사용자 현재 경도 (필수)")
@@ -342,11 +342,11 @@ class HealthzView(APIView):
         responses={200: inline_serializer("Healthz", {"ok": serializers.BooleanField(), "version": serializers.CharField()})},
         tags=["health"],
         summary="Health check (no auth)",
-        examples=[OpenApiExample("RESPONSE", value={"ok": True, "version": "v0.2.1"}, response_only=True)],
+        examples=[OpenApiExample("RESPONSE", value={"ok": True, "version": "v0.2.2"}, response_only=True)],
         operation_id="getHealthz",
     )
     def get(self, request: HttpRequest):
-        return Response({"ok": True, "version": "v0.2.1"})
+        return Response({"ok": True, "version": "v0.2.2"})
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 유틸
@@ -516,6 +516,9 @@ def _ingest_for_category(session_id: uuid.UUID, category: str, top_k: int):
         log.exception("ingest failed for category=%s session=%s", category, session_id)
 
 def _run_content_delivery_for_category(*, session: RecommendationSession, user_ref: str, category: str, top_k: int = 3):
+    """
+    자동 실행(Restrict)용. recommender의 CTS( pre × context_boost × ThompsonSampling ) 최종 점수를 그대로 사용.
+    """
     _ingest_for_category(session.id, category, top_k)
 
     try:
@@ -545,8 +548,8 @@ def _run_content_delivery_for_category(*, session: RecommendationSession, user_r
             "url": picked["url"],
             "thumbnail": picked.get("thumbnail") or "",
             "rank": 1,
-            "score": None,
-            "reason": "ts+context",
+            "score": picked.get("score"),                 # recommender 산출 점수
+            "reason": picked.get("reason") or "pre×boost×θ (auto)",
         })
 
     try:
@@ -567,7 +570,7 @@ def _run_content_delivery_for_category(*, session: RecommendationSession, user_r
                 "url": c.url,
                 "thumbnail": thumb,
                 "rank": len(items) + 1,
-                "score": getattr(e, "pre_score", None),
+                "score": getattr(e, "pre_score", None),   # 후보의 기본 pre_score 노출(참고용)
                 "reason": "candidate",
             })
     except Exception:
@@ -861,7 +864,7 @@ class FeedbackView(APIView):
         request=FeedbackIn,
         responses={200: FeedbackOut},
         tags=["feedback"],
-        summary="Log feedback for a recommendation session",
+        summary="Log feedback for a recommendation session (CTS Beta update)",
         operation_id="postFeedback",
     )
     def post(self, request: HttpRequest):
@@ -903,6 +906,7 @@ class FeedbackView(APIView):
         if item_rec is None and content is not None:
             item_rec = ItemRec.objects.filter(session=session, content=content).order_by("-created_at").first()
 
+        # 기존 value 필드(완주/체류시간 등)를 그대로 보관
         value = d.get("dwell_ms") if d.get("dwell_ms") is not None else d.get("watched_pct")
 
         FeedbackModel.objects.create(
@@ -916,30 +920,65 @@ class FeedbackView(APIView):
             watched_pct=d.get("watched_pct"),
         )
 
+        # ---- CTS 통계 업데이트 (카운트 + Beta α/β) --------------------
         try:
             if content:
                 cs, _ = ContentStat.objects.get_or_create(content=content)
                 ucs, _ = UserContentStat.objects.get_or_create(user_ref=user_ref, content=content)
 
+                # 레거시 카운트 집계(그대로 유지)
                 if d["type"] == "ACCEPT":
                     cs.accepts += 1; ucs.accepts += 1
                 elif d["type"] == "COMPLETE":
                     cs.completes += 1; ucs.completes += 1
                 elif d["type"] == "EFFECT" and value is not None:
-                    cs.effects_sum += float(value or 0); ucs.effects_sum += float(value or 0)
+                    try:
+                        v = float(value or 0)
+                    except Exception:
+                        v = 0.0
+                    cs.effects_sum += v; ucs.effects_sum += v
 
-                cs.save(update_fields=["accepts","completes","effects_sum","updated_at"])
-                ucs.save(update_fields=["accepts","completes","effects_sum","updated_at"])
+                # Beta 업데이트: r ∈ [0,1]
+                def _norm01(v) -> float:
+                    if v is None:
+                        return 0.0
+                    try:
+                        x = float(v)
+                    except Exception:
+                        return 0.0
+                    # 0~1 범위 가정, 1보다 크면 100분율로 간주
+                    if x > 1.0:
+                        x = x / 100.0
+                    return max(0.0, min(1.0, x))
+
+                if d["type"] == "ACCEPT":
+                    r = 0.6
+                elif d["type"] == "COMPLETE":
+                    r = 0.2
+                elif d["type"] == "EFFECT":
+                    r = 0.2 * _norm01(value)
+                else:
+                    r = 0.0
+
+                # 전역/개인 동시 갱신
+                cs.add_reward(r); ucs.add_reward(r)
+
+                cs.save(update_fields=["accepts","completes","effects_sum","alpha","beta","updated_at"])
+                ucs.save(update_fields=["accepts","completes","effects_sum","alpha","beta","updated_at"])
         except Exception:
-            pass
+            log.exception("feedback stat update failed (session=%s, user=%s)", session.id, user_ref)
 
+        # Outcome 보관(EFFECT만)
         if d["type"] == "EFFECT" and value is not None:
-            OutcomeModel.objects.create(
-                session=session,
-                content=content,
-                outcome_type="self_report",
-                effect=float(value),
-            )
+            try:
+                OutcomeModel.objects.create(
+                    session=session,
+                    content=content,
+                    outcome_type="self_report",
+                    effect=float(value),
+                )
+            except Exception:
+                pass
 
         return Response({"ok": True})
 
@@ -1375,7 +1414,8 @@ class RecommendView(APIView):
         request=RecommendIn,
         responses={200: RecommendOut},
         tags=["recommend"],
-        summary="Category-based recommendation with ingest (YouTube/Spotify)",
+        summary="Category-based recommendation with CTS (pre × context_boost × ThompsonSampling)",
+        description="컨텍스트부스트×사전점수×Thompson 샘플링으로 최종 점수를 산출하고 Top-1 선택합니다.",
         operation_id="postRecommend",
     )
     def post(self, request: HttpRequest):
@@ -1451,16 +1491,18 @@ class RecommendView(APIView):
         except Exception:
             return Response({"ok": False, "error": "recommendation failed"}, status=500)
 
+        # 결과 구성: picked(최종 선택) + 후보 상위 pre_score
         items: List[Dict[str, Any]] = []
         picked = rec_out.picked
+        picked_score = picked.get("score") if isinstance(picked, dict) else None  # recommender가 제공 시 노출
         items.append({
             "content_id": picked["content_id"],
             "title": picked["title"],
             "url": picked["url"],
             "thumbnail": picked.get("thumbnail") or "",
             "rank": 1,
-            "score": None,
-            "reason": "ts+context",
+            "score": picked_score,              # ← CTS 최종 점수(없으면 null)
+            "reason": picked.get("reason") or "pre×boost×θ",
         })
 
         try:
@@ -1481,7 +1523,7 @@ class RecommendView(APIView):
                     "url": c.url,
                     "thumbnail": thumb,
                     "rank": len(items)+1,
-                    "score": getattr(e, "pre_score", None),
+                    "score": getattr(e, "pre_score", None),  # 참고용: 기본 pre_score
                     "reason": "candidate",
                 })
         except Exception:
