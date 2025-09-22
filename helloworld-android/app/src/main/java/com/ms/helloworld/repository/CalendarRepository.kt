@@ -79,14 +79,13 @@ class CalendarRepository @Inject constructor(
     }
     
     suspend fun getEvents(
-        coupleId: Long? = null,
         from: String? = null,
         to: String? = null,
         page: Int? = null,
         size: Int? = null
     ): Result<CalendarEventsPageResponse> {
         return try {
-            val response = calendarApi.getEvents(coupleId, from, to, page, size)
+            val response = calendarApi.getEvents(from, to, page, size)
             Result.success(response)
         } catch (e: Exception) {
             Result.failure(e)

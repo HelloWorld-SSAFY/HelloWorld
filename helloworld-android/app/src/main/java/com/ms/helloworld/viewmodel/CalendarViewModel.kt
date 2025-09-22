@@ -6,7 +6,6 @@ import com.ms.helloworld.dto.request.CalendarCreateRequest
 import com.ms.helloworld.dto.request.CalendarUpdateRequest
 import com.ms.helloworld.dto.response.CalendarEventResponse
 import com.ms.helloworld.repository.CalendarRepository
-import com.ms.helloworld.util.TokenManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -27,16 +26,11 @@ data class CalendarState(
 
 @HiltViewModel
 class CalendarViewModel @Inject constructor(
-    private val calendarRepository: CalendarRepository,
-    private val tokenManager: TokenManager
+    private val calendarRepository: CalendarRepository
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(CalendarState())
     val state: StateFlow<CalendarState> = _state.asStateFlow()
-
-    private fun getCoupleId(): Long? = tokenManager.getCoupleId()
-
-    private fun getWriterId(): String? = tokenManager.getCurrentUserId()
 
     init {
         loadEventsForCurrentMonth()
@@ -72,20 +66,9 @@ class CalendarViewModel @Inject constructor(
                     orderNo = orderNo
                 )
 
-                val coupleId = getCoupleId()
-                val writerId = getWriterId()
-
-                if (coupleId == null || writerId == null) {
-                    _state.value = _state.value.copy(
-                        isLoading = false,
-                        errorMessage = "사용자 인증 정보를 찾을 수 없습니다"
-                    )
-                    return@launch
-                }
-
                 val result = calendarRepository.createEvent(
-                    coupleId = coupleId,
-                    writerId = writerId.toLongOrNull() ?: 0L,
+                    coupleId = 0L, // 서버에서 토큰으로 처리
+                    writerId = 0L, // 서버에서 토큰으로 처리
                     request = request
                 )
 
@@ -248,17 +231,7 @@ class CalendarViewModel @Inject constructor(
                 val from = "${yearMonth}-01T00:00:00Z"
                 val to = "${yearMonth}-${lastDayOfMonth.toString().padStart(2, '0')}T23:59:59Z"
 
-                val coupleId = getCoupleId()
-                if (coupleId == null) {
-                    _state.value = _state.value.copy(
-                        isLoading = false,
-                        errorMessage = "사용자 인증 정보를 찾을 수 없습니다"
-                    )
-                    return@launch
-                }
-
                 val result = calendarRepository.getEvents(
-                    coupleId = coupleId,
                     from = from,
                     to = to
                 )

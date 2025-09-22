@@ -6,7 +6,6 @@ import com.ms.helloworld.dto.request.DiaryCreateRequest
 import com.ms.helloworld.dto.request.DiaryUpdateRequest
 import com.ms.helloworld.dto.response.DiaryResponse
 import com.ms.helloworld.repository.DiaryRepository
-import com.ms.helloworld.util.TokenManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -14,6 +13,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import java.time.temporal.WeekFields
 import java.util.*
 import javax.inject.Inject
@@ -37,8 +37,7 @@ data class WeeklyDiaryStatus(
 
 @HiltViewModel
 class DiaryViewModel @Inject constructor(
-    private val diaryRepository: DiaryRepository,
-    private val tokenManager: TokenManager
+    private val diaryRepository: DiaryRepository
 ) : ViewModel() {
 
     // LMP 날짜는 외부에서 설정
@@ -49,7 +48,6 @@ class DiaryViewModel @Inject constructor(
         println("📝 DiaryViewModel - LMP 날짜 업데이트: lmpDate=$lmpDate")
     }
 
-    private fun getCoupleId(): Long? = tokenManager.getCoupleId()
     private fun getLmpDate(): String = actualLmpDate
 
     private val _state = MutableStateFlow(DiaryState())
@@ -71,24 +69,12 @@ class DiaryViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 _state.value = _state.value.copy(isLoading = true, errorMessage = null)
-                val coupleId = getCoupleId()
-                if (coupleId == null) {
-                    println("❌ DiaryViewModel - coupleId가 토큰에서 추출되지 않음")
-                    _state.value = _state.value.copy(
-                        isLoading = false,
-                        errorMessage = "사용자 인증 정보를 찾을 수 없습니다"
-                    )
-                    return@launch
-                }
-
                 val lmpDate = getLmpDate()
                 println("📅 DiaryViewModel - 주간 일기 로딩: ${week}주차")
-                println("📅 DiaryViewModel - API 파라미터: coupleId=$coupleId, week=$week, lmpDate=$lmpDate")
-                println("📅 DiaryViewModel - 예상 URL: /calendar/diary/week?coupleId=$coupleId&week=$week&lmpDate=$lmpDate")
+                println("📅 DiaryViewModel - API 파라미터: week=$week, lmpDate=$lmpDate")
 
                 // 새로운 API 사용: calendar/diary/week
                 val result = diaryRepository.getDiariesByWeek(
-                    coupleId = coupleId,
                     week = week,
                     lmpDate = lmpDate
                 )
@@ -140,16 +126,6 @@ class DiaryViewModel @Inject constructor(
 
                 _state.value = _state.value.copy(isLoading = true, errorMessage = null)
 
-                val coupleId = getCoupleId()
-                if (coupleId == null) {
-                    println("❌ DiaryViewModel - coupleId가 토큰에서 추출되지 않음")
-                    _state.value = _state.value.copy(
-                        isLoading = false,
-                        errorMessage = "사용자 인증 정보를 찾을 수 없습니다"
-                    )
-                    return@launch
-                }
-
                 val currentDate = LocalDate.now().toString()
 
                 val request = DiaryCreateRequest(
@@ -157,7 +133,7 @@ class DiaryViewModel @Inject constructor(
                     diaryTitle = title,
                     diaryContent = content,
                     imageUrl = "", // 임시로 빈 문자열
-                    coupleId = coupleId,
+                    coupleId = 0L, // 서버에서 토큰으로 처리하므로 의미없는 값
                     authorId = authorId,
                     authorRole = authorRole,
                     targetDate = targetDate
@@ -286,19 +262,9 @@ class DiaryViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 _state.value = _state.value.copy(isLoading = true, errorMessage = null)
-                val coupleId = getCoupleId()
-                if (coupleId == null) {
-                    println("❌ DiaryViewModel - coupleId가 토큰에서 추출되지 않음")
-                    _state.value = _state.value.copy(
-                        isLoading = false,
-                        errorMessage = "사용자 인증 정보를 찾을 수 없습니다"
-                    )
-                    return@launch
-                }
-
                 println("📆 DiaryViewModel - 일별 일기 로딩: ${day}일차")
 
-                val result = diaryRepository.getDiariesByDay(coupleId, day, lmpDate)
+                val result = diaryRepository.getDiariesByDay(day, lmpDate)
                 if (result.isSuccess) {
                     val diariesResponse = result.getOrNull()
                     val diaries = diariesResponse?.content ?: emptyList()
@@ -335,12 +301,19 @@ class DiaryViewModel @Inject constructor(
     // TODO: 나중에 필요시 전체 일기 조회 기능 추가
     // fun loadAllDiariesForDebug() { ... }
 
-    // 임신 주차 계산 (임시 구현)
+    // 임신 주차 계산 (네겔레 법칙 기반)
     private fun getCurrentPregnancyWeek(currentDate: LocalDate): Int {
-        // TODO: 실제 임신 시작일 기준으로 계산
-        // 현재는 임시로 연초부터의 주차 계산
-        val weekFields = WeekFields.of(Locale.getDefault())
-        return currentDate.get(weekFields.weekOfYear())
+        return try {
+            val lmpDate = LocalDate.parse(getLmpDate())
+            val daysSinceLastPeriod = ChronoUnit.DAYS.between(lmpDate, currentDate)
+            val pregnancyWeek = ((daysSinceLastPeriod / 7) + 1).toInt()
+
+            // 임신 주차는 1~42주 범위로 제한
+            pregnancyWeek.coerceIn(1, 42)
+        } catch (e: Exception) {
+            println("❌ DiaryViewModel - LMP 날짜 파싱 실패, 기본값 1주차 반환: ${e.message}")
+            1 // 기본값으로 1주차 반환
+        }
     }
 
     // 주간 일기 상태 생성
