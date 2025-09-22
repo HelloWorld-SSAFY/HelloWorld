@@ -32,6 +32,7 @@ urlpatterns = [
     path("", include("django_prometheus.urls")),
 ]
 
+
 # BASE_DIR는 보통 'ai_server' (바깥 폴더)
 urlpatterns += static(
     "/static/",
