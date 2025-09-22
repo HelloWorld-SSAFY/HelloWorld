@@ -14,12 +14,18 @@ from .views import (
     RecommendView,  # ✅ 추가
 )
 
-# ⬇️ Delivery 전용 뷰(세션 내 N개 반환) — 분리했다면 views_delivery에서 임포트
+# ⬇️ Delivery 전용 뷰(세션 내 N개 반환)
 from .views_delivery import (
     MusicDeliveryView,
     MeditationDeliveryView,
     YogaDeliveryView,
     OutingDeliveryView,
+)
+
+# ⬇️ 메인 서버 브릿지(메인 API 호출/저장)
+from .views_main_bridge import (
+    MainEchoView,             # 메인 API 결과 그대로 보기(디버그용)
+    PullStepsBaselineView,    # 메인에서 일일 누적걸음 평균 가져와 업서트
 )
 
 @extend_schema(
@@ -44,16 +50,21 @@ def healthz(request):
     return Response({"status": "ok", "version": "v1"})
 
 urlpatterns = [
+    # ---- core ----
     path("telemetry",    TelemetryView.as_view(),   name="telemetry"),
     path("feedback",     FeedbackView.as_view(),    name="feedback"),
     path("steps-check",  StepsCheckView.as_view(),  name="steps-check"),
     path("places",       PlacesView.as_view(),      name="places"),
-    path("recommend",    RecommendView.as_view(),   name="recommend"),  # ✅ 추가
+    path("recommend",    RecommendView.as_view(),   name="recommend"),
     path("healthz",      healthz,                   name="healthz"),
 
-    # ✅ Delivery: 카테고리 GET → 최신 세션의 여러 개 반환 (기본 3개)
+    # ---- delivery ----
     path("delivery/music",       MusicDeliveryView.as_view(),      name="delivery-music"),
     path("delivery/meditation",  MeditationDeliveryView.as_view(), name="delivery-meditation"),
     path("delivery/yoga",        YogaDeliveryView.as_view(),       name="delivery-yoga"),
     path("delivery/outing",      OutingDeliveryView.as_view(),     name="delivery-outing"),
+
+    # ---- main-bridge (메인 서버 호출/저장) ----
+    path("_main/echo",           MainEchoView.as_view(),           name="main-echo"),
+    path("steps-baseline/pull",  PullStepsBaselineView.as_view(),  name="steps-baseline-pull"),
 ]
