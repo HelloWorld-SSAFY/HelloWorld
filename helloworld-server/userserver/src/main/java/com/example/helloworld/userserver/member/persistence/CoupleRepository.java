@@ -8,6 +8,7 @@ import java.util.Optional;
 
 public interface CoupleRepository extends JpaRepository<Couple, Long> {
 
+    Optional<Couple> findByUserA_IdOrUserB_Id(Long userIdA, Long userIdB);
     // 여성 등록 시 커플 자동생성/재사용을 위해 A 슬롯으로 검색
     Optional<Couple> findByUserAId(Long userId);
 
