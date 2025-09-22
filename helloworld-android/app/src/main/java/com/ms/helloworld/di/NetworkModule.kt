@@ -1,5 +1,6 @@
 package com.ms.helloworld.di
 
+import android.content.Context
 import com.ms.helloworld.network.AuthInterceptor
 import com.ms.helloworld.network.TokenAuthenticator
 import com.ms.helloworld.network.api.AuthApi
@@ -7,10 +8,13 @@ import com.ms.helloworld.network.api.CalendarApi
 import com.ms.helloworld.network.api.CoupleApi
 import com.ms.helloworld.network.api.DiaryApi
 import com.ms.helloworld.network.api.FcmApi
+import com.ms.helloworld.network.api.HealthApi
 import com.ms.helloworld.network.api.UserApi
+import com.ms.helloworld.util.LocationManager
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -100,5 +104,17 @@ object NetworkModule {
     @Singleton
     fun provideFcmApi(retrofit: Retrofit): FcmApi {
         return retrofit.create(FcmApi::class.java)
+    }
+
+    @Provides
+    @Singleton
+    fun provideHealthApi(retrofit: Retrofit): HealthApi {
+        return retrofit.create(HealthApi::class.java)
+    }
+
+    @Provides
+    @Singleton
+    fun provideLocationManager(@ApplicationContext context: Context): LocationManager {
+        return LocationManager(context)
     }
 }

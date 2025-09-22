@@ -12,12 +12,18 @@ import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
+import dagger.hilt.android.qualifiers.ApplicationContext
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import javax.inject.Inject
+import javax.inject.Singleton
 
 private const val TAG = "싸피_HealthConnectManager"
-class HealthConnectManager(private val context: Context) {
+@Singleton
+class HealthConnectManager @Inject constructor(
+    @ApplicationContext private val context: Context
+){
     val healthConnectClient = HealthConnectClient.getOrCreate(context)
 
     val permissions = setOf(
