@@ -1,8 +1,10 @@
-package com.example.helloworld.userserver.alarm.presentation;
+package com.example.helloworld.healthserver.alarm.dto;
 
-import jakarta.validation.constraints.*;
+import com.example.helloworld.healthserver.alarm.domain.AlarmType;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+
 import java.time.Instant;
-import com.example.helloworld.userserver.alarm.domain.AlarmType;
 
 public record AlarmCreateRequest(
         @NotNull  AlarmType alarm_type,

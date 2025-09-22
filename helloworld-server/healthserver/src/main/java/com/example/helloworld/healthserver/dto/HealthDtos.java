@@ -11,7 +11,7 @@ public final class HealthDtos {
     // 생성 요청 (전부 nullable 허용)
     public record CreateRequest(
             Instant date,
-            Integer stress,
+            Double stress,
             Integer heartrate
     ) {}
 
@@ -19,7 +19,7 @@ public final class HealthDtos {
     public record GetResponse(
             @JsonProperty("health_id") Long healthId,
             Instant date,
-            Integer stress,
+            Double stress,
             Integer heartrate
     ) {}
 
@@ -46,17 +46,6 @@ public final class HealthDtos {
 //        ) {}
 //    }
 
-    public record BucketResponse(
-            @JsonProperty("date") LocalDate date,   // 요청한 날짜
-            List<Item> records                      // 항상 6개(0-4,4-8,...,20-24)
-    ) {
-        public record Item(
-                @JsonProperty("hour_range") String hourRange,   // "00-04" 등
-                @JsonProperty("avg_heartrate") Double avgHeartrate,
-                @JsonProperty("stddev_heartrate") Double stddevHeartrate,
-                @JsonProperty("count") Long count
-        ) {}
-    }
 
     public record StepResponse(
             List<Item> records // 0-12, 0-16, 0-24 (항상 3개)
@@ -66,4 +55,31 @@ public final class HealthDtos {
                 @JsonProperty("avg_steps") Double avgSteps
         ) {}
     }
+
+    /**
+     * 전체 커플의 일별 통계 응답
+     */
+    public record GlobalDailyStatsResponse(
+            List<StatsRow> stats
+    ) {}
+
+    /**
+     * 통계 데이터의 한 행을 나타내는 레코드
+     */
+    public record StatsRow(
+            @JsonProperty("user_ref") String userRef,       // "c" + coupleId
+            @JsonProperty("as_of") LocalDate asOf,          // 요청된 날짜 (YYYY-MM-DD)
+            String metric,                                  // "hr" 또는 "stress"
+            String stat,                                    // "avg" 또는 "stddev"
+            @JsonProperty("v_0_4") Double v0_4,
+            @JsonProperty("v_4_8") Double v4_8,
+            @JsonProperty("v_8_12") Double v8_12,
+            @JsonProperty("v_12_16") Double v12_16,
+            @JsonProperty("v_16_20") Double v16_20,
+            @JsonProperty("v_20_24") Double v20_24
+    ) {}
+
+
+
+
 }

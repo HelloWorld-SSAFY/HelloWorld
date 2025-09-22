@@ -1,6 +1,6 @@
 package com.example.helloworld.userserver.alarm.persistence;
 
-import com.example.helloworld.userserver.alarm.dto.DeviceToken;
+import com.example.helloworld.userserver.alarm.entity.DeviceToken;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.transaction.annotation.Transactional;
 

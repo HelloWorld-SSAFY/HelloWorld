@@ -42,6 +42,27 @@ dependencies {
     implementation 'org.springframework.cloud:spring-cloud-starter-loadbalancer'
     implementation 'org.springframework.cloud:spring-cloud-starter-netflix-eureka-client'
     implementation 'org.springframework.cloud:spring-cloud-starter-openfeign'
+
+
+	// Google ID Token 검증 (google-api-client 계열)
+	implementation 'com.google.api-client:google-api-client:2.6.0'
+	implementation 'com.google.http-client:google-http-client-jackson2:1.43.3'
+
+	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0'
+
+	implementation 'com.google.firebase:firebase-admin:9.4.2'
+
+    runtimeOnly   'io.micrometer:micrometer-registry-prometheus'
+
+
+	implementation 'com.google.firebase:firebase-admin:9.2.0'
+	implementation 'org.springframework.boot:spring-boot-starter-security' // Spring Security 추가
+
+	//ring Security 테스트 라이브러리를 명시적으로 포함
+	testImplementation 'org.springframework.security:spring-security-test'
+
+
+
     runtimeOnly   'io.micrometer:micrometer-registry-prometheus'
 }
 

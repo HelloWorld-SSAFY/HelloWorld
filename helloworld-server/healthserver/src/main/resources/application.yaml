@@ -11,3 +11,18 @@ spring:
     config:
       uri: http://configserver-svc:8888
       enabled: true
+
+
+ai:
+  server:
+    base-url: http://aiserver-svc:8000
+  telemetry-path: /api/health/telemetry
+
+
+userserver:
+  base-url: http://userserver-svc:8080
+
+
+
+fcm:
+  service-account-file:firebase-service-account.json

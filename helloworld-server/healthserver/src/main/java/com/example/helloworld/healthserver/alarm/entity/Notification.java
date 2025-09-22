@@ -1,7 +1,6 @@
-package com.example.helloworld.userserver.alarm.dto;
+package com.example.helloworld.healthserver.alarm.entity;
 
-import com.example.helloworld.userserver.alarm.domain.AlarmType;
-import com.example.helloworld.userserver.member.entity.Couple;
+import com.example.helloworld.healthserver.alarm.domain.AlarmType;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -24,10 +23,10 @@ public class Notification {
     @Column(name = "alarm_type", nullable = false, length = 32)
     private AlarmType alarmType;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "couple_id", nullable = false,
-            foreignKey = @ForeignKey(name = "fk_notification_couple"))
-    private Couple couple;
+
+    // ✅ userserver 엔티티 연관 대신, FK 값만 보관
+    @Column(name = "couple_id", nullable = false)
+    private Long coupleId;
 
     @Column(name = "alarm_title", nullable = false, length = 255)
     private String alarmTitle;
