@@ -11,3 +11,25 @@ spring:
     config:
       uri: http://configserver-svc:8888
       enabled: true
+
+
+#
+#  jpa:
+#    hibernate:
+#      ddl-auto: update        # create / update / validate / none 중 선택
+#    properties:
+#      hibernate:
+#        dialect: org.hibernate.dialect.PostgreSQLDialect
+#        format_sql: true
+#        show_sql: true
+#
+#  datasource:
+#    url: jdbc:postgresql://localhost:5432/calendar_diary   # DB 이름에 맞게 수정
+#    username: postgres                                   # 본인 PostgreSQL 계정
+#    password: root                                       # 실제 비밀번호
+#    driver-class-name: org.postgresql.Driver
+#
+#eureka:
+#  client:
+#    enabled: false
+
