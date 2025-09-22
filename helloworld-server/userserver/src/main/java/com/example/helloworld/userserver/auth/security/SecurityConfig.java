@@ -12,7 +12,12 @@ public class SecurityConfig {
         return http
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(a -> a
-                        .requestMatchers("/api/auth/**").permitAll() // 로그인/리프레시 허용
+                        .requestMatchers(
+                                "/actuator/**",
+                                "/v3/api-docs/**",
+                                "/swagger-ui/**",
+                                "/api/auth/**"          // 로그인/리프레시 등 공개 엔드포인트
+                        ).permitAll() // 로그인/리프레시 허용
                         .anyRequest().permitAll()                   // (임시) 나중에 보호 구간만 authenticated()로
                 )
                 .httpBasic(b -> b.disable())
