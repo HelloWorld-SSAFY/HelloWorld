@@ -43,7 +43,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import com.ms.helloworld.R
 import com.ms.helloworld.navigation.Screen
+import com.ms.helloworld.ui.theme.BaseColor
 import com.ms.helloworld.ui.theme.MainColor
+import com.ms.helloworld.ui.theme.OnboardingColor
 import com.ms.helloworld.viewmodel.OnboardingState
 import com.ms.helloworld.viewmodel.OnboardingViewModel
 import kotlinx.coroutines.launch
@@ -215,10 +217,22 @@ fun OnboardingScreens(
         }
     }
 
+    // 현재 화면이 사용자 정보 입력 화면인지 확인
+    val isFormScreen = if (screens.isNotEmpty() && pagerState.currentPage < screens.size) {
+        screens[pagerState.currentPage].screenType in listOf(
+            ScreenType.BASIC_INFO_FORM,
+            ScreenType.MOM_INFO_FORM,
+            ScreenType.DAD_INFO_FORM
+        )
+    } else false
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.White),
+            .background(
+                // 폼 화면일 때는 흰색, 나머지는 OnboardingColor
+                if (isFormScreen) Color.White else OnboardingColor
+            ),
         contentAlignment = Alignment.Center
     ) {
         Column(
