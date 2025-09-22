@@ -126,6 +126,20 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        lifecycleScope.launch {
+            delay(1000)
+            val viewModel: WearMainViewModel = ViewModelProvider(this@MainActivity)[WearMainViewModel::class.java]
+
+            // 토큰 상태 확인
+            val hasToken = viewModel.uiState.value.isAuthenticated
+            if (!hasToken) {
+                Log.d(TAG, "토큰 없음 - 폰에 토큰 요청")
+                viewModel.requestTokenFromPhone(this@MainActivity) // 추가 필요
+            }
+
+            logTokenStatus(viewModel)
+        }
+
         installSplashScreen()
         super.onCreate(savedInstanceState)
 
@@ -216,6 +230,18 @@ class MainActivity : ComponentActivity() {
         onAuthenticated: () -> Unit,
         featureName: String = "이 기능"
     ): Boolean {
+        if (!viewModel.uiState.value.isAuthenticated) {
+            // 토큰 요청 시도
+            viewModel.requestTokenFromPhone(this)
+            delay(2000) // 잠시 대기
+
+            // 다시 확인
+            if (!viewModel.uiState.value.isAuthenticated) {
+                Toast.makeText(this, "모바일 앱에서 로그인해주세요.", Toast.LENGTH_LONG).show()
+                return false
+            }
+        }
+
         val tokenStatus = viewModel.checkTokenStatus()
 
         // 토큰 확인

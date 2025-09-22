@@ -17,7 +17,7 @@ data class MemberProfile(
 )
 
 data class CoupleProfile(
-    @SerializedName("couple_id") val id: Long,
+    @SerializedName("couple_id") val coupleId: Long,
     @SerializedName("user_a_id") val userAId: Long?,
     @SerializedName("user_b_id") val userBId: Long?,
     @SerializedName("pregnancyWeek") val pregnancyWeek: Int?,  // 서버가 camelCase로 보냄

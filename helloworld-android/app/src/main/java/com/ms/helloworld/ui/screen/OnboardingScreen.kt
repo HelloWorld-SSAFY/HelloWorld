@@ -1,6 +1,5 @@
 package com.ms.helloworld.ui.screen
 
-import android.util.Log
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.AnimatedVisibility
@@ -10,7 +9,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -18,7 +16,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
@@ -964,12 +961,7 @@ fun NicknamePreview(
         modifier = Modifier
             .fillMaxWidth()
             .background(
-                Color(0xFFF0F9FF), // 연한 파란색 배경
-                RoundedCornerShape(8.dp)
-            )
-            .border(
-                1.dp,
-                MainColor.copy(alpha = 0.3f),
+                MainColor.copy(alpha = 0.1f),
                 RoundedCornerShape(8.dp)
             )
             .padding(12.dp)
@@ -978,15 +970,13 @@ fun NicknamePreview(
             Text(
                 text = "등록될 닉네임",
                 fontSize = 12.sp,
-                color = Color(0xFF666666),
-                fontWeight = FontWeight.Medium
+                color = Color(0xFF757575),
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = combinedNickname,
                 fontSize = 14.sp,
-                color = MainColor,
-                fontWeight = FontWeight.Bold
+                color = Color.Black,
             )
         }
     }

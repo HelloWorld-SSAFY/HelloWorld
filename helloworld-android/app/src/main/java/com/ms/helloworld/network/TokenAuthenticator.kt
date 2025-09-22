@@ -43,18 +43,35 @@ class TokenAuthenticator @Inject constructor(
                         RefreshTokenRequest(refreshToken)
                     )
 
-                    // 새 토큰 저장
-                    tokenManager.saveTokens(
-                        refreshResponse.accessToken,
-                        refreshResponse.refreshToken ?: refreshToken // 새 리프레시 토큰이 없으면 기존 것 유지
-                    )
+                    // Response가 성공적인지 확인
+                    if (refreshResponse.isSuccessful) {
+                        val tokenResponse = refreshResponse.body()
 
-                    Log.d(TAG, "토큰 갱신 성공")
+                        if (tokenResponse != null) {
+                            // 새 토큰 저장
+                            tokenManager.saveTokens(
+                                tokenResponse.accessToken,
+                                tokenResponse.refreshToken ?: refreshToken // 새 리프레시 토큰이 없으면 기존 것 유지
+                            )
 
-                    // 실패한 요청을 새 토큰으로 재시도
-                    response.request.newBuilder()
-                        .header("Authorization", "Bearer ${refreshResponse.accessToken}")
-                        .build()
+                            Log.d(TAG, "토큰 갱신 성공")
+
+                            // 실패한 요청을 새 토큰으로 재시도
+                            response.request.newBuilder()
+                                .header("Authorization", "Bearer ${tokenResponse.accessToken}")
+                                .build()
+                        } else {
+                            Log.e(TAG, "토큰 갱신 응답 본문이 null")
+                            tokenManager.clearTokens()
+                            Log.d(TAG, "🗑토큰 삭제됨 - 재로그인 필요")
+                            null
+                        }
+                    } else {
+                        Log.e(TAG, "토큰 갱신 실패: ${refreshResponse.code()}")
+                        tokenManager.clearTokens()
+                        Log.d(TAG, "🗑토큰 삭제됨 - 재로그인 필요")
+                        null
+                    }
 
                 } catch (e: Exception) {
                     Log.e(TAG, "토큰 갱신 실패: ${e.message}")

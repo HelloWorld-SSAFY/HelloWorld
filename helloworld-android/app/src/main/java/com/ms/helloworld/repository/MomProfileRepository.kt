@@ -16,6 +16,7 @@ import com.ms.helloworld.model.OnboardingStatus
 import com.ms.helloworld.model.OnboardingCheckResult
 import com.ms.helloworld.network.api.UserApi
 import com.ms.helloworld.util.TokenManager
+import retrofit2.Response
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
@@ -35,8 +36,31 @@ class MomProfileRepository @Inject constructor(
         return userApi.getUserInfo()
     }
 
-    suspend fun getCoupleDetailInfo(): retrofit2.Response<CoupleDetailResponse> {
-        return userApi.getCoupleDetail()
+    suspend fun getCoupleDetailInfo(): Response<CoupleDetailResponse> {
+        Log.d("MomProfileRepository", "getCoupleDetailInfo() 호출 시작")
+
+        return try {
+            val response = userApi.getCoupleDetail()
+
+            Log.d("MomProfileRepository", "API 호출 완료:")
+            Log.d("MomProfileRepository", "- Response code: ${response.code()}")
+            Log.d("MomProfileRepository", "- Is successful: ${response.isSuccessful}")
+            Log.d("MomProfileRepository", "- Headers: ${response.headers()}")
+            Log.d("MomProfileRepository", "- Raw body exists: ${response.raw().body != null}")
+
+            if (response.isSuccessful) {
+                Log.d("MomProfileRepository", "- Parsed body: ${response.body()}")
+            } else {
+                val errorBody = response.errorBody()?.string()
+                Log.d("MomProfileRepository", "- Error body: '$errorBody'")
+            }
+
+            response
+
+        } catch (e: Exception) {
+            Log.e("MomProfileRepository", "getCoupleDetailInfo() 예외 발생: ${e.javaClass.simpleName}: ${e.message}", e)
+            throw e
+        }
     }
 
     suspend fun getMomProfile(): MomProfile? {
@@ -50,7 +74,7 @@ class MomProfileRepository @Inject constructor(
             val couple = response.couple
             if (couple != null) {
                 Log.d(TAG, "Couple is not null")
-                Log.d(TAG, "Couple id: ${couple.id}")
+                Log.d(TAG, "Couple id: ${couple.coupleId}")
                 Log.d(TAG, "Couple userAId: ${couple.userAId}")
                 Log.d(TAG, "Couple userBId: ${couple.userBId}")
                 Log.d(TAG, "Couple pregnancyWeek: ${couple.pregnancyWeek}")
@@ -448,7 +472,7 @@ class MomProfileRepository @Inject constructor(
             Log.d(TAG, "Current user nickname: ${currentUser.nickname}")
             Log.d(TAG, "Current user gender: ${currentUser.gender}")
             Log.d(TAG, "Couple info: $couple")
-            Log.d(TAG, "Couple ID: ${couple.id}")
+            Log.d(TAG, "Couple ID: ${couple.coupleId}")
             Log.d(TAG, "Couple userAId: ${couple.userAId}")
             Log.d(TAG, "Couple userBId: ${couple.userBId}")
             Log.d(TAG, "=================================")

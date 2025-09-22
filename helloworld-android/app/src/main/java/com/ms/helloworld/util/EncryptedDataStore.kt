@@ -34,16 +34,36 @@ class EncryptedDataStore @Inject constructor(
     }
 
     // 액세스 토큰 조회
-    fun getAccessToken(): String? {
-        return runBlocking {
-            context.dataStore.data.first()[accessTokenKey]
-        }
+    suspend fun getAccessTokenSuspend(): String? {
+        return context.dataStore.data.first()[accessTokenKey]
     }
 
     // 리프레시 토큰 조회
+    suspend fun getRefreshTokenSuspend(): String? {
+        return context.dataStore.data.first()[refreshTokenKey]
+    }
+
+    fun getAccessToken(): String? {
+        return try {
+            runBlocking {
+                context.dataStore.data.first()[accessTokenKey]
+            }
+        } catch (e: Exception) {
+            // 로그 추가
+            android.util.Log.e("EncryptedDataStore", "액세스 토큰 조회 실패: ${e.message}")
+            null
+        }
+    }
+
     fun getRefreshToken(): String? {
-        return runBlocking {
-            context.dataStore.data.first()[refreshTokenKey]
+        return try {
+            runBlocking {
+                context.dataStore.data.first()[refreshTokenKey]
+            }
+        } catch (e: Exception) {
+            // 로그 추가
+            android.util.Log.e("EncryptedDataStore", "리프레시 토큰 조회 실패: ${e.message}")
+            null
         }
     }
 
@@ -52,6 +72,18 @@ class EncryptedDataStore @Inject constructor(
         context.dataStore.edit { preferences ->
             preferences.remove(accessTokenKey)
             preferences.remove(refreshTokenKey)
+        }
+    }
+
+    // 토큰 존재 여부 확인 (suspend 버전)
+    suspend fun hasTokens(): Boolean {
+        return try {
+            val prefs = context.dataStore.data.first()
+            val accessToken = prefs[accessTokenKey]
+            val refreshToken = prefs[refreshTokenKey]
+            !accessToken.isNullOrBlank() && !refreshToken.isNullOrBlank()
+        } catch (e: Exception) {
+            false
         }
     }
 }

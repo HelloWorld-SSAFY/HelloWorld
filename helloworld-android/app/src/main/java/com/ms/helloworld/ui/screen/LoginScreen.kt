@@ -95,6 +95,8 @@ fun LoginScreen(
                     colors = ButtonDefaults.outlinedButtonColors(
                         containerColor = Color.White,
                         contentColor = Color.Black,
+                        disabledContainerColor = Color.White,
+                        disabledContentColor = Color.Black.copy(alpha = 0.38f)
                     ),
                     border = androidx.compose.foundation.BorderStroke(
                         1.dp,
