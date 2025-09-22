@@ -14,15 +14,19 @@ from drf_spectacular.utils import (
 # ✅ 단일 소스: recommend_delivery 만 사용
 from api.models import RecommendationDelivery as RecommendDelivery
 
-# 공용 인증/헤더 유틸 재사용 (api/views.py의 상수/함수 그대로 사용)
+# 공용 인증/헤더 유틸 재사용
 from api.views import (
     _assert_app_token,
     _require_user_ref,           # ← 헤더(X-Couple-Id) 우선으로 user_ref 결정
     _access_token_from_request,  # ← 필요 시 액세스 토큰 조회
     APP_TOKEN_PARAM,
     COUPLE_ID_PARAM,             # ← Swagger에 X-Couple-Id 노출
-    ACCESS_TOKEN_PARAM,          # ← Swagger에 X-Access-Token 노출
+    ACCESS_TOKEN_PARAM,          # ← Swagger에 X-Access-Token 노출 (views.py에서 AUTH_HEADER_PARAM 별칭)
+    AUTH_HEADER_PARAM,           # ← 실제 Authorization 헤더 파라미터
 )
+
+# ✅ 로컬 별칭(views.py에 AUTHZ_PARAM이 없으므로 여기서 매핑)
+AUTHZ_PARAM = AUTH_HEADER_PARAM
 
 
 # ───────────── 유틸 ─────────────
@@ -32,14 +36,12 @@ def _first(*vals):
             return v
     return None
 
-
 def _enforce_ttl(qs, ttl_min: int | None) -> bool:
     if not ttl_min:
         return True
     edge = timezone.now() - timedelta(minutes=ttl_min)
     latest = qs.order_by("-created_at").values_list("created_at", flat=True).first()
     return bool(latest and latest >= edge)
-
 
 def _has_field(model_cls, name: str) -> bool:
     # Django 5 안전: concrete 필드만 검사
@@ -72,7 +74,6 @@ class DeliveryItem(serializers.Serializer):
     created_at = serializers.CharField()
     reason = serializers.CharField(required=False, allow_blank=True)
     meta = serializers.JSONField(required=False)
-
 
 class DeliveryOut(serializers.Serializer):
     ok = serializers.BooleanField()
@@ -190,9 +191,10 @@ class _RecommendDeliveryBase(APIView):
 
     @extend_schema(
         parameters=[
+            AUTHZ_PARAM,         # ← Authorization 헤더
             APP_TOKEN_PARAM,
-            COUPLE_ID_PARAM,      # ← 헤더로 user_ref 전달 가능(우선)
-            ACCESS_TOKEN_PARAM,   # ← 액세스 토큰 입력 칸(외부 호출용, 현재는 읽기만)
+            COUPLE_ID_PARAM,     # ← 헤더로 user_ref 전달 가능(우선)
+            ACCESS_TOKEN_PARAM,  # ← 외부 호출용 토큰 전달
             OpenApiParameter(
                 "user_ref", OpenApiTypes.STR, OpenApiParameter.QUERY, required=False,
                 description="유저 식별자. 헤더 X-Couple-Id가 있으면 그 값을 우선 사용합니다."
@@ -263,7 +265,7 @@ class _RecommendDeliveryBase(APIView):
         if not _enforce_ttl(qs, ttl_min):
             return Response({"ok": False, "error": "DELIVERY_EXPIRED", "category": self.CATEGORY}, status=404)
 
-        # 4) 정렬 (rank > created_at) — 필드 없으면 안전하게 fallback
+        # 4) 정렬 (rank > score > created_at) — 필드 없으면 안전하게 fallback
         if _has_field(RecommendDelivery, "rank"):
             order_by = ["rank", "-created_at"]
         elif _has_field(RecommendDelivery, "score"):
@@ -292,7 +294,6 @@ class MusicDeliveryView(_RecommendDeliveryBase):
     CATEGORY = "MUSIC"
     SERIALIZER_FN = staticmethod(_serialize_media_from_recommend)
 
-
 @extend_schema_view(
     get=extend_schema(summary="MEDITATION 전달물 조회", operation_id="getDeliveryMeditation")
 )
@@ -300,14 +301,12 @@ class MeditationDeliveryView(_RecommendDeliveryBase):
     CATEGORY = "MEDITATION"
     SERIALIZER_FN = staticmethod(_serialize_media_from_recommend)
 
-
 @extend_schema_view(
     get=extend_schema(summary="YOGA 전달물 조회", operation_id="getDeliveryYoga")
 )
 class YogaDeliveryView(_RecommendDeliveryBase):
     CATEGORY = "YOGA"
     SERIALIZER_FN = staticmethod(_serialize_media_from_recommend)
-
 
 @extend_schema_view(
     get=extend_schema(summary="OUTING 전달물 조회", operation_id="getDeliveryOuting")

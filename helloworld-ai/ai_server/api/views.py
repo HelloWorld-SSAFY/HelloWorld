@@ -84,15 +84,15 @@ def _user_ref_from_request(request: HttpRequest, fallback: Optional[str]) -> Opt
 def _access_token_from_request(request: HttpRequest) -> Optional[str]:
     """
     외부 API 호출에 사용할 액세스 토큰 추출.
-    - Swagger 가이드는 `Authentication: Bearer <token>` 사용
+    - Swagger/게이트웨이는 보통 'Authorization: Bearer <token>'을 사용
     - 서버는 Authorization/Authentication 둘 다 인식(+ 과거 호환 X-Access-Token)
     반환값은 'Bearer '를 뗀 순수 토큰 문자열.
     """
     raw = (
-        request.headers.get("Authentication")
-        or request.headers.get("Authorization")
-        or request.META.get("HTTP_AUTHENTICATION")
+        request.headers.get("Authorization")
+        or request.headers.get("Authentication")
         or request.META.get("HTTP_AUTHORIZATION")
+        or request.META.get("HTTP_AUTHENTICATION")
         or request.headers.get("X-Access-Token")               # backward compat
         or request.META.get("HTTP_X_ACCESS_TOKEN")             # backward compat
     )
@@ -185,11 +185,11 @@ COUPLE_ID_PARAM = OpenApiParameter(
     description="Gateway가 주입하는 커플 ID. 제공되면 user_ref로 사용합니다.",
 )
 AUTH_HEADER_PARAM = OpenApiParameter(
-    name="Authentication",
+    name="Authorization",
     type=OpenApiTypes.STR,
     location=OpenApiParameter.HEADER,
     required=False,
-    description="메인서버/게이트웨이 통과용 액세스 토큰. 예) **Bearer eyJ...**  (서버는 Authorization/Authentication 둘 다 인식)",
+    description="게이트웨이/메인서버 통과용 액세스 토큰. 예) **Bearer eyJ...**  (서버는 Authorization/Authentication/X-Access-Token 모두 인식)",
 )
 # Backward-compat for modules still importing ACCESS_TOKEN_PARAM
 ACCESS_TOKEN_PARAM = AUTH_HEADER_PARAM
@@ -1250,6 +1250,7 @@ class PlacesView(APIView):
             if callable(gw):
                 weather_kind, gate = gw(lat=d["lat"], lng=d["lng"])
             else:
+                # ✅ 오타 수정: dng -> lng
                 weather_kind, gate = gw.gate(lat=d["lat"], lng=d["lng"])
         except Exception:
             weather_kind, gate = "unknown", None
