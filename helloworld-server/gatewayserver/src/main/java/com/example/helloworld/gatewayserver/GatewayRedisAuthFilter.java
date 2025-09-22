@@ -54,12 +54,14 @@ public class GatewayRedisAuthFilter implements GlobalFilter {
         // Skip paths that don't require authentication
         for (String p : skipPaths) {
             if (matcher.match(p, path)) {
+                log.info("Path {} matches skip pattern {}", path, p);
                 return chain.filter(exchange);
             }
         }
 
         // Extract Bearer token
         String auth = exchange.getRequest().getHeaders().getFirst("Authorization");
+        log.info("Authorization header: {}", auth != null ? "present" : "missing");
         if (auth == null || !auth.startsWith("Bearer ")) {
             return unauthorized(exchange);
         }
@@ -70,21 +72,38 @@ public class GatewayRedisAuthFilter implements GlobalFilter {
         String blacklistKey = "blacklist:" + hash;
         String tokenKey = "token:" + hash;
 
-        // Check blacklist with proper error handling
-        return checkBlacklist(blacklistKey)
+        log.debug("Checking token hash: {}", hash);
+
+
+        // 1. 먼저 블랙리스트 확인
+        return redis.hasKey(blacklistKey)
+                .timeout(redisTimeout)
+                .onErrorResume(e -> {
+                    log.error("Redis error checking blacklist: {}", e.getMessage());
+                    return Mono.just(false);  // Redis 오류 시 계속 진행
+                })
                 .flatMap(blacklisted -> {
-                    if (blacklisted) {
-                        log.debug("Token {} is blacklisted", hash);
+                    if (Boolean.TRUE.equals(blacklisted)) {
+                        log.debug("Token is blacklisted: {}", hash);
                         return unauthorized(exchange);
                     }
-                    return authenticateToken(exchange, chain, tokenKey, hash);
-                })
-                .onErrorResume(e -> {
-                    log.error("Authentication filter error: {}", e.getMessage());
-                    if (e instanceof RedisException) {
-                        return serviceUnavailable(exchange);
-                    }
-                    return internalError(exchange);
+
+                    // 2. 토큰 데이터 조회
+                    return redis.opsForValue().get(tokenKey)
+                            .timeout(redisTimeout)
+                            .doOnNext(json -> {
+                                if (json != null) {
+                                    log.debug("Redis token data found: {}", json);
+                                } else {
+                                    log.warn("No token data in Redis for hash: {}", hash);
+                                }
+                            })
+                            .onErrorResume(e -> {
+                                log.error("Redis error fetching token: {}", e.getMessage());
+                                return Mono.empty();
+                            })
+                            .flatMap(json -> processTokenData(exchange, chain, json, hash))
+                            .switchIfEmpty(unauthorized(exchange));
                 });
     }
 
