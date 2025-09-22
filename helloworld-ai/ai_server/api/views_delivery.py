@@ -17,9 +17,11 @@ from api.models import RecommendationDelivery as RecommendDelivery
 # 공용 인증/헤더 유틸 재사용
 from api.views import (
     _assert_app_token,
-    _require_user_ref,          # ← 헤더(X-Couple-Id) 우선으로 user_ref 결정
+    _require_user_ref,           # ← 헤더(X-Couple-Id) 우선으로 user_ref 결정
+    _access_token_from_request,  # ← 필요 시 액세스 토큰 조회
     APP_TOKEN_PARAM,
-    COUPLE_ID_PARAM,            # ← Swagger에 X-Couple-Id 노출
+    COUPLE_ID_PARAM,             # ← Swagger에 X-Couple-Id 노출
+    ACCESS_TOKEN_PARAM,          # ← Swagger에 X-Access-Token 노출
 )
 
 
@@ -66,7 +68,7 @@ class DeliveryItem(serializers.Serializer):
     rank = serializers.IntegerField()
     score = serializers.FloatField(required=False, allow_null=True)
     created_at = serializers.CharField()
-    reason = serializers.CharField(required=False, allow_blank=True)  # ← reason 포함
+    reason = serializers.CharField(required=False, allow_blank=True)
     meta = serializers.JSONField(required=False)
 
 class DeliveryOut(serializers.Serializer):
@@ -186,7 +188,8 @@ class _RecommendDeliveryBase(APIView):
     @extend_schema(
         parameters=[
             APP_TOKEN_PARAM,
-            COUPLE_ID_PARAM,  # ← 헤더로 user_ref 전달 가능(우선)
+            COUPLE_ID_PARAM,      # ← 헤더로 user_ref 전달 가능(우선)
+            ACCESS_TOKEN_PARAM,   # ← 액세스 토큰 입력 칸
             OpenApiParameter(
                 "user_ref", OpenApiTypes.STR, OpenApiParameter.QUERY, required=False,
                 description="유저 식별자. 헤더 X-Couple-Id가 있으면 그 값을 우선 사용합니다."
@@ -217,6 +220,9 @@ class _RecommendDeliveryBase(APIView):
         bad = _assert_app_token(request)
         if bad:
             return bad
+
+        # 필요 시 외부 호출에 쓰려고 꺼내 두기(현재는 저장만)
+        _ = _access_token_from_request(request)
 
         # 헤더(X-Couple-Id) 우선 → 없으면 쿼리의 user_ref 사용
         user_ref_qs = request.query_params.get("user_ref")
