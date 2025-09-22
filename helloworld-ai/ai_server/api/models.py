@@ -1,6 +1,7 @@
 from __future__ import annotations
 import uuid
 from django.db import models
+from django.core.validators import MinValueValidator, MaxValueValidator
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -22,6 +23,7 @@ FEEDBACK_TYPE_CHOICES = (
 # ─────────────────────────────────────────────────────────────────────
 # 콘텐츠 (외부 제공자 매핑 + 금기/활성 여부)
 # 장소 추천 지원을 위해 type/lat/lng/tags/safety_flags 추가
+# + 추천 고도화를 위한 메타(길이/언어/보이스/채널품질/pre_score_base) 추가
 # ─────────────────────────────────────────────────────────────────────
 class Content(models.Model):
     provider = models.CharField(max_length=50, blank=True, default="")      # 예: "YOUTUBE" / "SPOTIFY" / "INAPP"
@@ -40,6 +42,21 @@ class Content(models.Model):
     tags = models.JSONField(null=True, blank=True)             # ["SHADE","STROLLER_OK"]
     safety_flags = models.JSONField(null=True, blank=True)     # ["RESTROOM_NEARBY"]
 
+    # ── 추천 메타(컨텍스트 부스트/품질) ───────────────────────────────
+    length_sec = models.IntegerField(null=True, blank=True, help_text="콘텐츠 길이(초)")
+    lang = models.CharField(max_length=10, blank=True, default="", help_text="ko/en 등")
+    voice_guided = models.BooleanField(null=True, blank=True, help_text="음성 가이드 여부")
+    channel_quality = models.FloatField(
+        null=True, blank=True,
+        validators=[MinValueValidator(0.0), MaxValueValidator(1.0)],
+        help_text="채널/제공자 품질(0~1)"
+    )
+    pre_score_base = models.FloatField(
+        null=True, blank=True,
+        validators=[MinValueValidator(0.0), MaxValueValidator(1.0)],
+        help_text="배치 산출 기본 품질 점수(0~1)"
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -50,6 +67,10 @@ class Content(models.Model):
             models.Index(fields=["lat", "lng"]),
             models.Index(fields=["category"]),
             models.Index(fields=["is_active"]),
+            # 추천 메타 인덱스
+            models.Index(fields=["lang"]),
+            models.Index(fields=["length_sec"]),
+            models.Index(fields=["voice_guided"]),
         ]
 
     def __str__(self) -> str:
@@ -98,7 +119,7 @@ class RecommendationSession(models.Model):
 class ExposureCandidate(models.Model):
     session = models.ForeignKey(RecommendationSession, on_delete=models.CASCADE, related_name="candidates")
     content = models.ForeignKey(Content, on_delete=models.CASCADE)
-    pre_score = models.FloatField(null=True, blank=True)
+    pre_score = models.FloatField(null=True, blank=True)  # 0~1 (없으면 0.5로 처리)
     chosen_flag = models.BooleanField(default=False)
     x_item_vec = models.JSONField(default=dict, blank=True)            # 임베딩/피처 등 (thumb_url 포함 가능)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -192,28 +213,67 @@ class Outcome(models.Model):
 
 # ─────────────────────────────────────────────────────────────────────
 # 개인화 통계(전역/유저) — Thompson Sampling / CTS 가중치에 사용
+#  - accepts/completes/effects_sum: 레거시/집계 호환 필드 유지
+#  - alpha/beta: Beta 분포 파라미터(보상 r∈[0,1] 에 따라 업데이트)
 # ─────────────────────────────────────────────────────────────────────
 class ContentStat(models.Model):
     content = models.OneToOneField(Content, on_delete=models.CASCADE, related_name="stat")
+    # 레거시 카운트(집계용)
     accepts = models.IntegerField(default=0)
     completes = models.IntegerField(default=0)
     effects_sum = models.FloatField(default=0.0)
+    # Thompson Sampling 파라미터(전역 prior)
+    alpha = models.FloatField(default=1.0, validators=[MinValueValidator(0.0)])
+    beta = models.FloatField(default=1.0, validators=[MinValueValidator(0.0)])
+
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = "content_stat"
-        indexes = [models.Index(fields=["updated_at"])]
+        indexes = [
+            models.Index(fields=["updated_at"]),
+        ]
 
     def __str__(self) -> str:
-        return f"ContentStat({self.content_id}) a={self.accepts} c={self.completes} e={self.effects_sum:.2f}"
+        return f"ContentStat({self.content_id}) a={self.accepts} c={self.completes} e={self.effects_sum:.2f} | α={self.alpha:.2f}, β={self.beta:.2f}"
+
+    # ---- 헬퍼: 보상 r∈[0,1]으로 Beta 업데이트 ----
+    def add_reward(self, r: float):
+        r = max(0.0, min(1.0, r if r is not None else 0.0))
+        self.alpha += r
+        self.beta += (1.0 - r)
+
+    # ---- 헬퍼: 기본 가중으로 r 계산 후 업데이트(옵션) ----
+    def apply_feedback(self, accept: bool = False, complete: bool = False, effect_value: float | None = None,
+                       w_accept: float = 0.6, w_complete: float = 0.2, w_effect: float = 0.2):
+        if accept:
+            self.accepts += 1
+        if complete:
+            self.completes += 1
+        if effect_value is not None:
+            # effect_value는 0~1 스케일 가정
+            v = max(0.0, min(1.0, effect_value))
+            self.effects_sum += v
+        else:
+            v = 0.0
+
+        r = (w_accept * (1.0 if accept else 0.0)) + (w_complete * (1.0 if complete else 0.0)) + (w_effect * v)
+        self.add_reward(r)
 
 
 class UserContentStat(models.Model):
     user_ref = models.CharField(max_length=64, db_index=True)
     content = models.ForeignKey(Content, on_delete=models.CASCADE, related_name="user_stats")
+
+    # 레거시 카운트(집계용)
     accepts = models.IntegerField(default=0)
     completes = models.IntegerField(default=0)
     effects_sum = models.FloatField(default=0.0)
+
+    # Thompson Sampling 파라미터(개인 prior)
+    alpha = models.FloatField(default=1.0, validators=[MinValueValidator(0.0)])
+    beta = models.FloatField(default=1.0, validators=[MinValueValidator(0.0)])
+
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -225,7 +285,27 @@ class UserContentStat(models.Model):
         ]
 
     def __str__(self) -> str:
-        return f"UserContentStat({self.user_ref}, {self.content_id})"
+        return f"UserContentStat({self.user_ref}, {self.content_id}) | α={self.alpha:.2f}, β={self.beta:.2f}"
+
+    def add_reward(self, r: float):
+        r = max(0.0, min(1.0, r if r is not None else 0.0))
+        self.alpha += r
+        self.beta += (1.0 - r)
+
+    def apply_feedback(self, accept: bool = False, complete: bool = False, effect_value: float | None = None,
+                       w_accept: float = 0.6, w_complete: float = 0.2, w_effect: float = 0.2):
+        if accept:
+            self.accepts += 1
+        if complete:
+            self.completes += 1
+        if effect_value is not None:
+            v = max(0.0, min(1.0, effect_value))
+            self.effects_sum += v
+        else:
+            v = 0.0
+
+        r = (w_accept * (1.0 if accept else 0.0)) + (w_complete * (1.0 if complete else 0.0)) + (w_effect * v)
+        self.add_reward(r)
 
 
 # ─────────────────────────────────────────────────────────────────────
