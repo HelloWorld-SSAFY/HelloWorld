@@ -1,112 +1,123 @@
 # services/steps_check.py
 from __future__ import annotations
-from dataclasses import dataclass
-from datetime import datetime, timezone, timedelta
-from typing import List, Optional
-from django.db import transaction
+import os, logging, requests
+from typing import Any, Dict, Tuple
+from datetime import timedelta
+from django.utils import timezone
 
-from services.anomaly import KST, bucket_index_4h  # 이미 있는 유틸 재사용
-from services.policy_service import categories_for_trigger  # DB 우선 + 폴백
-from api.models import (
-    RecommendationSession,
-    UserStepsTodStatsDaily,
-)
+log = logging.getLogger(__name__)
 
-EPS = 1e-6
+# ── ENV ──────────────────────────────────────────────────────────────────────
+MAIN_API_BASE    = os.getenv("MAIN_API_BASE", "").rstrip("/")
+MAIN_API_TOKEN   = os.getenv("MAIN_API_TOKEN")            # ex) Bearer 토큰
+MAIN_API_TIMEOUT = float(os.getenv("MAIN_API_TIMEOUT", "2.0"))
+DIFF_TH          = int(os.getenv("STEPS_DIFF_THRESHOLD", "500"))  # ← 500 고정 규칙
 
-@dataclass
-class StepsDecision:
+KST = timezone.get_fixed_timezone(9 * 60)
+
+def _main_headers() -> Dict[str, str]:
+    h = {"Accept": "application/json"}
+    if MAIN_API_TOKEN:
+        h["Authorization"] = f"Bearer {MAIN_API_TOKEN}"  # 필요 시 헤더명 교체
+    return h
+
+# ── 버킷 계산: 12/16/20시 ─────────────────────────────────────────────────────
+def pick_bucket_hms(ts_kst) -> str:
+    h = ts_kst.hour
+    if 12 <= h < 16: return "12:00:00"
+    if 16 <= h < 20: return "16:00:00"
+    return "20:00:00"
+
+# ── 메인서버 기준선 조회 ─────────────────────────────────────────────────────
+def _extract_baseline_from_payload(payload: Dict[str, Any], bucket_hms: str) -> float | None:
     """
-    steps-check 판단 전용 결과 객체.
-    - anomaly: 저활동 트리거 여부
-    - reasons: 판단 근거 메시지 배열
-    - session_id: (restrict일 때) 세션 UUID 문자열, 없으면 None
-    - categories: 모바일 힌트용 카테고리 배열 [{category, rank, reason}]
+    메인 응답의 키 형태가 달라도 최대한 유연하게 꺼내기.
+    기대 예시:
+      { "ok": true, "avg": {"00_12": 1800, "00_16": 3200, "00_20": 6500}, "until":"2025-09-21" }
+      혹은 { "ok": true, "baseline": 3200, "bucket": "16:00:00" }
     """
-    anomaly: bool
-    reasons: List[str]
-    session_id: Optional[str]
-    categories: List[dict]
+    # 1) 단일 baseline
+    if "baseline" in payload and payload["baseline"] is not None:
+        try:
+            return float(payload["baseline"])
+        except Exception:
+            pass
 
-def to_kst(dt: datetime) -> datetime:
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(KST)
+    # 2) avg/averages 딕셔너리에서 버킷 키 찾기
+    bucket_map = {
+        "12:00:00": ["00_12", "00-12", "12", "12:00:00"],
+        "16:00:00": ["00_16", "00-16", "16", "16:00:00"],
+        "20:00:00": ["00_20", "00-20", "20", "20:00:00"],
+    }
+    for key_group_name in ("avg", "averages", "data", "result"):
+        sub = payload.get(key_group_name)
+        if isinstance(sub, dict):
+            for k in bucket_map.get(bucket_hms, []):
+                if k in sub and sub[k] is not None:
+                    try:
+                        return float(sub[k])
+                    except Exception:
+                        continue
+    return None
 
-def _ensure_steps_session(user_ref: str, kst: datetime, bucket: int) -> RecommendationSession:
+def fetch_bucket_baseline_from_main(couple_id: int, bucket_hms: str) -> Tuple[float | None, Dict[str, Any]]:
     """
-    같은 날짜/버킷의 steps_low 세션을 재사용. 없으면 생성.
+    메인서버의 '동일 couple_id, 동시간대(버킷), 어제까지 누적 평균'을 조회.
+    실제 경로/쿼리는 메인서버 스펙에 맞추세요.
+    현재 가정: GET {MAIN_API_BASE}/api/steps/overall-cumulative-avg?coupleId=7
     """
-    with transaction.atomic():
-        sess = (RecommendationSession.objects
-                .filter(user_ref=user_ref, mode="restrict", trigger="steps_low")
-                .filter(context__kst_date=str(kst.date()), context__bucket=bucket)
-                .order_by("-created_at")
-                .first())
-        if sess:
-            return sess
-        return RecommendationSession.objects.create(
-            user_ref=user_ref,
-            trigger="steps_low",
-            mode="restrict",
-            context={"kst_date": str(kst.date()), "bucket": bucket, "reason": "steps_low"},
-        )
+    if not MAIN_API_BASE:
+        return None, {"error": "MAIN_API_BASE not set"}
 
-def _build_categories_for_steps_low() -> List[dict]:
+    url = f"{MAIN_API_BASE}/api/steps/overall-cumulative-avg"
+    params = {"coupleId": couple_id}
+
+    try:
+        r = requests.get(url, headers=_main_headers(), params=params, timeout=MAIN_API_TIMEOUT)
+        ctype = r.headers.get("content-type", "")
+        payload: Dict[str, Any] = r.json() if "application/json" in ctype else {}
+        baseline = None
+        if r.status_code == 200:
+            baseline = _extract_baseline_from_payload(payload, bucket_hms)
+        meta = {"status": r.status_code, "payload_keys": list(payload.keys()) if isinstance(payload, dict) else None}
+        if "until" in payload:  # 메인서버가 어제 날짜 반환 시
+            meta["until"] = payload["until"]
+        meta["bucket"] = bucket_hms
+        meta["endpoint"] = url
+        meta["params"] = params
+        return baseline, meta
+    except Exception as e:
+        log.warning("baseline fetch failed: %s", e)
+        return None, {"error": str(e), "bucket": bucket_hms}
+
+# ── 메인 로직: diff ≥ 500 이면 restrict ──────────────────────────────────────
+def decide_steps_status(cum_steps: int, baseline: float | None) -> tuple[str, Dict[str, Any]]:
     """
-    정책 테이블(services.policy_service)을 통해 steps_low 대응 카테고리 정렬.
-    폴백까지 고려하여 [{category, rank, reason}] 형태로 반환.
+    baseline 이 None 이면 보수적으로 normal.
+    baseline 이 있으면 (baseline - cum_steps) >= DIFF_TH 이면 restrict.
     """
-    policies = categories_for_trigger("steps_low") or []
-    out: List[dict] = []
-    # policies: [{"code": "OUTING", "priority": 1, ...}, ...] 형태 가정
-    # 모바일 힌트 스키마에 맞춰 변환
-    for i, p in enumerate(sorted(policies, key=lambda x: x.get("priority", 999)), start=1):
-        code = p.get("code") or p.get("category") or ""
-        if not code:
-            continue
-        out.append({"category": code, "rank": i, "reason": "steps low vs baseline"})
-    # 폴백(정책이 비어있다면 OUTING 한 개라도 제공)
-    if not out:
-        out = [{"category": "OUTING", "rank": 1, "reason": "steps low vs baseline"}]
-    return out
+    if baseline is None:
+        return "normal", {"reason": "no_baseline"}
 
-def decide_steps_low(user_ref: str, ts: datetime, cum_steps: int) -> StepsDecision:
+    diff = float(baseline) - float(cum_steps)
+    if diff >= DIFF_TH:
+        return "steps_low", {"diff": int(diff), "threshold": DIFF_TH, "rule": "abs_diff>=500"}
+    return "normal", {"diff": int(diff), "threshold": DIFF_TH, "rule": "abs_diff>=500"}
+
+# ── 엔트리: 뷰에서 호출 ──────────────────────────────────────────────────────
+def check_steps_low(couple_id: int, cum_steps: int, ts_kst) -> Dict[str, Any]:
     """
-    입력된 누적 걸음수(cum_steps)가 '동시간대 p20 미만' 혹은 'Z <= -1.0'이면 저활동으로 판정.
-    - 판정만 수행하며, 장소 추천 실행/저장은 상위(뷰) 레이어에서 처리.
+    return: { status, baseline, bucket, reasons(meta), decision, ts_kst_iso }
     """
-    kst = to_kst(ts)
-    b = bucket_index_4h(kst)  # 0..5
+    bucket = pick_bucket_hms(ts_kst)
+    baseline, main_meta = fetch_bucket_baseline_from_main(couple_id, bucket)
+    status, decision = decide_steps_status(cum_steps, baseline)
 
-    # 기준선: 오늘 우선, 없으면 최근일 한 건
-    qs = UserStepsTodStatsDaily.objects.filter(user_ref=user_ref, bucket=b)
-    base = qs.filter(d=kst.date()).first() or qs.order_by("-d").first()
-    if not base:
-        # 기준선 없으면 정상 취급
-        return StepsDecision(False, ["no_baseline"], None, [])
-
-    # Z와 p20 비교
-    z = (cum_steps - float(base.cum_mu or 0.0)) / max(float(base.cum_sigma or 0.0), EPS)
-    is_low = (z <= -1.0) or (cum_steps < (base.p20 or 0))
-
-    if not is_low:
-        return StepsDecision(False, [], None, [])
-
-    # 세션 확보(재사용 또는 생성)
-    sess = _ensure_steps_session(user_ref=user_ref, kst=kst, bucket=b)
-
-    # 카테고리 힌트(정책)
-    cats = _build_categories_for_steps_low()
-
-    reasons = [
-        f"cum_steps_z<={z:.2f} (bucket={b})",
-        f"cum_steps={cum_steps}, p20={base.p20}",
-    ]
-
-    return StepsDecision(
-        anomaly=True,
-        reasons=reasons,
-        session_id=str(sess.id),
-        categories=cats,
-    )
+    return {
+        "status": status,
+        "baseline": baseline,
+        "bucket": bucket,
+        "decision": decision,         # diff/threshold/rule or no_baseline
+        "main": main_meta,            # 메인 호출 메타
+        "ts_kst_iso": ts_kst.isoformat(),
+    }

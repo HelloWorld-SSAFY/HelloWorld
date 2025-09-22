@@ -9,10 +9,12 @@ from drf_spectacular.utils import extend_schema, inline_serializer
 from .views import (
     TelemetryView,
     FeedbackView,
-    StepsCheckView,
     PlacesView,     # ✅ 클래스 기반
     RecommendView,  # ✅ 추가
 )
+
+# ✅ StepsCheckView는 새 모듈에서 import
+from .views_steps_check import StepsCheckView
 
 # ⬇️ Delivery 전용 뷰(세션 내 N개 반환)
 from .views_delivery import (
