@@ -1,7 +1,6 @@
 package com.ms.helloworld.ui.screen
 
 import android.annotation.SuppressLint
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -15,10 +14,8 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -59,19 +56,14 @@ fun DiaryBoardScreen(
     diaryType: String, // "birth" 또는 "observation"
     day: Int
 ) {
-
-    val backgroundColor = Color(0xFFF5F5F5)
-    val title = if (diaryType == "birth") "출산일기" else "관찰일기"
-
-
-    // 샘플 데이터
-    val diaryData = remember {
-
     // HomeViewModel에서 실제 데이터 가져오기
     val homeViewModel: HomeViewModel = hiltViewModel()
     val momProfile by homeViewModel.momProfile.collectAsState()
     val menstrualDate by homeViewModel.menstrualDate.collectAsState()
     val currentPregnancyDay by homeViewModel.currentPregnancyDay.collectAsState()
+
+    val backgroundColor = Color(0xFFF5F5F5)
+    val title = if (diaryType == "birth") "출산일기" else "관찰일기"
 
     // 실제 임신 일수와 마지막 생리일 사용
     val actualPregnancyDay = if (currentPregnancyDay > 0) currentPregnancyDay else day
@@ -80,18 +72,11 @@ fun DiaryBoardScreen(
     // 현재 날짜 계산 (마지막 생리일 + day)
     val currentDate = try {
         val lmpDate = LocalDate.parse(actualMenstrualDate)
-        lmpDate.plusDays((actualPregnancyDay - 1).toLong()).format(DateTimeFormatter.ISO_LOCAL_DATE)
+        lmpDate.plusDays((actualPregnancyDay - 1).toLong())
+            .format(DateTimeFormatter.ISO_LOCAL_DATE)
     } catch (e: Exception) {
         LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
     }
-
-    // 디버깅용 로그
-    println("🐛 DiaryBoardScreen - pregnancyWeek: $pregnancyWeek, pregnancyDay: $pregnancyDay")
-    println("🐛 DiaryBoardScreen - 실제 데이터:")
-    println("  - actualPregnancyDay: $actualPregnancyDay")
-    println("  - actualMenstrualDate: $actualMenstrualDate")
-    println("  - currentDate: $currentDate")
-    println("  - momProfile.pregnancyWeek: ${momProfile.pregnancyWeek}")
 
     // 실제 데이터를 사용한 일기 데이터
     val diaryData = remember(currentDate, actualPregnancyDay) {
@@ -135,7 +120,7 @@ fun DiaryBoardScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { 
+                    IconButton(onClick = {
                         // 일기 수정 화면으로 이동
                         navController.navigate("diary_register/$diaryType/$day/true")
                     }) {
@@ -162,26 +147,26 @@ fun DiaryBoardScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-        // 사진 섹션
-        if (diaryData.photos.isNotEmpty()) {
+            // 사진 섹션
+            if (diaryData.photos.isNotEmpty()) {
+                item {
+                    PhotoSection(
+                        photos = diaryData.photos,
+                        onCharacterGenerateClick = {
+                            // 캐리커쳐 생성 화면으로 이동
+                            navController.navigate("character_generate")
+                        }
+                    )
+                }
+            }
+
+            // 텍스트 내용 섹션
             item {
-                PhotoSection(
-                    photos = diaryData.photos,
-                    onCharacterGenerateClick = {
-                        // 캐리커쳐 생성 화면으로 이동
-                        navController.navigate("character_generate")
-                    }
+                TextContentSection(
+                    title = diaryData.title,
+                    content = diaryData.content
                 )
             }
-        }
-
-        // 텍스트 내용 섹션
-        item {
-            TextContentSection(
-                title = diaryData.title,
-                content = diaryData.content
-            )
-        }
 
             // 하단 여백
             item {
