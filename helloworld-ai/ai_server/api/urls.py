@@ -5,14 +5,16 @@ from rest_framework.permissions import AllowAny
 from rest_framework import serializers
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema, inline_serializer
+from .views_debug import echo_headers
 
 from .views import (
     TelemetryView,
     FeedbackView,
     PlacesView,     # ✅ 클래스 기반
     RecommendView,  # ✅ 추가
-    echo_headers,
 )
+
+
 
 # ✅ StepsCheckView는 새 모듈에서 import
 from .views_steps_check import StepsCheckView
@@ -63,7 +65,7 @@ urlpatterns = [
     path("telemetry",    TelemetryView.as_view(),   name="telemetry"),
     path("feedback",     FeedbackView.as_view(),    name="feedback"),
     path("steps-check",  StepsCheckView.as_view(),  name="steps-check"),
-    path("places",       PlacesView.as_view(),      name="places"),
+    path("places",       PlacesView.as_view(),      name="places"), 
     path("recommend",    RecommendView.as_view(),   name="recommend"),
     path("healthz",      healthz,                   name="healthz"),
 
