@@ -84,160 +84,164 @@ fun DiaryScreen(
 
     // 실제 임신 정보 사용 (currentPregnancyDay를 우선 사용)
     val currentWeek = homeState?.let { profile ->
-        Log.d("DiaryScreen", "MomProfile 데이터: 주차=${profile.pregnancyWeek}, 기존currentDay=${profile.currentDay}, 닉네임=${profile.nickname}")
-
-    val homeState by actualHomeViewModel.momProfile.collectAsState()
-    val currentPregnancyDay by actualHomeViewModel.currentPregnancyDay.collectAsState()
-    val coupleId by actualHomeViewModel.coupleId.collectAsState()
-    val menstrualDate by actualHomeViewModel.menstrualDate.collectAsState()
-    val userId by actualHomeViewModel.userId.collectAsState()
-    val userGender by actualHomeViewModel.userGender.collectAsState()
-
-    // 현재 보여지는 주차를 별도로 관리
-    var viewingWeek by remember { mutableStateOf<Int?>(null) }
-
-    // 실제 임신 정보 사용 (currentPregnancyDay를 우선 사용)
-    val actualCurrentWeek = homeState?.let { profile ->
-        println("📊 DiaryScreen - MomProfile 데이터: 주차=${profile.pregnancyWeek}, 기존currentDay=${profile.currentDay}, 닉네임=${profile.nickname}")
-        println("📊 DiaryScreen - HomeViewModel currentPregnancyDay: ${currentPregnancyDay}")
-        println("📊 DiaryScreen - homeState 객체 해시: ${profile.hashCode()}")
-        PregnancyWeek(
-            week = profile.pregnancyWeek,
-            dayCount = currentPregnancyDay  // HomeViewModel의 정확한 계산값 사용
+        Log.d(
+            "DiaryScreen",
+            "MomProfile 데이터: 주차=${profile.pregnancyWeek}, 기존currentDay=${profile.currentDay}, 닉네임=${profile.nickname}"
         )
-    } ?: run {
-        PregnancyWeek(week = 1, dayCount = currentPregnancyDay)
-    }
 
-    // 표시할 주차 결정: viewingWeek가 설정되어 있으면 그것을 사용, 아니면 현재 주차
-    val displayWeek = if (viewingWeek != null) {
-        PregnancyWeek(week = viewingWeek!!, dayCount = currentPregnancyDay)
-    } else {
-        actualCurrentWeek
-    }
+        val homeState by homeViewModel.momProfile.collectAsState()
+        val currentPregnancyDay by homeViewModel.currentPregnancyDay.collectAsState()
+        val coupleId by homeViewModel.coupleId.collectAsState()
+        val menstrualDate by homeViewModel.menstrualDate.collectAsState()
+        val userId by homeViewModel.userId.collectAsState()
+        val userGender by homeViewModel.userGender.collectAsState()
 
-    // API에서 받은 주간 일기 상태를 기존 형식으로 변환
-    val weeklyDiaryStatus = state.weeklyDiaryStatus.map { weeklyStatus ->
-        DiaryStatus(
-            day = weeklyStatus.day,
-            momWritten = weeklyStatus.momWritten,
-            dadWritten = weeklyStatus.dadWritten
+        // 현재 보여지는 주차를 별도로 관리
+        var viewingWeek by remember { mutableStateOf<Int?>(null) }
+
+        // 실제 임신 정보 사용 (currentPregnancyDay를 우선 사용)
+        val actualCurrentWeek = homeState?.let { profile ->
+            println("📊 DiaryScreen - MomProfile 데이터: 주차=${profile.pregnancyWeek}, 기존currentDay=${profile.currentDay}, 닉네임=${profile.nickname}")
+            println("📊 DiaryScreen - HomeViewModel currentPregnancyDay: ${currentPregnancyDay}")
+            println("📊 DiaryScreen - homeState 객체 해시: ${profile.hashCode()}")
+            PregnancyWeek(
+                week = profile.pregnancyWeek,
+                dayCount = currentPregnancyDay  // HomeViewModel의 정확한 계산값 사용
+            )
+        } ?: run {
+            PregnancyWeek(week = 1, dayCount = currentPregnancyDay)
+        }
+
+        // 표시할 주차 결정: viewingWeek가 설정되어 있으면 그것을 사용, 아니면 현재 주차
+        val displayWeek = if (viewingWeek != null) {
+            PregnancyWeek(week = viewingWeek!!, dayCount = currentPregnancyDay)
+        } else {
+            actualCurrentWeek
+        }
+
+        // API에서 받은 주간 일기 상태를 기존 형식으로 변환
+        val weeklyDiaryStatus = state.weeklyDiaryStatus.map { weeklyStatus ->
+            DiaryStatus(
+                day = weeklyStatus.day,
+                momWritten = weeklyStatus.momWritten,
+                dadWritten = weeklyStatus.dadWritten
+            )
+        }.takeIf { it.isNotEmpty() } ?: listOf(
+            // 기본값 (로딩 중이거나 데이터 없을 때)
+            DiaryStatus(1, false, false),
+            DiaryStatus(2, false, false),
+            DiaryStatus(3, false, false),
+            DiaryStatus(4, false, false),
+            DiaryStatus(5, false, false),
+            DiaryStatus(6, false, false),
+            DiaryStatus(7, false, false)
         )
-    }.takeIf { it.isNotEmpty() } ?: listOf(
-        // 기본값 (로딩 중이거나 데이터 없을 때)
-        DiaryStatus(1, false, false),
-        DiaryStatus(2, false, false),
-        DiaryStatus(3, false, false),
-        DiaryStatus(4, false, false),
-        DiaryStatus(5, false, false),
-        DiaryStatus(6, false, false),
-        DiaryStatus(7, false, false)
-    )
 
-    // 산모 건강 데이터 (임시 - 추후 HealthData API와 연동)
-    val momHealthData = MomHealthData(
-        weight = 62f,
-        weightChange = 8f,
-        bloodPressureSystolic = 120,
-        bloodPressureDiastolic = 80,
-        bloodSugar = 95
-    )
+        // 산모 건강 데이터 (임시 - 추후 HealthData API와 연동)
+        val momHealthData = MomHealthData(
+            weight = 62f,
+            weightChange = 8f,
+            bloodPressureSystolic = 120,
+            bloodPressureDiastolic = 80,
+            bloodSugar = 95
+        )
 
-    // HomeViewModel의 실제 데이터를 DiaryViewModel에 전달
-    LaunchedEffect(menstrualDate) {
-        val actualMenstrualDate = menstrualDate
-        if (actualMenstrualDate != null) {
-            viewModel.setLmpDate(actualMenstrualDate)
-        }
-    }
-
-    // 사용자 정보를 DiaryViewModel에 전달
-    LaunchedEffect(userId, userGender) {
-        if (userId != null && userGender != null) {
-            println("👤 DiaryScreen - DiaryViewModel에 사용자 정보 전달: userId=$userId, userGender=$userGender")
-            viewModel.setUserInfo(userId, userGender)
-
-            // 사용자 정보가 업데이트되면 기존 데이터를 다시 처리
-            homeState?.let { profile ->
-                println("🔄 DiaryScreen - 사용자 정보 업데이트 후 주간 일기 재로딩")
-                viewModel.loadWeeklyDiaries(profile.pregnancyWeek)
-            }
-        }
-    }
-
-    // HomeViewModel에서 임신 주차가 업데이트될 때 DiaryViewModel 새로고침
-    LaunchedEffect(homeState?.pregnancyWeek, menstrualDate) {
-        homeState?.let { profile ->
+        // HomeViewModel의 실제 데이터를 DiaryViewModel에 전달
+        LaunchedEffect(menstrualDate) {
             val actualMenstrualDate = menstrualDate
             if (actualMenstrualDate != null) {
                 viewModel.setLmpDate(actualMenstrualDate)
-                viewModel.loadWeeklyDiaries(profile.pregnancyWeek)
             }
         }
-    }
 
-    Column(
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        CustomTopAppBar(
-            title = "${actualCurrentWeek.week}주차 (${actualCurrentWeek.dayCount}일째)",
-            navController = navController
-        )
+        // 사용자 정보를 DiaryViewModel에 전달
+        LaunchedEffect(userId, userGender) {
+            if (userId != null && userGender != null) {
+                println("👤 DiaryScreen - DiaryViewModel에 사용자 정보 전달: userId=$userId, userGender=$userGender")
+                viewModel.setUserInfo(userId, userGender)
+
+                // 사용자 정보가 업데이트되면 기존 데이터를 다시 처리
+                homeState?.let { profile ->
+                    println("🔄 DiaryScreen - 사용자 정보 업데이트 후 주간 일기 재로딩")
+                    viewModel.loadWeeklyDiaries(profile.pregnancyWeek)
+                }
+            }
+        }
+
+        // HomeViewModel에서 임신 주차가 업데이트될 때 DiaryViewModel 새로고침
+        LaunchedEffect(homeState?.pregnancyWeek, menstrualDate) {
+            homeState?.let { profile ->
+                val actualMenstrualDate = menstrualDate
+                if (actualMenstrualDate != null) {
+                    viewModel.setLmpDate(actualMenstrualDate)
+                    viewModel.loadWeeklyDiaries(profile.pregnancyWeek)
+                }
+            }
+        }
 
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(backgroundColor)
-                .verticalScroll(rememberScrollState())
-                .padding(start = 16.dp, end = 16.dp),
+            modifier = Modifier.fillMaxWidth()
         ) {
+            CustomTopAppBar(
+                title = "${actualCurrentWeek.week}주차 (${actualCurrentWeek.dayCount}일째)",
+                navController = navController
+            )
 
-            // 주차 네비게이션 헤더
-            WeekNavigationHeader(
-                currentWeek = displayWeek,
-                actualCurrentWeek = actualCurrentWeek.week,
-                onPreviousWeek = {
-                    if (displayWeek.week > 1) {
-                        viewingWeek = displayWeek.week - 1
-                        println("📅 DiaryScreen - 이전 주차로 이동: ${displayWeek.week - 1}주차")
-                        viewModel.loadWeeklyDiaries(displayWeek.week - 1)
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(backgroundColor)
+                    .verticalScroll(rememberScrollState())
+                    .padding(start = 16.dp, end = 16.dp),
+            ) {
+
+                // 주차 네비게이션 헤더
+                WeekNavigationHeader(
+                    currentWeek = displayWeek,
+                    actualCurrentWeek = actualCurrentWeek.week,
+                    onPreviousWeek = {
+                        if (displayWeek.week > 1) {
+                            viewingWeek = displayWeek.week - 1
+                            println("📅 DiaryScreen - 이전 주차로 이동: ${displayWeek.week - 1}주차")
+                            viewModel.loadWeeklyDiaries(displayWeek.week - 1)
+                        }
+                    },
+                    onNextWeek = {
+                        if (displayWeek.week < actualCurrentWeek.week) {
+                            viewingWeek = displayWeek.week + 1
+                            println("📅 DiaryScreen - 다음 주차로 이동: ${displayWeek.week + 1}주차")
+                            viewModel.loadWeeklyDiaries(displayWeek.week + 1)
+                        }
+                    },
+                    onCurrentWeek = {
+                        viewingWeek = null
+                        println("📅 DiaryScreen - 현재 주차로 돌아가기: ${actualCurrentWeek.week}주차")
+                        viewModel.loadWeeklyDiaries(actualCurrentWeek.week)
                     }
-                },
-                onNextWeek = {
-                    if (displayWeek.week < actualCurrentWeek.week) {
-                        viewingWeek = displayWeek.week + 1
-                        println("📅 DiaryScreen - 다음 주차로 이동: ${displayWeek.week + 1}주차")
-                        viewModel.loadWeeklyDiaries(displayWeek.week + 1)
+                )
+
+                // 일주일 일기 체크 카드
+                WeeklyDiaryCard(
+                    weeklyStatus = weeklyDiaryStatus,
+                    onDayClick = { dayInWeek ->
+                        // 표시 중인 주차의 일수를 실제 임신 일수로 변환
+                        val actualDay = (displayWeek.week - 1) * 7 + dayInWeek
+                        println("🔗 DiaryScreen - 네비게이션: ${displayWeek.week}주차 dayInWeek=$dayInWeek -> actualDay=$actualDay")
+                        navController.navigate("diary_detail/$actualDay")
                     }
-                },
-                onCurrentWeek = {
-                    viewingWeek = null
-                    println("📅 DiaryScreen - 현재 주차로 돌아가기: ${actualCurrentWeek.week}주차")
-                    viewModel.loadWeeklyDiaries(actualCurrentWeek.week)
-                }
-            )
+                )
 
-            // 일주일 일기 체크 카드
-            WeeklyDiaryCard(
-                weeklyStatus = weeklyDiaryStatus,
-                onDayClick = { dayInWeek ->
-                    // 표시 중인 주차의 일수를 실제 임신 일수로 변환
-                    val actualDay = (displayWeek.week - 1) * 7 + dayInWeek
-                    println("🔗 DiaryScreen - 네비게이션: ${displayWeek.week}주차 dayInWeek=$dayInWeek -> actualDay=$actualDay")
-                    navController.navigate("diary_detail/$actualDay")
-                }
-            )
+                Spacer(modifier = Modifier.height(16.dp))
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // 산모 데이터 요약 카드
-            MomDataSummaryCard(
-                momHealthData = momHealthData,
-                onCardClick = {
-                    // HealthStatusScreen으로 이동
-                    navController.navigate("health_status")
-                }
-            )
+                // 산모 데이터 요약 카드
+                MomDataSummaryCard(
+                    momHealthData = momHealthData,
+                    onCardClick = {
+                        // HealthStatusScreen으로 이동
+                        navController.navigate("health_status")
+                    }
+                )
+            }
         }
     }
 }
