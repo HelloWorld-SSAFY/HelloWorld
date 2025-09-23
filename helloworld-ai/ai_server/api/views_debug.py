@@ -13,7 +13,7 @@ def echo_headers(request):
 from rest_framework.decorators import api_view, permission_classes, authentication_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.authentication import get_authorization_header  # 필요없지만 예시용
-from ai_server.settings import GatewayInternalAuth  # settings에 정의한 클래스 임포트
+from api.auth_internal import GatewayInternalAuth
 
 @api_view(["GET"])
 @authentication_classes([GatewayInternalAuth])   # 여기가 핵심: 내부 헤더 인증을 강제

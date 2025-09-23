@@ -170,6 +170,7 @@ REST_FRAMEWORK = {
 
     # ★ 전역: 모든 요청은 Bearer Access Token 필수
     "DEFAULT_AUTHENTICATION_CLASSES": (
+        "api.auth_internal.GatewayInternalAuth",
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": (
@@ -222,3 +223,6 @@ SPECTACULAR_SETTINGS = {
 
 # 게이트웨이 베이스 경로는 미들웨어에서 처리(기본 "/ai"). 필요 시 환경변수로 조정 가능.
 # BASE_PATH_PREFIX = os.getenv("BASE_PATH_PREFIX", "/ai")
+
+GATEWAY_HMAC_SECRET = os.getenv("GATEWAY_HMAC_SECRET", "").encode("utf-8")
+INTERNAL_SKEW_SECONDS = int(os.getenv("INTERNAL_SKEW_SECONDS", "300"))
