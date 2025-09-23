@@ -1,6 +1,7 @@
 package com.ms.helloworld.ui.screen
 
 import android.annotation.SuppressLint
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -20,14 +21,19 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
+import com.ms.helloworld.viewmodel.HealthViewModel
+import java.math.BigDecimal
 
 @SuppressLint("NewApi")
 @Composable
 fun HealthRegisterScreen(
-    navController: NavHostController
+    navController: NavHostController,
+    viewModel: HealthViewModel = hiltViewModel()
 ) {
     val backgroundColor = Color(0xFFF5F5F5)
+    val state by viewModel.state.collectAsState()
 
     // 입력 상태들
     var weight by remember { mutableStateOf("") }
@@ -99,14 +105,17 @@ fun HealthRegisterScreen(
                 onClick = {
                     // 데이터 저장 로직
                     saveHealthData(
-                        weight = weight.toFloatOrNull(),
-                        systolicBP = systolicBP.toFloatOrNull(),
-                        diastolicBP = diastolicBP.toFloatOrNull(),
-                        bloodSugar = bloodSugar.toFloatOrNull()
+                        viewModel = viewModel,
+                        weight = weight,
+                        systolicBP = systolicBP,
+                        diastolicBP = diastolicBP,
+                        bloodSugar = bloodSugar,
+                        onSuccess = {
+                            navController.popBackStack()
+                        }
                     )
-                    navController.popBackStack()
                 },
-                enabled = isFormValid(weight, systolicBP, diastolicBP, bloodSugar)
+                enabled = isFormValid(weight, systolicBP, diastolicBP, bloodSugar) && !state.isLoading
             )
         }
     }
@@ -280,19 +289,60 @@ fun isFormValid(
             bloodSugar.isNotBlank()
 }
 
+private const val TAG = "HealthRegisterScreen"
+
 fun saveHealthData(
-    weight: Float?,
-    systolicBP: Float?,
-    diastolicBP: Float?,
-    bloodSugar: Float?
+    viewModel: HealthViewModel,
+    weight: String,
+    systolicBP: String,
+    diastolicBP: String,
+    bloodSugar: String,
+    onSuccess: () -> Unit = {}
 ) {
-    // 실제 구현에서는 Repository나 ViewModel을 통해 데이터 저장
-    println("Saving health data:")
-    weight?.let { println("Weight: $it kg") }
-    if (systolicBP != null && diastolicBP != null) {
-        println("Blood Pressure: $systolicBP/$diastolicBP mmHg")
+    Log.d(TAG, "건강 데이터 저장 시작")
+
+    try {
+        // 입력값 변환 및 기본값 설정
+        val weightValue = if (weight.isNotBlank()) {
+            BigDecimal(weight)
+        } else {
+            BigDecimal.ZERO
+        }
+
+        val systolicValue = if (systolicBP.isNotBlank()) {
+            systolicBP.toInt()
+        } else {
+            0
+        }
+
+        val diastolicValue = if (diastolicBP.isNotBlank()) {
+            diastolicBP.toInt()
+        } else {
+            0
+        }
+
+        val bloodSugarValue = if (bloodSugar.isNotBlank()) {
+            bloodSugar.toInt()
+        } else {
+            0
+        }
+
+        Log.d(TAG, "변환된 데이터: 체중=$weightValue, 혈압=$systolicValue/$diastolicValue, 혈당=$bloodSugarValue")
+
+        // ViewModel을 통해 서버에 데이터 저장
+        viewModel.createHealthRecord(
+            weight = weightValue,
+            maxBloodPressure = systolicValue,
+            minBloodPressure = diastolicValue,
+            bloodSugar = bloodSugarValue,
+            onSuccess = onSuccess
+        )
+
+        Log.d(TAG, "건강 데이터 저장 요청 완료")
+
+    } catch (e: Exception) {
+        Log.e(TAG, "건강 데이터 저장 실패: ${e.message}", e)
     }
-    bloodSugar?.let { println("Blood Sugar: $it mg/dL") }
 }
 
 @Preview(showBackground = true)
