@@ -21,6 +21,7 @@ class FcmRepository @Inject constructor(
                 val t = token ?: FirebaseMessaging.getInstance().token.await()
                 val fcmTokenRequest = FcmRegisterRequest(t, platform)
 
+                Log.d("FCM", "토큰 등록 API 호출 : $token")
                 val res = api.registerFcmToken(fcmTokenRequest)
                 if (res.isSuccessful) {
                     Log.i("FCM", "토큰 등록 성공")

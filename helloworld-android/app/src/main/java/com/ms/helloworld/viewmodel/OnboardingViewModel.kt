@@ -115,12 +115,12 @@ class OnboardingViewModel @Inject constructor(
                 val dueDate = menstrualDate.plusDays(280)
                 val dueDateString = dueDate.format(DateTimeFormatter.ISO_LOCAL_DATE)
 
-                println("📅 임신 정보 계산 (네겔레 법칙):")
-                println("  - 마지막 생리일: $menstrualDate")
-                println("  - 오늘: $today")
-                println("  - 경과 일수: ${daysSinceLastPeriod}일")
-                println("  - 계산된 예정일: $dueDate (생리일 + 280일)")
-                println("  - 임신 주차: ${calculatedWeek}주 (${daysSinceLastPeriod}일 ÷ 7 + 1)")
+//                println("임신 정보 계산 (네겔레 법칙):")
+//                println("  - 마지막 생리일: $menstrualDate")
+//                println("  - 오늘: $today")
+//                println("  - 경과 일수: ${daysSinceLastPeriod}일")
+//                println("  - 계산된 예정일: $dueDate (생리일 + 280일)")
+//                println("  - 임신 주차: ${calculatedWeek}주 (${daysSinceLastPeriod}일 ÷ 7 + 1)")
 
                 _state.value = _state.value.copy(
                     calculatedPregnancyWeek = calculatedWeek,
@@ -153,21 +153,20 @@ class OnboardingViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 // 현재 사용자 정보 확인
-                println("🔍 OnboardingViewModel - 초대 코드 검증 전 사용자 정보 확인")
                 try {
                     val userInfo = momProfileRepository.getUserInfo()
-                    println("👤 현재 사용자 정보:")
-                    println("  - ID: ${userInfo.member.id}")
-                    println("  - 성별: ${userInfo.member.gender}")
-                    println("  - 닉네임: ${userInfo.member.nickname}")
-                    println("  - 현재 커플 상태: ${if (userInfo.couple != null) "커플 있음" else "커플 없음"}")
+//                    println("👤 현재 사용자 정보:")
+//                    println("  - ID: ${userInfo.member.id}")
+//                    println("  - 성별: ${userInfo.member.gender}")
+//                    println("  - 닉네임: ${userInfo.member.nickname}")
+//                    println("  - 현재 커플 상태: ${if (userInfo.couple != null) "커플 있음" else "커플 없음"}")
                     if (userInfo.couple != null) {
-                        println("  - 커플 ID: ${userInfo.couple?.coupleId}")
-                        println("  - userAId: ${userInfo.couple?.userAId}")
-                        println("  - userBId: ${userInfo.couple?.userBId}")
+//                        println("  - 커플 ID: ${userInfo.couple?.coupleId}")
+//                        println("  - userAId: ${userInfo.couple?.userAId}")
+//                        println("  - userBId: ${userInfo.couple?.userBId}")
                     }
                 } catch (e: Exception) {
-                    println("❌ 사용자 정보 조회 실패: ${e.message}")
+                    println("사용자 정보 조회 실패: ${e.message}")
                 }
 
                 _state.value = _state.value.copy(
@@ -182,7 +181,7 @@ class OnboardingViewModel @Inject constructor(
                         isInviteCodeValid = true,
                         inviteCodeError = null
                     )
-                    println("✅ 초대 코드 검증 성공")
+//                    println("✅ 초대 코드 검증 성공")
                 } else {
                     _state.value = _state.value.copy(
                         isValidatingInviteCode = false,
@@ -233,10 +232,10 @@ class OnboardingViewModel @Inject constructor(
                 age = currentState.age.toInt()
             )
 
-            println("💾 기본 정보 저장:")
-            println("  - nickname: ${request.nickname}")
-            println("  - gender: ${request.gender}")
-            println("  - age: ${request.age}")
+//            println("💾 기본 정보 저장:")
+//            println("  - nickname: ${request.nickname}")
+//            println("  - gender: ${request.gender}")
+//            println("  - age: ${request.age}")
 
             val result = momProfileRepository.registerUser(request)
             if (result != null) {
@@ -244,7 +243,7 @@ class OnboardingViewModel @Inject constructor(
                     isLoading = false,
                     errorMessage = null
                 )
-                println("✅ 기본 정보 저장 성공")
+//                println("✅ 기본 정보 저장 성공")
                 true
             } else {
                 _state.value = _state.value.copy(
@@ -281,11 +280,11 @@ class OnboardingViewModel @Inject constructor(
                 is_childbirth = currentState.isChildbirth
             )
 
-            println("💾 커플 정보 저장:")
-            println("  - pregnancyWeek: ${coupleUpdateRequest.pregnancyWeek}")
-            println("  - due_date: ${coupleUpdateRequest.due_date}")
-            println("  - menstrual_date: ${coupleUpdateRequest.menstrual_date}")
-            println("  - is_childbirth: ${coupleUpdateRequest.is_childbirth}")
+//            println("💾 커플 정보 저장:")
+//            println("  - pregnancyWeek: ${coupleUpdateRequest.pregnancyWeek}")
+//            println("  - due_date: ${coupleUpdateRequest.due_date}")
+//            println("  - menstrual_date: ${coupleUpdateRequest.menstrual_date}")
+//            println("  - is_childbirth: ${coupleUpdateRequest.is_childbirth}")
 
             val result = momProfileRepository.updateCoupleInfo(coupleUpdateRequest)
             if (result != null) {
@@ -293,7 +292,7 @@ class OnboardingViewModel @Inject constructor(
                     isLoading = false,
                     errorMessage = null
                 )
-                println("✅ 커플 정보 저장 성공")
+//                println("✅ 커플 정보 저장 성공")
                 true
             } else {
                 _state.value = _state.value.copy(
@@ -321,7 +320,6 @@ class OnboardingViewModel @Inject constructor(
                 when (currentState.selectedGender) {
                     "엄마" -> {
                         // 엄마: 커플 테이블 생성 및 정보 저장
-                        println("👩 엄마 커플 생성 시작")
 
                         val coupleCreateRequest = CoupleCreateRequest(
                             pregnancyWeek = if (currentState.calculatedPregnancyWeek > 0) currentState.calculatedPregnancyWeek else null,
@@ -331,12 +329,12 @@ class OnboardingViewModel @Inject constructor(
                             is_childbirth = currentState.isChildbirth
                         )
 
-                        println("💾 백엔드로 전송할 couple 데이터:")
-                        println("  - pregnancyWeek: ${coupleCreateRequest.pregnancyWeek}")
-                        println("  - due_date: ${coupleCreateRequest.due_date}")
-                        println("  - menstrual_date: ${coupleCreateRequest.menstrual_date}")
-                        println("  - menstrual_cycle: ${coupleCreateRequest.menstrual_cycle}")
-                        println("  - is_childbirth: ${coupleCreateRequest.is_childbirth}")
+//                        println("💾 백엔드로 전송할 couple 데이터:")
+//                        println("  - pregnancyWeek: ${coupleCreateRequest.pregnancyWeek}")
+//                        println("  - due_date: ${coupleCreateRequest.due_date}")
+//                        println("  - menstrual_date: ${coupleCreateRequest.menstrual_date}")
+//                        println("  - menstrual_cycle: ${coupleCreateRequest.menstrual_cycle}")
+//                        println("  - is_childbirth: ${coupleCreateRequest.is_childbirth}")
 
                         val result = momProfileRepository.createCouple(coupleCreateRequest)
                         if (result != null) {
@@ -344,7 +342,6 @@ class OnboardingViewModel @Inject constructor(
                                 isLoading = false,
                                 submitSuccess = true
                             )
-                            println("✅ 엄마 커플 생성 완료")
                         } else {
                             _state.value = _state.value.copy(
                                 isLoading = false,
@@ -354,14 +351,12 @@ class OnboardingViewModel @Inject constructor(
                     }
                     "아빠" -> {
                         // 아빠: 초대코드 검증만 확인 (기본 정보는 이미 저장됨)
-                        println("👨 아빠 온보딩 완료 - 초대코드로 couple 연결 완료")
 
                         if (currentState.isInviteCodeValid) {
                             _state.value = _state.value.copy(
                                 isLoading = false,
                                 submitSuccess = true
                             )
-                            println("✅ 아빠 온보딩 완료")
                         } else {
                             _state.value = _state.value.copy(
                                 isLoading = false,
@@ -391,20 +386,19 @@ class OnboardingViewModel @Inject constructor(
 
     suspend fun checkAndResumeOnboarding(): OnboardingCheckResult {
         return try {
-            println("🔍 온보딩 상태 체크 시작")
             val result = momProfileRepository.checkOnboardingStatus()
 
             when (result.status) {
                 OnboardingStatus.BASIC_COMPLETED -> {
                     // 기존 사용자 정보로 상태 초기화
                     initializeFromExistingData(result)
-                    println("📝 기존 정보로 상태 초기화 완료")
+//                    println("📝 기존 정보로 상태 초기화 완료")
                 }
                 OnboardingStatus.FULLY_COMPLETED -> {
-                    println("✅ 온보딩 이미 완료됨")
+//                    println("✅ 온보딩 이미 완료됨")
                 }
                 OnboardingStatus.NOT_STARTED -> {
-                    println("🆕 새로운 사용자 - 처음부터 시작")
+//                    println("🆕 새로운 사용자 - 처음부터 시작")
                 }
             }
 
@@ -446,10 +440,10 @@ class OnboardingViewModel @Inject constructor(
                 dueDate = couple?.dueDate ?: ""
             )
 
-            println("📋 기존 데이터로 상태 초기화:")
-            println("  - nickname: $nickname")
-            println("  - gender: $genderText")
-            println("  - age: ${member.age}")
+//            println("📋 기존 데이터로 상태 초기화:")
+//            println("  - nickname: $nickname")
+//            println("  - gender: $genderText")
+//            println("  - age: ${member.age}")
 
         } catch (e: Exception) {
             println("❌ 기존 데이터 초기화 실패: ${e.message}")

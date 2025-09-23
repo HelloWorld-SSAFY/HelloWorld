@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.google.android.gms.wearable.PutDataMapRequest
 import com.google.android.gms.wearable.Wearable
 import com.ms.helloworld.repository.AuthRepository
+import com.ms.helloworld.repository.FcmRepository
 import com.ms.helloworld.repository.MomProfileRepository
 import com.ms.helloworld.util.TokenManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -22,7 +23,8 @@ import javax.inject.Inject
 class SplashViewModel @Inject constructor(
     private val tokenManager: TokenManager,
     private val authRepository: AuthRepository,
-    private val momProfileRepository: MomProfileRepository
+    private val momProfileRepository: MomProfileRepository,
+    private val fcmRepository: FcmRepository
 ) : ViewModel() {
 
     sealed class UiState {
@@ -43,6 +45,8 @@ class SplashViewModel @Inject constructor(
         private const val ACCESS_TOKEN_KEY = "access_token"
         private const val REFRESH_TOKEN_KEY = "refresh_token"
         private const val TIMESTAMP_KEY = "timestamp"
+        private const val FCM_PREFS = "fcm_prefs"
+        private const val FCM_TOKEN_KEY = "fcm_token"
     }
 
     fun autoLogin(context: Context) {
@@ -100,12 +104,19 @@ class SplashViewModel @Inject constructor(
                     if (coupleId != null && coupleId > 0) {
                         Log.d(TAG, "커플 ID 있음 -> 홈 화면으로")
 
-                        // 워치로 토큰 전송 (선택사항)
+                        // 자동 로그인 성공 시 FCM 토큰 등록
+                        registerStoredFcmToken(context)
+
+                        // 워치로 토큰 전송
                         sendCurrentTokensToWearOS(context)
 
                         UiState.GoHome
                     } else {
                         Log.d(TAG, "커플 ID 없음 -> 온보딩 화면으로")
+
+                        // 온보딩으로 가는 경우에도 FCM 토큰 등록
+                        registerStoredFcmToken(context)
+
                         UiState.GoOnboarding
                     }
                 }
@@ -113,6 +124,10 @@ class SplashViewModel @Inject constructor(
                 response.code() == 404 -> {
                     // 커플 정보가 아직 없음 (정상적인 상황)
                     Log.d(TAG, "커플 정보 없음 (404) -> 온보딩 화면으로")
+
+                    // 404인 경우에도 FCM 토큰 등록 (로그인은 성공한 상태)
+                    registerStoredFcmToken(context)
+
                     UiState.GoOnboarding
                 }
 
@@ -139,6 +154,56 @@ class SplashViewModel @Inject constructor(
                 UiState.GoOnboarding
             }
         }
+    }
+
+    /**
+     * 자동 로그인 성공 시 저장된 FCM 토큰을 서버에 등록
+     */
+    private fun registerStoredFcmToken(context: Context) {
+        viewModelScope.launch {
+            try {
+                val sharedPrefs = context.getSharedPreferences(FCM_PREFS, Context.MODE_PRIVATE)
+                val storedToken = sharedPrefs.getString(FCM_TOKEN_KEY, null)
+
+                if (storedToken != null) {
+                    Log.d(TAG, "자동 로그인 후 저장된 FCM 토큰 등록 시도")
+                    fcmRepository.registerTokenAsync(
+                        token = storedToken,
+                        platform = com.ms.helloworld.dto.request.Platforms.ANDROID
+                    )
+                    Log.d(TAG, "FCM 토큰 등록 완료")
+                } else {
+                    Log.d(TAG, "저장된 FCM 토큰 없음, 현재 토큰 가져와서 등록")
+                    registerCurrentFcmToken()
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "FCM 토큰 등록 실패: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * 현재 FCM 토큰을 가져와서 등록
+     */
+    private fun registerCurrentFcmToken() {
+        com.google.firebase.messaging.FirebaseMessaging.getInstance().token
+            .addOnSuccessListener { token ->
+                viewModelScope.launch {
+                    try {
+                        Log.d(TAG, "자동 로그인 후 현재 FCM 토큰 등록 시도")
+                        fcmRepository.registerTokenAsync(
+                            token = token,
+                            platform = com.ms.helloworld.dto.request.Platforms.ANDROID
+                        )
+                        Log.d(TAG, "현재 FCM 토큰 등록 완료")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "현재 FCM 토큰 등록 실패: ${e.message}")
+                    }
+                }
+            }
+            .addOnFailureListener { e ->
+                Log.w(TAG, "FCM 토큰 가져오기 실패: ${e.message}")
+            }
     }
 
     // 토큰 갱신이 필요한 경우 처리 (선택사항)
@@ -220,7 +285,7 @@ class SplashViewModel @Inject constructor(
 
     private suspend fun sendTokenToWearOS(context: Context, accessToken: String, refreshToken: String) {
         try {
-            Log.d(TAG, "워치로 토큰 전송 시작...")
+            Log.d(TAG, "워치로 토큰 전송 시작")
             val dataClient = Wearable.getDataClient(context)
             val nodeClient = Wearable.getNodeClient(context)
 

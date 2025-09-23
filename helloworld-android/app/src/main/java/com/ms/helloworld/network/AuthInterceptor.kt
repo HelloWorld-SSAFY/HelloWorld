@@ -24,10 +24,8 @@ class AuthInterceptor @Inject constructor(
         val isPublicEndpoint = publicEndpoints.any { url.contains(it) }
 
         Log.d(TAG, "Request URL: $url")
-        Log.d(TAG, "Is public endpoint: $isPublicEndpoint")
 
         val newRequest = if (isPublicEndpoint) {
-            Log.d(TAG, "Public endpoint - no token added")
             request
         } else {
             val accessToken = runBlocking { tokenManager.getAccessToken() }

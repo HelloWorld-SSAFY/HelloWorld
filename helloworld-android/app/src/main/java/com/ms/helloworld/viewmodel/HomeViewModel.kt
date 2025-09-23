@@ -23,14 +23,10 @@ class HomeViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val viewModelId = System.currentTimeMillis().toString().takeLast(4)
-
-    init {
-        println("🏗️ HomeViewModel 생성됨 - ID: $viewModelId")
-    }
     
     private val _momProfile = MutableStateFlow(
         MomProfile(
-            nickname = "로딩중...",
+            nickname = "로딩중",
             pregnancyWeek = 1,
             dueDate = LocalDate.now()
         )
@@ -60,64 +56,33 @@ class HomeViewModel @Inject constructor(
 
     // 임시 테스트용 - API 호출이 실패할 경우 기본값 설정
     private fun setTestGender() {
-        println("🧪 HomeViewModel($viewModelId) - 테스트용 성별 설정: FEMALE")
         _userGender.value = "FEMALE" // 임시로 여성으로 설정
-    }
-
-
-    init {
-        // 순차적 초기화: 사용자 정보 → 커플 정보 → 기타 데이터
-        initializeSequentially()
-    }
-
-    private fun initializeSequentially() {
-        viewModelScope.launch {
-            try {
-                println("🚀 HomeViewModel($viewModelId) - 순차적 초기화 시작")
-
-                // 1단계: 기본 사용자 정보 로드
-                loadUserGender()
-
-                // 2단계: 커플 정보 로드 (사용자 정보 로드 완료 후)
-                // loadUserGender()에서 loadCoupleInfo()가 호출됨
-
-                // 3단계: 기타 데이터 로드 (병렬로 실행 가능)
-                loadMomProfile()
-                loadCurrentMonthEvents()
-
-                println("🚀 HomeViewModel($viewModelId) - 순차적 초기화 완료")
-            } catch (e: Exception) {
-                println("💥 HomeViewModel($viewModelId) - 초기화 실패: ${e.message}")
-                e.printStackTrace()
-            }
-        }
     }
     
     private fun loadMomProfile() {
         viewModelScope.launch {
             try {
-                println("🚀 HomeViewModel($viewModelId) - loadHomeProfile 시작")
                 _isLoading.value = true
                 val profile = momProfileRepository.getHomeProfileData()
                 if (profile != null) {
-                    println("🚀 HomeViewModel($viewModelId) - Couple 테이블 기반 데이터: 주차=${profile.pregnancyWeek}, 닉네임=${profile.nickname}")
-                    println("🚀 HomeViewModel($viewModelId) - 예정일=${profile.dueDate}, D-day=${profile.daysUntilDue}")
+//                    println("HomeViewModel($viewModelId) - Couple 테이블 기반 데이터: 주차=${profile.pregnancyWeek}, 닉네임=${profile.nickname}")
+//                    println("HomeViewModel($viewModelId) - 예정일=${profile.dueDate}, D-day=${profile.daysUntilDue}")
 
                     // StateFlow 강제 업데이트 - 새로운 객체로 교체
                     val newProfile = profile.copy()
                     _momProfile.value = newProfile
 
-                    println("🚀 HomeViewModel($viewModelId) - _momProfile.value 업데이트 완료: ${_momProfile.value.pregnancyWeek}주차")
-                    println("🚀 HomeViewModel($viewModelId) - StateFlow 현재값: ${momProfile.value.pregnancyWeek}주차")
+//                    println("HomeViewModel($viewModelId) - _momProfile.value 업데이트 완료: ${_momProfile.value.pregnancyWeek}주차")
+//                    println("HomeViewModel($viewModelId) - StateFlow 현재값: ${momProfile.value.pregnancyWeek}주차")
                 } else {
-                    println("❌ HomeViewModel($viewModelId) - Couple 데이터에서 null 받음")
+                    println("HomeViewModel($viewModelId) - Couple 데이터에서 null 받음")
                 }
             } catch (e: Exception) {
-                println("💥 HomeViewModel - loadHomeProfile 예외: ${e.message}")
+                println("HomeViewModel - loadHomeProfile 예외: ${e.message}")
                 e.printStackTrace()
             } finally {
                 _isLoading.value = false
-                println("🏁 HomeViewModel - loadHomeProfile 완료")
+//                println("🏁 HomeViewModel - loadHomeProfile 완료")
             }
         }
     }
@@ -125,16 +90,16 @@ class HomeViewModel @Inject constructor(
     private fun loadUserGender() {
         viewModelScope.launch {
             try {
-                println("🚀 HomeViewModel($viewModelId) - loadUserGender 시작")
+//                println("🚀 HomeViewModel($viewModelId) - loadUserGender 시작")
                 val userInfo = momProfileRepository.getUserInfo()
-                println("🚻 HomeViewModel($viewModelId) - 전체 사용자 정보: $userInfo")
-                println("🚻 HomeViewModel($viewModelId) - member 정보: ${userInfo.member}")
+//                println("🚻 HomeViewModel($viewModelId) - 전체 사용자 정보: $userInfo")
+//                println("🚻 HomeViewModel($viewModelId) - member 정보: ${userInfo.member}")
 
                 val gender = userInfo.member.gender
                 val userId = userInfo.member.id
 
-                println("🚻 HomeViewModel($viewModelId) - 원본 성별: $gender")
-                println("🚻 HomeViewModel($viewModelId) - 사용자 ID: $userId")
+//                println("🚻 HomeViewModel($viewModelId) - 원본 성별: $gender")
+//                println("🚻 HomeViewModel($viewModelId) - 사용자 ID: $userId")
 
                 _userGender.value = gender
                 _userId.value = userId
@@ -142,9 +107,9 @@ class HomeViewModel @Inject constructor(
                 // 커플 정보는 별도 API에서 가져오기
                 loadCoupleInfo()
 
-                println("🚻 HomeViewModel($viewModelId) - 기본 사용자 정보 저장 완료")
+//                println("HomeViewModel($viewModelId) - 기본 사용자 정보 저장 완료")
             } catch (e: Exception) {
-                println("💥 HomeViewModel - loadUserGender 예외: ${e.message}")
+                println("HomeViewModel - loadUserGender 예외: ${e.message}")
                 e.printStackTrace()
                 // API 호출 실패 시 임시로 테스트 성별 설정
                 setTestGender()
@@ -155,7 +120,7 @@ class HomeViewModel @Inject constructor(
     private fun loadCoupleInfo() {
         viewModelScope.launch {
             try {
-                println("🚀 HomeViewModel($viewModelId) - loadCoupleInfo 시작")
+//                println("🚀 HomeViewModel($viewModelId) - loadCoupleInfo 시작")
                 val response = momProfileRepository.getCoupleDetailInfo()
 
                 if (response.isSuccessful) {
@@ -164,9 +129,9 @@ class HomeViewModel @Inject constructor(
                         val coupleId = coupleDetail.couple.coupleId
                         val menstrualDate = coupleDetail.couple.menstrualDate
 
-                        println("🚻 HomeViewModel($viewModelId) - 커플 상세 정보:")
-                        println("  - 커플 ID: $coupleId")
-                        println("  - 생리일: $menstrualDate")
+//                        println("🚻 HomeViewModel($viewModelId) - 커플 상세 정보:")
+//                        println("  - 커플 ID: $coupleId")
+//                        println("  - 생리일: $menstrualDate")
 
                         _coupleId.value = coupleId
                         _menstrualDate.value = menstrualDate
@@ -174,15 +139,15 @@ class HomeViewModel @Inject constructor(
                         // 현재 임신 일수 계산 (네겔레 법칙)
                         calculateCurrentPregnancyDay(menstrualDate)
 
-                        println("🚻 HomeViewModel($viewModelId) - 커플 정보 저장 완료")
+//                        println("🚻 HomeViewModel($viewModelId) - 커플 정보 저장 완료")
                     } else {
-                        println("❌ HomeViewModel($viewModelId) - 커플 상세 정보가 null")
+                        println("HomeViewModel($viewModelId) - 커플 상세 정보가 null")
                     }
                 } else {
-                    println("❌ HomeViewModel($viewModelId) - 커플 상세 API 실패: ${response.code()}")
+                    println("HomeViewModel($viewModelId) - 커플 상세 API 실패: ${response.code()}")
                 }
             } catch (e: Exception) {
-                println("💥 HomeViewModel - loadCoupleInfo 예외: ${e.message}")
+                println("HomeViewModel - loadCoupleInfo 예외: ${e.message}")
                 e.printStackTrace()
             }
         }
@@ -191,7 +156,7 @@ class HomeViewModel @Inject constructor(
     private fun calculateCurrentPregnancyDay(menstrualDate: String?) {
         try {
             if (menstrualDate.isNullOrEmpty()) {
-                println("❌ HomeViewModel($viewModelId) - 생리일이 null이므로 임신 일수 계산 건너뜀")
+                println("HomeViewModel - 생리일이 null이므로 임신 일수 계산 건너뜀")
                 return
             }
 
@@ -204,15 +169,15 @@ class HomeViewModel @Inject constructor(
 
             _currentPregnancyDay.value = pregnancyDays.coerceAtLeast(1)
 
-            println("🧮 HomeViewModel($viewModelId) - 임신 일수 계산 (네겔레 법칙):")
-            println("  - 마지막 생리일: $lmpDate")
-            println("  - 오늘: $today")
-            println("  - 날짜 차이: ${daysBetween}일")
-            println("  - 임신 일수: ${pregnancyDays}일차")
-            println("  - 임신 주수: ${pregnancyDays / 7.0}주 → ${(pregnancyDays / 7) + 1}주차")
+//            println("🧮 HomeViewModel($viewModelId) - 임신 일수 계산 (네겔레 법칙):")
+//            println("  - 마지막 생리일: $lmpDate")
+//            println("  - 오늘: $today")
+//            println("  - 날짜 차이: ${daysBetween}일")
+//            println("  - 임신 일수: ${pregnancyDays}일차")
+//            println("  - 임신 주수: ${pregnancyDays / 7.0}주 → ${(pregnancyDays / 7) + 1}주차")
 
         } catch (e: Exception) {
-            println("💥 HomeViewModel($viewModelId) - 임신 일수 계산 실패: ${e.message}")
+            println("HomeViewModel($viewModelId) - 임신 일수 계산 실패: ${e.message}")
             _currentPregnancyDay.value = 1
         }
     }
@@ -248,44 +213,59 @@ class HomeViewModel @Inject constructor(
                     } ?: emptyMap()
 
                     _calendarEvents.value = eventsByDate
-                    println("📅 Home - 캘린더 이벤트 로드 완료: ${eventsByDate.values.sumOf { it.size }}개")
+//                    println("📅 Home - 캘린더 이벤트 로드 완료: ${eventsByDate.values.sumOf { it.size }}개")
                 } else {
-                    println("❌ Home - 캘린더 이벤트 로드 실패: ${result.exceptionOrNull()?.message}")
+                    println("Home - 캘린더 이벤트 로드 실패: ${result.exceptionOrNull()?.message}")
                 }
             } catch (e: Exception) {
-                println("💥 Home - 캘린더 이벤트 로드 예외: ${e.message}")
+                println("Home - 캘린더 이벤트 로드 예외: ${e.message}")
                 e.printStackTrace()
             }
         }
     }
 
     fun refreshProfile() {
-        println("🔄 HomeViewModel - refreshProfile() 호출됨")
         refreshMomProfileSilently()
     }
 
     fun forceRefreshProfile() {
-        println("💪 HomeViewModel($viewModelId) - forceRefreshProfile() 강제 새로고침 시작")
-        loadMomProfile() // 강제로 전체 로딩 프로세스 다시 실행
-        loadUserGender() // 성별 정보도 다시 로드
+        viewModelScope.launch {
+            try {
+                _isLoading.value = true
+
+                // 1. 사용자 정보 먼저 로드
+                loadUserGender()
+
+                // 2. 프로필 정보 로드 (커플 정보가 로드된 후)
+                loadMomProfile()
+
+            } catch (e: Exception) {
+                println("HomeViewModel - forceRefreshProfile 실패: ${e.message}")
+                e.printStackTrace()
+            } finally {
+                _isLoading.value = false
+            }
+        }
     }
 
     private fun refreshMomProfileSilently() {
         viewModelScope.launch {
             try {
-                println("🔄 HomeViewModel - refreshHomeProfileSilently 시작")
                 // 로딩 상태를 변경하지 않고 백그라운드에서 새로고침
                 val profile = momProfileRepository.getHomeProfileData()
                 if (profile != null) {
-                    println("🔄 HomeViewModel - 새 Couple 기반 프로필 데이터: 주차=${profile.pregnancyWeek}, 닉네임=${profile.nickname}")
-                    println("🔄 HomeViewModel - 예정일=${profile.dueDate}, D-day=${profile.daysUntilDue}")
+//                    println("🔄 HomeViewModel - 새 Couple 기반 프로필 데이터: 주차=${profile.pregnancyWeek}, 닉네임=${profile.nickname}")
+//                    println("🔄 HomeViewModel - 예정일=${profile.dueDate}, D-day=${profile.daysUntilDue}")
                     _momProfile.value = profile
-                    println("🔄 HomeViewModel - _momProfile 상태 업데이트 완료")
-                } else {
-                    println("❌ HomeViewModel - Couple 기반 프로필 데이터가 null입니다")
+//                    println("🔄 HomeViewModel - _momProfile 상태 업데이트 완료")
                 }
+                val currentMenstrualDate = _menstrualDate.value
+                if (currentMenstrualDate != null) {
+                    calculateCurrentPregnancyDay(currentMenstrualDate)
+                }
+
             } catch (e: Exception) {
-                println("❌ HomeScreen - 프로필 silent refresh 실패: ${e.message}")
+                println("HomeScreen - 프로필 silent refresh 실패: ${e.message}")
                 e.printStackTrace()
             }
         }

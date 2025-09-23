@@ -25,16 +25,14 @@ class AuthRepository @Inject constructor(
     suspend fun socialLogin(request: GoogleLoginRequest): LoginResponse? {
         return try {
             Log.d(TAG, "소셜 로그인 API 호출 시작")
-            Log.d(TAG, "Provider: Google")
-            Log.d(TAG, "Token length: ${request.idToken.length}")
 
             val response = authApi.socialLogin(request)
 
             if (response != null) {
                 Log.d(TAG, "소셜 로그인 성공")
                 Log.d(TAG, "MemberId: ${response.memberId}")
-                Log.d(TAG, "AccessToken 존재: ${response.accessToken.isNotBlank()}")
-                Log.d(TAG, "RefreshToken 존재: ${response.refreshToken.isNotBlank()}")
+                Log.d(TAG, "AccessToken: ${response.accessToken}")
+                Log.d(TAG, "RefreshToken: ${response.refreshToken}")
 
                 // FCM 토큰 등록
                 fcmRepository.registerTokenAsync(platform = "ANDROID")
@@ -54,7 +52,6 @@ class AuthRepository @Inject constructor(
     suspend fun refreshToken(refreshToken: String): TokenRefreshResponse? {
         return try {
             Log.d(TAG, "토큰 갱신 API 호출 시작")
-            Log.d(TAG, "RefreshToken 길이: ${refreshToken.length}")
 
             val response = authApi.refreshToken(RefreshTokenRequest(refreshToken))
 
@@ -65,11 +62,10 @@ class AuthRepository @Inject constructor(
                     val body = response.body()
                     if (body != null) {
                         Log.d(TAG, "토큰 갱신 성공")
-                        Log.d(TAG, "새 AccessToken 존재: ${body.accessToken.isNotBlank()}")
-                        Log.d(TAG, "새 RefreshToken 존재: ${body.refreshToken?.isNotBlank() ?: false}")
+                        Log.d(TAG, "새 AccessToken: ${body.accessToken}")
+                        Log.d(TAG, "새 RefreshToken: ${body.refreshToken}")
                         body
                     } else {
-                        Log.e(TAG, "토큰 갱신 응답 본문이 null")
                         null
                     }
                 }

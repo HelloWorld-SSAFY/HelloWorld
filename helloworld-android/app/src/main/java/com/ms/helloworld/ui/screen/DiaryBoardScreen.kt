@@ -23,7 +23,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
+import com.ms.helloworld.viewmodel.HomeViewModel
 
 // 사진 타입
 enum class PhotoType {
@@ -53,15 +55,11 @@ data class DiaryBoardData(
 fun DiaryBoardScreen(
     navController: NavHostController,
     diaryType: String, // "birth" 또는 "observation"
-    day: Int,
-    pregnancyWeek: Int = 0,
-    pregnancyDay: Int = 0
+    day: Int
 ) {
+
     val backgroundColor = Color(0xFFF5F5F5)
     val title = if (diaryType == "birth") "출산일기" else "관찰일기"
-
-    // 디버깅용 로그
-    println("🐛 DiaryBoardScreen - pregnancyWeek: $pregnancyWeek, pregnancyDay: $pregnancyDay")
 
     // 샘플 데이터
     val diaryData = remember {
