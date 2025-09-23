@@ -6,6 +6,7 @@ from rest_framework import serializers
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema, inline_serializer
 from .views_debug import echo_headers
+from .views_debug import whoami
 
 from .views import (
     TelemetryView,
@@ -80,4 +81,5 @@ urlpatterns = [
     path("steps-baseline/pull",  PullStepsBaselineView.as_view(),  name="steps-baseline-pull"),
 
     path("debug/headers", echo_headers),
+    path("debug/whoami", whoami),
 ]
