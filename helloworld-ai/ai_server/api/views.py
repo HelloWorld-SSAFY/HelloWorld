@@ -749,16 +749,17 @@ def _run_places_delivery(*, session: RecommendationSession, user_ref: str, ctx: 
     for i, it in enumerate(items, start=1):
         it["rank"] = i
 
+    # ✅ limit 제대로 적용 (저장/로깅 모두)
     if items:
         try:
             PlaceExposure.objects.bulk_create([
                 PlaceExposure(user_ref=user_ref, place_type=it["place_type"], place_id=it["content_id"])
-                for it in items[:default_limit]
+                for it in items[:limit]
             ], ignore_conflicts=True)
         except Exception:
             pass
 
-    _log_places_delivery(session=session, user_ref=user_ref, category="OUTING", items=items[:default_limit])
+    _log_places_delivery(session=session, user_ref=user_ref, category="OUTING", items=items[:limit])
 
     if weather_fallback or (not items):
         log.info("places delivery fallback or empty (session=%s, user=%s)", session.id, user_ref)
