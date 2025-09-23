@@ -54,8 +54,11 @@ public class UserInfoAuthenticationFilter extends OncePerRequestFilter {
                 Long userId   = Long.parseLong(userIdStr);
                 Long coupleId = StringUtils.hasText(coupleIdStr) ? Long.parseLong(coupleIdStr) : null;
 
+                log.info("Creating UserPrincipal - userId: {}, coupleId: {}", userId, coupleId);
+
                 UserPrincipal principal = new UserPrincipal(userId, coupleId);
 
+                log.info("Created UserPrincipal - getCoupleId(): {}", principal.getCoupleId());
                 // 🔹 권한 구성: 접두어 없이 쓸 거면 "A", ROLE 방식이면 "ROLE_A"
                 var authorities = new java.util.ArrayList<org.springframework.security.core.GrantedAuthority>();
 

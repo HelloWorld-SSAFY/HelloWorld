@@ -21,8 +21,11 @@ import io.swagger.v3.oas.annotations.parameters.RequestBody;
 import io.swagger.v3.oas.annotations.media.*;
 import java.net.URI;
 import java.util.Map;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "Steps", description = "걸음수 등록 API")
+@Slf4j
 @RestController
 @RequestMapping("/api/steps")
 @RequiredArgsConstructor
@@ -63,6 +66,14 @@ public class StepsController {
             @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody StepsDtos.CreateRequest req
     ) {
+        log.info("StepsController - principal class: {}", principal.getClass().getName());
+        log.info("StepsController - userId: {}, coupleId: {}",
+                principal.getUserId(), principal.getCoupleId());
+
+        if (principal.getCoupleId() == null) {
+            log.error("CoupleId is null!");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "커플 등록 필요");
+        }
 
         StepsDtos.CreateResponse res = service.create(principal.getCoupleId(), req);
         return ResponseEntity.status(HttpStatus.CREATED).body(res);
