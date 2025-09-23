@@ -19,7 +19,9 @@ import com.ms.helloworld.util.TokenManager
 import com.ms.helloworld.repository.MomProfileRepository
 import com.ms.helloworld.model.OnboardingStatus
 import androidx.navigation.NavHostController
+import com.ms.helloworld.dto.request.Platforms
 import com.ms.helloworld.navigation.Screen
+import com.ms.helloworld.repository.FcmRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -41,7 +43,8 @@ data class LoginState(
 class LoginViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val tokenManager: TokenManager,
-    private val momProfileRepository: MomProfileRepository
+    private val momProfileRepository: MomProfileRepository,
+    private val fcmRepository: FcmRepository
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(LoginState())
@@ -53,6 +56,8 @@ class LoginViewModel @Inject constructor(
         private const val ACCESS_TOKEN_KEY = "access_token"
         private const val REFRESH_TOKEN_KEY = "refresh_token"
         private const val TIMESTAMP_KEY = "timestamp"
+        private const val FCM_PREFS = "fcm_prefs"
+        private const val FCM_TOKEN_KEY = "fcm_token"
     }
 
     fun signInWithGoogle(context: Context) {
@@ -89,28 +94,19 @@ class LoginViewModel @Inject constructor(
                 val credential = GoogleIdTokenCredential.createFrom(result.credential.data)
                 val idToken = credential.idToken
 
-                Log.d(TAG, "Google ID Token received (full): $idToken")
-                Log.d(TAG, "Google ID Token length: ${idToken.length}")
-
                 // Spring Boot 서버로 소셜 로그인 요청
                 val loginRequest = GoogleLoginRequest(
                     idToken = idToken
                 )
 
-                Log.d(TAG, "Sending login request to server - Google")
-                Log.d(TAG, "Token length being sent: ${loginRequest.idToken.length}")
-
                 val loginResponse = authRepository.socialLogin(loginRequest)
 
-                Log.d(TAG, "Server response received: $loginResponse")
                 if (loginResponse != null) {
                     Log.d(TAG, "Member ID: ${loginResponse.memberId}")
                     Log.d(TAG, "Access token: ${loginResponse.accessToken}")
                     Log.d(TAG, "Refresh token: ${loginResponse.refreshToken}")
                     Log.d(TAG, "User gender: ${loginResponse.gender}")
-                    Log.d(TAG, "Gender is null: ${loginResponse.gender == null}")
-                    Log.d(TAG, "Access token is null: ${loginResponse.accessToken == null}")
-                    Log.d(TAG, "Refresh token is null: ${loginResponse.refreshToken == null}")
+
                     // JWT 토큰 저장
                     tokenManager.saveTokens(
                         accessToken = loginResponse.accessToken,
@@ -122,6 +118,9 @@ class LoginViewModel @Inject constructor(
                     // WearOS로 토큰 전송
                     sendTokenToWearOS(context, loginResponse.accessToken, loginResponse.refreshToken)
 
+                    // 로그인 성공 후 저장된 FCM 토큰 등록
+                    registerStoredFcmToken(context)
+
 
                     _state.value = _state.value.copy(
                         isLoading = false,
@@ -130,19 +129,17 @@ class LoginViewModel @Inject constructor(
                         userGender = loginResponse.gender,
                         isAutoLoginChecked = true
                     )
-                    Log.d(TAG, "Google login successful")
+                    Log.d(TAG, "소셜 로그인 성공")
                 } else {
                     _state.value = _state.value.copy(
                         isLoading = false,
                         errorMessage = "로그인 실패. 잠시 후 다시 시도해주세요."
                     )
-                    Log.d(TAG, "로그인 실패")
+                    Log.d(TAG, "소셜 로그인 실패")
                 }
 
             } catch (e: GetCredentialException) {
-                Log.e(TAG, "Google login failed", e)
-                Log.e(TAG, "Exception type: ${e.javaClass.simpleName}")
-                Log.e(TAG, "Exception message: ${e.message}")
+                Log.e(TAG, "소셜 로그인 실패", e)
 
                 val errorMessage = when {
                     e.javaClass.simpleName.contains("NoCredentialException") ||
@@ -161,7 +158,6 @@ class LoginViewModel @Inject constructor(
                     errorMessage = errorMessage
                 )
             } catch (e: Exception) {
-                Log.e(TAG, "Login error", e)
                 _state.value = _state.value.copy(
                     isLoading = false,
                     errorMessage = "로그인 중 오류가 발생했습니다: ${e.message}"
@@ -170,18 +166,63 @@ class LoginViewModel @Inject constructor(
         }
     }
 
+    /**
+     * 로그인 성공 후 저장된 FCM 토큰을 서버에 등록
+     */
+    private fun registerStoredFcmToken(context: Context) {
+        viewModelScope.launch {
+            try {
+                val sharedPrefs = context.getSharedPreferences(FCM_PREFS, Context.MODE_PRIVATE)
+                val storedToken = sharedPrefs.getString(FCM_TOKEN_KEY, null)
+
+                if (storedToken != null) {
+                    Log.d(TAG, "저장된 FCM 토큰 발견, 서버 등록 시도")
+                    fcmRepository.registerTokenAsync(
+                        token = storedToken,
+                        platform = Platforms.ANDROID
+                    )
+                } else {
+                    Log.d(TAG, "저장된 FCM 토큰 없음")
+                    // 현재 FCM 토큰을 새로 가져와서 등록
+                    registerCurrentFcmToken()
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "FCM 토큰 등록 실패: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * 현재 FCM 토큰을 가져와서 등록
+     */
+    private fun registerCurrentFcmToken() {
+        com.google.firebase.messaging.FirebaseMessaging.getInstance().token
+            .addOnSuccessListener { token ->
+                viewModelScope.launch {
+                    try {
+                        Log.d(TAG, "현재 FCM 토큰 등록 시도: $token")
+                        fcmRepository.registerTokenAsync(
+                            token = token,
+                            platform = com.ms.helloworld.dto.request.Platforms.ANDROID
+                        )
+                        Log.d(TAG, "현재 FCM 토큰 등록 완료")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "현재 FCM 토큰 등록 실패: ${e.message}")
+                    }
+                }
+            }
+            .addOnFailureListener { e ->
+                Log.w(TAG, "FCM 토큰 가져오기 실패: ${e.message}")
+            }
+    }
+
     private suspend fun sendTokenToWearOS(context: Context, accessToken: String, refreshToken: String) {
         try {
-            Log.d(TAG, "Attempting to send tokens to WearOS...")
             val dataClient = Wearable.getDataClient(context)
             val nodeClient = Wearable.getNodeClient(context)
 
             // 연결된 노드 확인
             val nodes = nodeClient.connectedNodes.await()
-            Log.d(TAG, "Connected nodes: ${nodes.size}")
-            for (node in nodes) {
-                Log.d(TAG, "Node: ${node.displayName} - ${node.id}")
-            }
 
             if (nodes.isEmpty()) {
                 Log.w(TAG, "No connected WearOS devices found")
@@ -223,13 +264,11 @@ class LoginViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 clearLoginSuccess()
-                println("로그인 성공 후 온보딩 상태 체크")
                 val result = momProfileRepository.checkOnboardingStatus()
 
                 navigateBasedOnOnboardingStatus(result, navController)
 
             } catch (e: Exception) {
-                println("온보딩 상태 체크 실패 → 온보딩 화면으로 이동")
                 navController.navigate(Screen.OnboardingScreens.route) {
                     popUpTo(Screen.LoginScreen.route) { inclusive = true }
                 }

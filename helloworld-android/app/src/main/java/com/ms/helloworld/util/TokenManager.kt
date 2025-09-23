@@ -26,14 +26,14 @@ class TokenManager @Inject constructor(
     }
 
     // 토큰 만료 시간 확인
-    private fun isTokenExpired(token: String): Boolean {
+    fun isTokenExpired(token: String): Boolean {
         return try {
             val payload = getPayload(token)
             val exp = payload?.optLong("exp") ?: return true
             val currentTime = System.currentTimeMillis() / 1000
             val isExpired = currentTime >= exp
 
-            Log.d(TAG, "토큰 만료 검사 - 현재시간: $currentTime, 만료시간: $exp, 만료됨: $isExpired")
+//            Log.d(TAG, "토큰 만료 검사 - 현재시간: $currentTime, 만료시간: $exp, 만료됨: $isExpired")
             isExpired
         } catch (e: Exception) {
             Log.e(TAG, "토큰 만료 검사 실패: ${e.message}")
@@ -84,8 +84,6 @@ class TokenManager @Inject constructor(
             val savedAccess = encryptedDataStore.getAccessTokenSuspend()
             val savedRefresh = encryptedDataStore.getRefreshTokenSuspend()
 
-            Log.d(TAG, "저장 확인 - AccessToken 길이: ${savedAccess?.length ?: 0}")
-            Log.d(TAG, "저장 확인 - RefreshToken 길이: ${savedRefresh?.length ?: 0}")
             Log.d(TAG, "저장 확인 - AccessToken 일치: ${savedAccess == accessToken}")
             Log.d(TAG, "저장 확인 - RefreshToken 일치: ${savedRefresh == refreshToken}")
 
@@ -99,7 +97,7 @@ class TokenManager @Inject constructor(
     fun getAccessToken(): String? {
         return try {
             val token = encryptedDataStore.getAccessToken()
-            Log.d(TAG, "액세스 토큰 조회 - 길이: ${token?.length ?: 0}")
+            Log.d(TAG, "Access Token: $token")
 
             if (token != null && isTokenExpired(token)) {
                 Log.w(TAG, "액세스 토큰이 만료되었습니다")
@@ -116,7 +114,7 @@ class TokenManager @Inject constructor(
     fun getRefreshToken(): String? {
         return try {
             val token = encryptedDataStore.getRefreshToken()
-            Log.d(TAG, "리프레시 토큰 조회 - 길이: ${token?.length ?: 0}")
+            Log.d(TAG, "Refresh Token: $token")
 
             if (token != null && isTokenExpired(token)) {
                 Log.w(TAG, "리프레시 토큰이 만료되었습니다")
@@ -133,7 +131,7 @@ class TokenManager @Inject constructor(
     suspend fun getAccessTokenSuspend(): String? {
         return try {
             val token = encryptedDataStore.getAccessTokenSuspend()
-            Log.d(TAG, "액세스 토큰 조회(suspend) - 길이: ${token?.length ?: 0}")
+            Log.d(TAG, "Access Token: $token")
 
             if (token != null && isTokenExpired(token)) {
                 Log.w(TAG, "액세스 토큰이 만료되었습니다(suspend)")
@@ -150,7 +148,7 @@ class TokenManager @Inject constructor(
     suspend fun getRefreshTokenSuspend(): String? {
         return try {
             val token = encryptedDataStore.getRefreshTokenSuspend()
-            Log.d(TAG, "리프레시 토큰 조회(suspend) - 길이: ${token?.length ?: 0}")
+            Log.d(TAG, "Refresh Token: $token")
 
             if (token != null && isTokenExpired(token)) {
                 Log.w(TAG, "리프레시 토큰이 만료되었습니다(suspend)")
@@ -165,14 +163,13 @@ class TokenManager @Inject constructor(
 
     // 토큰 삭제
     suspend fun clearTokens() {
-        Log.d(TAG, "토큰 삭제 시작")
         try {
             // 삭제 전 확인
             val beforeAccess = encryptedDataStore.getAccessTokenSuspend()
             val beforeRefresh = encryptedDataStore.getRefreshTokenSuspend()
 
-            Log.d(TAG, "삭제 전 - AccessToken 존재: ${!beforeAccess.isNullOrBlank()}")
-            Log.d(TAG, "삭제 전 - RefreshToken 존재: ${!beforeRefresh.isNullOrBlank()}")
+            Log.d(TAG, "삭제 전 - AccessToken: $beforeAccess")
+            Log.d(TAG, "삭제 전 - RefreshToken: $beforeRefresh")
 
             encryptedDataStore.clearTokens()
 
@@ -180,8 +177,8 @@ class TokenManager @Inject constructor(
             val afterAccess = encryptedDataStore.getAccessTokenSuspend()
             val afterRefresh = encryptedDataStore.getRefreshTokenSuspend()
 
-            Log.d(TAG, "삭제 후 - AccessToken 존재: ${!afterAccess.isNullOrBlank()}")
-            Log.d(TAG, "삭제 후 - RefreshToken 존재: ${!afterRefresh.isNullOrBlank()}")
+            Log.d(TAG, "삭제 후 - AccessToken: $afterAccess")
+            Log.d(TAG, "삭제 후 - RefreshToken: $afterRefresh")
             Log.d(TAG, "토큰 삭제 완료")
 
         } catch (e: Exception) {
@@ -212,7 +209,7 @@ class TokenManager @Inject constructor(
     suspend fun hasTokensSuspend(): Boolean {
         return try {
             val hasTokens = encryptedDataStore.hasTokens()
-            Log.d(TAG, "토큰 존재 여부(suspend): $hasTokens")
+            Log.d(TAG, "토큰 존재 여부: $hasTokens")
             hasTokens
         } catch (e: Exception) {
             Log.e(TAG, "토큰 존재 여부(suspend) 확인 실패: ${e.message}")

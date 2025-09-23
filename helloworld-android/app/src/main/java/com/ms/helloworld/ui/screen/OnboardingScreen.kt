@@ -97,16 +97,13 @@ fun OnboardingScreens(
                 com.ms.helloworld.model.OnboardingStatus.BASIC_COMPLETED -> {
                     // 중간 단계부터 시작
                     initialPageIndex = viewModel.getResumePageIndex(result)
-                    println("중간 단계부터 시작: 페이지 $initialPageIndex")
                 }
                 com.ms.helloworld.model.OnboardingStatus.NOT_STARTED -> {
                     // 처음부터 시작
                     initialPageIndex = 0
-                    println("처음부터 온보딩 시작")
                 }
             }
         } catch (e: Exception) {
-            println("온보딩 상태 체크 실패: ${e.message}")
             initialPageIndex = 0
         } finally {
             isStatusChecked = true
@@ -203,11 +200,6 @@ fun OnboardingScreens(
                 popUpTo(Screen.OnboardingScreens.route) { inclusive = true }
             }
         }
-    }
-
-    // 기본 정보 입력 완료 시 pager 상태 업데이트
-    LaunchedEffect(screens.size) {
-        // screens 크기가 변경되면 pagerState도 업데이트됨
     }
 
     // 에러 메시지 표시

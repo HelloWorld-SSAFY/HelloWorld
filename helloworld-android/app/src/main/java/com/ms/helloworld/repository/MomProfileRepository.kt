@@ -42,14 +42,13 @@ class MomProfileRepository @Inject constructor(
         return try {
             val response = userApi.getCoupleDetail()
 
-            Log.d("MomProfileRepository", "API 호출 완료:")
-            Log.d("MomProfileRepository", "- Response code: ${response.code()}")
-            Log.d("MomProfileRepository", "- Is successful: ${response.isSuccessful}")
-            Log.d("MomProfileRepository", "- Headers: ${response.headers()}")
-            Log.d("MomProfileRepository", "- Raw body exists: ${response.raw().body != null}")
+            Log.d("MomProfileRepository", "getCoupleDetailInfo API 호출 완료: ${response.code()}")
+//            Log.d("MomProfileRepository", "- Is successful: ${response.isSuccessful}")
+//            Log.d("MomProfileRepository", "- Headers: ${response.headers()}")
+//            Log.d("MomProfileRepository", "- Raw body exists: ${response.raw().body != null}")
 
             if (response.isSuccessful) {
-                Log.d("MomProfileRepository", "- Parsed body: ${response.body()}")
+                Log.d("MomProfileRepository", "Body Data ${response.body()}")
             } else {
                 val errorBody = response.errorBody()?.string()
                 Log.d("MomProfileRepository", "- Error body: '$errorBody'")
@@ -115,10 +114,10 @@ class MomProfileRepository @Inject constructor(
             Log.d(TAG, "Request age: ${request.age}")
 
             val response = userApi.registerUser(request)
-            Log.d(TAG, "✅ 사용자 등록 API 응답 성공: $response")
+            Log.d(TAG, "사용자 등록 API 응답 성공: $response")
             response
         } catch (e: Exception) {
-            Log.e(TAG, "❌ 사용자 등록 API 실패", e)
+            Log.e(TAG, "사용자 등록 API 실패", e)
             Log.e(TAG, "Exception message: ${e.message}")
             Log.e(TAG, "Exception type: ${e.javaClass.simpleName}")
 
@@ -295,26 +294,25 @@ class MomProfileRepository @Inject constructor(
 
     suspend fun getHomeProfileData(): MomProfile? {
         return try {
-            Log.d(TAG, "🏠 HomeProfile 데이터 조회 시작 - 새로운 CoupleDetail API 사용")
 
             val response = userApi.getCoupleDetail()
             if (!response.isSuccessful) {
-                Log.e(TAG, "CoupleDetail API 실패: ${response.code()}")
+                Log.e(TAG, "getHomeProfileData API 실패: ${response.code()}")
                 return null
             }
 
             val coupleDetail = response.body()
             if (coupleDetail == null) {
-                Log.e(TAG, "CoupleDetail 응답이 null")
+                Log.e(TAG, "getHomeProfileData 응답이 null")
                 return null
             }
 
             val couple = coupleDetail.couple
             val userA = coupleDetail.userA
 
-            Log.d(TAG, "🏠 CoupleDetail API로 데이터 조회 성공")
-            Log.d(TAG, "🏠 user_a 닉네임: ${userA.nickname}")
-            Log.d(TAG, "🏠 couple 임신주차: ${couple.pregnancyWeek}")
+            Log.d(TAG, "CoupleDetail 조회 성공")
+            Log.d(TAG, "user_a 닉네임: ${userA.nickname}")
+            Log.d(TAG, "couple 임신주차: ${couple.pregnancyWeek}")
 
             // user_a의 닉네임 사용 (항상 존재)
             val userANickname = userA.nickname ?: "엄마"
@@ -353,7 +351,6 @@ class MomProfileRepository @Inject constructor(
                 lastMenstruationDate = lastMenstruationDate
             )
 
-            Log.d(TAG, "🏠 HomeProfile 생성 완료: $homeProfile")
             homeProfile
         } catch (e: Exception) {
             Log.e(TAG, "HomeProfile 조회 실패", e)
@@ -368,36 +365,34 @@ class MomProfileRepository @Inject constructor(
             // 네트워크 연결 테스트
             try {
                 val testHost = java.net.InetAddress.getByName("j13d204.p.ssafy.io")
-                Log.d(TAG, "✅ DNS 해석 성공: ${testHost.hostAddress}")
             } catch (e: Exception) {
-                Log.e(TAG, "❌ DNS 해석 실패: ${e.message}")
+                Log.e(TAG, "checkOnboardingStatus 실패: ${e.message}")
 
                 // Google DNS로 테스트
                 try {
                     val googleDns = java.net.InetAddress.getByName("8.8.8.8")
-                    Log.d(TAG, "✅ Google DNS 접근 가능: ${googleDns.hostAddress}")
                 } catch (e2: Exception) {
-                    Log.e(TAG, "❌ 인터넷 연결 자체에 문제: ${e2.message}")
+                    Log.e(TAG, "인터넷 연결 자체에 문제: ${e2.message}")
                 }
             }
 
             // 현재 사용자 ID를 토큰에서 가져오기
             val currentUserId = tokenManager.getUserId()?.toLongOrNull()
             if (currentUserId == null) {
-                Log.e(TAG, "❌ 토큰에서 사용자 ID 추출 실패")
+                Log.e(TAG, "토큰에서 사용자 ID 추출 실패")
                 return OnboardingCheckResult(OnboardingStatus.NOT_STARTED)
             }
-            Log.d(TAG, "🔑 토큰에서 추출한 현재 사용자 ID: $currentUserId")
+            Log.d(TAG, "토큰에서 추출한 현재 사용자 ID: $currentUserId")
 
             // 토큰 유효성 먼저 체크 (기존 API로)
             try {
-                Log.d(TAG, "🔐 토큰 유효성 체크 중...")
+                Log.d(TAG, "토큰 유효성 체크 중...")
                 val userInfoTest = userApi.getUserInfo()
-                Log.d(TAG, "✅ 토큰 유효 - 기본 사용자 정보 조회 성공")
+                Log.d(TAG, "토큰 유효 - 기본 사용자 정보 조회 성공")
             } catch (e: Exception) {
-                Log.e(TAG, "❌ 토큰 무효 - 기본 사용자 정보 조회 실패: ${e.message}")
+                Log.e(TAG, "토큰 무효 - 기본 사용자 정보 조회 실패: ${e.message}")
                 if (e is retrofit2.HttpException && (e.code() == 401 || e.code() == 403)) {
-                    Log.d(TAG, "🔄 토큰 만료로 추정 - 토큰 삭제 후 로그인 필요")
+                    Log.d(TAG, "토큰 만료로 추정 - 토큰 삭제 후 로그인 필요")
                     tokenManager.clearTokens()
                 }
                 return OnboardingCheckResult(OnboardingStatus.NOT_STARTED)

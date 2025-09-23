@@ -9,6 +9,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.ms.helloworld.R
@@ -17,7 +18,7 @@ import com.ms.helloworld.R
 fun PregnancyProfileImage(
     pregnancyWeek: Int,
     modifier: Modifier = Modifier,
-    size: Int = 60
+    size: Int = 80
 ) {
     val drawableRes = getDrawableResource(pregnancyWeek)
     
@@ -31,17 +32,18 @@ fun PregnancyProfileImage(
         Image(
             painter = painterResource(id = drawableRes),
             contentDescription = "${pregnancyWeek}주차 프로필 이미지",
-            modifier = Modifier.size((size * 0.8).toInt().dp)
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop     // 비율 유지하며 꽉 채우기
         )
     }
 }
 
 private fun getDrawableResource(pregnancyWeek: Int): Int {
     return when (pregnancyWeek) {
-        in 1..10 -> R.drawable.week1
-        in 11..20 -> R.drawable.week2
-        in 21..30 -> R.drawable.week3
-        in 31..40 -> R.drawable.week4
-        else -> R.drawable.week1 // 기본값
+        in 1..10 -> R.drawable.pregnant_woman
+        in 11..20 -> R.drawable.pregnant_woman
+        in 21..30 -> R.drawable.pregnant_woman
+        in 31..40 -> R.drawable.pregnant_woman
+        else -> R.drawable.pregnant_woman // 기본값
     }
 }

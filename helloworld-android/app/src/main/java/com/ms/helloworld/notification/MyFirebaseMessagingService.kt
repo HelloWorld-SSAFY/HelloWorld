@@ -2,6 +2,7 @@ package com.ms.helloworld.notification
 
 import android.Manifest
 import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.hardware.Sensor.TYPE_HEART_RATE
@@ -19,7 +20,11 @@ import com.ms.helloworld.dto.request.Platforms
 import com.ms.helloworld.repository.AuthRepository
 import com.ms.helloworld.repository.FcmRepository
 import com.ms.helloworld.ui.theme.MainColor
+import com.ms.helloworld.util.TokenManager
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 import kotlin.random.Random
 
@@ -27,16 +32,47 @@ import kotlin.random.Random
 class MyFirebaseMessagingService : FirebaseMessagingService() {
 
     @Inject lateinit var fcmRepository: FcmRepository
+    @Inject lateinit var tokenManager: TokenManager
+
+    // Service에서 사용할 CoroutineScope
+    private val serviceScope = CoroutineScope(Dispatchers.IO)
 
     companion object {
         const val TYPE_REMINDER = "REMINDER"           // 일정 알림
         const val TYPE_EMERGENCY = "EMERGENCY"       // 심박수,스트레스 지수, 활동량 이상 알림
+        private const val FCM_PREFS = "fcm_prefs"
+        private const val FCM_TOKEN_KEY = "fcm_token"
     }
 
     override fun onNewToken(token: String) {
         Log.i("FCM", "새 토큰: $token")
-        // 로그인 상태에선 서버 등록
-        fcmRepository.registerTokenAsync(token = token, Platforms.ANDROID)
+
+        saveTokenToLocal(token)
+
+        // 로그인 상태면 즉시 등록 시도
+        serviceScope.launch {
+            try {
+                val accessToken = tokenManager.getAccessToken()
+                if (!accessToken.isNullOrEmpty()) {
+                    Log.d("FCM", "로그인 상태 확인됨, 토큰 등록 시도")
+                    fcmRepository.registerTokenAsync(token = token, Platforms.ANDROID)
+                } else {
+                    Log.d("FCM", "로그인 상태 아님, 로컬에만 저장")
+                }
+            } catch (e: Exception) {
+                Log.w("FCM", "토큰 등록 실패: ${e.message}")
+            }
+        }
+    }
+
+    private fun saveTokenToLocal(token: String) {
+        try {
+            val sharedPrefs = getSharedPreferences(FCM_PREFS, Context.MODE_PRIVATE)
+            sharedPrefs.edit().putString(FCM_TOKEN_KEY, token).apply()
+            Log.d("FCM", "토큰 로컬 저장 완료")
+        } catch (e: Exception) {
+            Log.e("FCM", "토큰 로컬 저장 실패: ${e.message}")
+        }
     }
 
     override fun onMessageReceived(message: RemoteMessage) {

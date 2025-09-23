@@ -25,19 +25,17 @@ class TokenAuthenticator @Inject constructor(
     private val refreshMutex = Mutex()
 
     override fun authenticate(route: Route?, response: Response): Request? {
-        Log.d(TAG, "401 에러 감지 - 토큰 갱신 시도")
 
         return runBlocking {
             refreshMutex.withLock {
                 val refreshToken = tokenManager.getRefreshToken()
 
                 if (refreshToken.isNullOrBlank()) {
-                    Log.e(TAG, "RefreshToken이 없음 - 로그아웃 필요")
+                    Log.e(TAG, "RefreshToken 없음")
                     return@withLock null
                 }
 
                 try {
-                    Log.d(TAG, "RefreshToken으로 토큰 갱신 중...")
 
                     val refreshResponse = authApiProvider.get().refreshToken(
                         RefreshTokenRequest(refreshToken)
@@ -55,6 +53,8 @@ class TokenAuthenticator @Inject constructor(
                             )
 
                             Log.d(TAG, "토큰 갱신 성공")
+                            Log.d(TAG, "New Access Token: ${tokenResponse.accessToken}")
+                            Log.d(TAG, "New Refresh Token: ${tokenResponse.refreshToken ?: refreshToken}")
 
                             // 실패한 요청을 새 토큰으로 재시도
                             response.request.newBuilder()
@@ -79,7 +79,7 @@ class TokenAuthenticator @Inject constructor(
                     // 갱신 실패 시 토큰 삭제 (로그아웃 처리)
                     try {
                         tokenManager.clearTokens()
-                        Log.d(TAG, "🗑토큰 삭제됨 - 재로그인 필요")
+                        Log.d(TAG, "토큰 삭제됨 - 재로그인 필요")
                     } catch (clearException: Exception) {
                         Log.e(TAG, "토큰 삭제 실패", clearException)
                     }

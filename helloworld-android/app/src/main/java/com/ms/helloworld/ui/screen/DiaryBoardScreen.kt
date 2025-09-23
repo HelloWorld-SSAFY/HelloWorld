@@ -24,8 +24,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
-import androidx.hilt.navigation.compose.hiltViewModel
 import com.ms.helloworld.viewmodel.HomeViewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -57,12 +57,15 @@ data class DiaryBoardData(
 fun DiaryBoardScreen(
     navController: NavHostController,
     diaryType: String, // "birth" 또는 "observation"
-    day: Int,
-    pregnancyWeek: Int = 0,
-    pregnancyDay: Int = 0
+    day: Int
 ) {
+
     val backgroundColor = Color(0xFFF5F5F5)
     val title = if (diaryType == "birth") "출산일기" else "관찰일기"
+
+
+    // 샘플 데이터
+    val diaryData = remember {
 
     // HomeViewModel에서 실제 데이터 가져오기
     val homeViewModel: HomeViewModel = hiltViewModel()

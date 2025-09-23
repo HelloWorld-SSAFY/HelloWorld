@@ -70,12 +70,6 @@ fun MainNavigation(
                                 restoreState = true
                             }
                         }
-
-                        // 출산일기 탭 클릭 시 HomeViewModel 강제 refresh
-                        if (route == BottomNavItem.Diary.route) {
-                            println("🔄 MainNavigation - 출산일기 탭 클릭, HomeViewModel 강제 refresh")
-                            homeViewModel.forceRefreshProfile()
-                        }
                     }
                 )
             }
@@ -188,16 +182,10 @@ fun MainNavigation(
                 val diaryType = backStackEntry.arguments?.getString("diaryType") ?: "birth"
                 val day = backStackEntry.arguments?.getInt("day") ?: 1
 
-                val homeViewModel: HomeViewModel = hiltViewModel()
-                val momProfile by homeViewModel.momProfile.collectAsState()
-                val currentPregnancyDay by homeViewModel.currentPregnancyDay.collectAsState()
-
                 DiaryBoardScreen(
                     navController = navController,
                     diaryType = diaryType,
                     day = day,
-                    pregnancyWeek = momProfile.pregnancyWeek,
-                    pregnancyDay = currentPregnancyDay
                 )
             }
 

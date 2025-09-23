@@ -16,7 +16,6 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.ms.helloworld.ui.components.*
-import com.ms.helloworld.dto.response.CalendarPost
 import com.ms.helloworld.dto.response.MomProfile
 import com.ms.helloworld.viewmodel.HomeViewModel
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -31,30 +30,29 @@ fun HomeScreen(
     navController: NavHostController,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
-    val backgroundColor = Color(0xFFFFFFFF)
-
     val momProfile by viewModel.momProfile.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val calendarEvents by viewModel.calendarEvents.collectAsState()
     val currentPregnancyDay by viewModel.currentPregnancyDay.collectAsState()
 
-    // 캘린더 이벤트 변경 감지
-    LaunchedEffect(calendarEvents) {
-        val totalEvents = calendarEvents.values.sumOf { it.size }
-        calendarEvents.forEach { (date, events) ->
-            println("🏠 $date: ${events.size}개 이벤트")
+    // 앱 시작 시 초기 데이터 로딩
+    LaunchedEffect(Unit) {
+        // 데이터가 초기 상태이 강제 새로고침
+        if (momProfile.nickname == "로딩중") {
+            viewModel.forceRefreshProfile()
+        } else {
+            viewModel.refreshProfile()
         }
-    }
 
-    // 초기 로드는 별도 처리 (로딩 상태 표시)
-    // 이후 새로고침은 silent refresh 사용
+        // 캘린더 이벤트도 함께 로딩
+        viewModel.refreshCalendarEvents()
+    }
 
     // Lifecycle 이벤트 감지하여 화면 복귀 시 동기화
     val lifecycleOwner = LocalLifecycleOwner.current
     LaunchedEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                println("🏠 HomeScreen - 화면 복귀, 프로필과 캘린더 이벤트 새로고침")
                 viewModel.refreshProfile()
                 viewModel.refreshCalendarEvents()
             }
@@ -82,7 +80,7 @@ fun HomeScreen(
                 // 초기 로딩일 때만 로딩 상태 표시
                 ProfileSection(
                     momProfile = MomProfile(
-                        nickname = "로딩중...",
+                        nickname = "로딩중",
                         pregnancyWeek = 1,
                         dueDate = LocalDate.now()
                     ),
@@ -115,15 +113,15 @@ fun HomeScreen(
         }
 
         HorizontalDivider(
-            thickness = 1.dp,
-            color = Color.LightGray
+            thickness = 0.5.dp,
+            color = Color(0xFFD0D0D0)
         )
 
         // 캘린더 섹션
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp)
+                .padding(16.dp)
         ) {
             CalendarSection(
                 onDateClick = { dateKey ->
@@ -139,7 +137,7 @@ fun HomeScreen(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp)
+                .padding(16.dp)
         ) {
             Text(
                 text = "오늘의 추천",
