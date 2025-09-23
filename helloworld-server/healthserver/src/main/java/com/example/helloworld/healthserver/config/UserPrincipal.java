@@ -18,6 +18,11 @@ public class UserPrincipal implements UserDetails {
         this.coupleId = coupleId;
         this.authorities = Collections.emptyList();
     }
+
+    public boolean hasCouple() {
+        return coupleId != null;
+    }
+
     // UserDetails 인터페이스의 나머지 메소드 구현 (생략)
     @Override public String getPassword() { return null; }
     @Override public String getUsername() { return String.valueOf(this.userId); }

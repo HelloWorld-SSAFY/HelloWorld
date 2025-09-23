@@ -44,10 +44,10 @@ public class WearableHealthController {
     @Operation(summary = "헬스데이터 단건 조회")
     @GetMapping("/{healthId}")
     public ResponseEntity<HealthDtos.GetResponse> getOne(
-            @RequestParam Long coupleId,
+            @AuthenticationPrincipal UserPrincipal userPrincipal,
             @PathVariable Long healthId
     ) {
-        return ResponseEntity.ok(healthService.getById(coupleId, healthId));
+        return ResponseEntity.ok(healthService.getById(userPrincipal.getCoupleId(), healthId));
     }
 
 
