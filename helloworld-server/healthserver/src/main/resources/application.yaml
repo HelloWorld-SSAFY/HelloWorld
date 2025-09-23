@@ -18,7 +18,7 @@ spring:
 ai:
   server:
     base-url: http://aiserver-svc:8000
-  telemetry-path: /api/health/telemetry
+  telemetry-path: /api/telemetry
   app-token: ${APP_TOKEN}
 
 

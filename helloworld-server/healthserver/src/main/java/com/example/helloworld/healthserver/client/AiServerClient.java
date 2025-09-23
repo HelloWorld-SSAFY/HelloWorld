@@ -14,6 +14,7 @@ import java.util.Map;
         configuration = AiServerFeignConfig.class
 )
 
+
 public interface AiServerClient {
 
     @PostMapping(path = "${ai.telemetry-path:/v1/telemetry}")
