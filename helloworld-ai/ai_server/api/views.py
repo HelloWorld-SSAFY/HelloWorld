@@ -57,6 +57,7 @@ from rest_framework.decorators import api_view, permission_classes
 from drf_spectacular.utils import extend_schema
 from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
+from typing import Optional, Tuple
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 전역 싱글턴 (상태 유지)
@@ -78,7 +79,8 @@ STEPS_GAP_THRESHOLD = int(os.getenv("STEPS_GAP_THRESHOLD", "500"))
 # ──────────────────────────────────────────────────────────────────────────────
 def _assert_app_token(request: HttpRequest):
     got = (request.headers.get("X-App-Token") or "").strip()
-    if not APP_TOKEN or got != APP_TOKEN:
+    # env에 APP_TOKEN이 설정된 경우에만 검사
+    if APP_TOKEN and got != APP_TOKEN:
         return Response({"ok": False, "error": "invalid app token"}, status=401)
     return None
 
@@ -109,30 +111,31 @@ def _access_token_from_request(request: HttpRequest) -> Optional[str]:
         return raw[7:].strip()
     return raw
 
-def _require_user_ref(request) -> str:
+from typing import Optional, Tuple
+
+def _require_user_ref(request: HttpRequest, fallback: Optional[str] = None) -> Tuple[str, Optional[Response]]:
     """
-    게이트웨이 내부 헤더 → 외부 헤더/바디 순으로 user_ref 결정.
-    포맷은 기존 DB 규칙에 맞춰 변경 가능 (예: u{user_id} / c{couple_id})
+    내부 헤더(request.user_id / request.couple_id) 우선 → 외부/fallback → body/query 순.
+    호출부와 맞추어 (user_ref, missing_response) 형태로 반환.
     """
-    # 미들웨어가 세팅한 속성 우선
+    # 1) 미들웨어가 채운 값 우선
     user_id = getattr(request, "user_id", None)
     couple_id = getattr(request, "couple_id", None)
-
-    # 최후 폴백: 요청 바디/쿼리
-    if not user_id and not couple_id:
-        body_ref = (getattr(request, "data", {}) or {}).get("user_ref")
-        query_ref = getattr(request, "query_params", {}).get("user_ref")
-        if body_ref:
-            return str(body_ref)
-        if query_ref:
-            return str(query_ref)
-
     if user_id:
-        return f"u{user_id}"
+        return f"u{user_id}", None
     if couple_id is not None:
-        return f"c{couple_id}"
+        return f"c{couple_id}", None
 
-    raise ValidationError({"error": "missing user_ref / couple_id"})
+    # 2) fallback(검증 데이터) → body → query
+    ref = (fallback
+           or ((getattr(request, "data", {}) or {}).get("user_ref"))
+           or (getattr(request, "query_params", {}).get("user_ref")))
+    if ref:
+        return str(ref), None
+
+    # 3) 실패
+    return "", Response({"ok": False, "error": "missing user_ref / couple_id"}, status=400)
+
 
 def _now_kst() -> datetime:
     return datetime.now(tz=KST)
@@ -144,13 +147,26 @@ def _slot_for(ts_kst: datetime) -> str:
     return "00-12" if h < 12 else "00-16"
 
 def _parse_couple_id(request: HttpRequest, user_ref: Optional[str]) -> Optional[int]:
-    """X-Couple-Id 우선, 없으면 user_ref의 말미 숫자를 couple_id로 추정(u7 -> 7)"""
-    cid = request.headers.get("X-Couple-Id") or request.META.get("HTTP_X_COUPLE_ID")
-    if cid:
+    """request.couple_id(미들웨어) 우선, 없으면 헤더/유저레프에서 추정"""
+    # 1) 미들웨어가 이미 정수로 채운 경우
+    cid_attr = getattr(request, "couple_id", None)
+    if cid_attr is not None:
         try:
-            return int(str(cid).strip())
+            return int(cid_attr)
         except Exception:
             pass
+
+    # 2) 헤더 폴백
+    cid = request.headers.get("X-Internal-Couple-Id") or \
+          request.headers.get("X-Couple-Id") or \
+          request.META.get("HTTP_X_COUPLE_ID")
+    if cid:
+        try:
+            return int(str(cid).strip().strip('"').strip("'"))
+        except Exception:
+            pass
+
+    # 3) user_ref 말미 숫자 추정
     if user_ref:
         m = re.search(r"(\d+)$", str(user_ref))
         if m:
@@ -159,6 +175,7 @@ def _parse_couple_id(request: HttpRequest, user_ref: Optional[str]) -> Optional[
             except Exception:
                 pass
     return None
+
 
 def _fetch_steps_overall_avg(*, couple_id: int, slot: str, access_token: Optional[str]) -> Optional[float]:
     """
