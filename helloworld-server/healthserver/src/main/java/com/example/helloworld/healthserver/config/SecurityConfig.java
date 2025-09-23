@@ -38,11 +38,10 @@ public class SecurityConfig {
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(auth -> auth
-                        // WebSecurityCustomizer에서 처리하는 경로는 여기서 제거
-                        // actuator/health 엔드포인트만 인증 없이 접근 허용
-                        .requestMatchers("/api/**").hasRole("INTERNAL_USER")
-                        // 그 외의 모든 요청은 반드시 인증을 거쳐야 함
-                        .anyRequest().authenticated()
+                        //  ▼▼▼ [수정] actuator 하위 모든 경로를 인증 없이 허용합니다. (헬스 체크용) ▼▼▼
+                                     .requestMatchers("/actuator/**").permitAll()
+                        //                        // /api/** 경로는 INTERNAL_USER 역할이 필요합니다.
+                                           .requestMatchers("/api/**").hasRole("INTERNAL_USER")
                 )
                 .exceptionHandling(exceptions -> exceptions
                         .accessDeniedHandler((request, response, accessDeniedException) -> {
