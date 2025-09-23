@@ -46,6 +46,7 @@ MIDDLEWARE = [
     'django_prometheus.middleware.PrometheusBeforeMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'api.middleware.app_token_mw',
+    'api.middleware.couple_id_mw', 
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -158,6 +159,8 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 CORS_ALLOW_ALL_ORIGINS = True  # 개발용. 운영에서는 False + 화이트리스트 권장
 CORS_ALLOW_HEADERS = list(default_headers) + [
     "x-app-token",
+    "authorization",      # ← 추가
+    "x-app-token",
     "x-access-token",
     "x-couple-id",
 ]
@@ -178,7 +181,7 @@ SPECTACULAR_SETTINGS = {
     "VERSION": "v0.2.1",
 
     # 전역 보안 요구 OFF → 각 API에서 헤더 파라미터로 입력
-    "SECURITY": [{"bearerAuth": [],"AppToken": []},],
+    "SECURITY": [],
 
     "SERVERS": [
         {"url": "/ai", "description": "via gateway"},
@@ -210,3 +213,6 @@ SPECTACULAR_SETTINGS = {
         "persistAuthorization": False,  # 전역 인증 저장 안 함
     },
 }
+
+# 게이트웨이 베이스 경로는 미들웨어에서 처리(기본 "/ai"). 필요 시 환경변수로 조정 가능.
+# BASE_PATH_PREFIX = os.getenv("BASE_PATH_PREFIX", "/ai")

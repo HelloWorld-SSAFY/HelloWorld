@@ -30,6 +30,10 @@ from .views_main_bridge import (
     PullStepsBaselineView,    # 메인에서 일일 누적걸음 평균 가져와 업서트
 )
 
+# 선택: reverse 네임스페이스용
+app_name = "api"
+
+
 @extend_schema(
     tags=["health"],
     summary="Health check (no auth)",
@@ -50,6 +54,7 @@ from .views_main_bridge import (
 @permission_classes([AllowAny])
 def healthz(request):
     return Response({"status": "ok", "version": "v1"})
+
 
 urlpatterns = [
     # ---- core ----
