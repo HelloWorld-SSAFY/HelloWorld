@@ -6,6 +6,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.Instant;
+import java.util.List;
 
 
 public final class StepsDtos {
@@ -35,4 +36,13 @@ public final class StepsDtos {
             Instant date,
             Integer steps
     ) {}
+
+    public record StepResponse(
+            List<Item> records // 0-12, 0-16, 0-24 (항상 3개)
+    ) {
+        public record Item(
+                @JsonProperty("hour_range") String hourRange, // "00-12", "00-16", "00-24"
+                @JsonProperty("avg_steps") Double avgSteps
+        ) {}
+    }
 }

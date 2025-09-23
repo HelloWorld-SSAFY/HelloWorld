@@ -31,6 +31,7 @@ public final class HealthDtos {
 //                Integer stress,
 //                @JsonProperty("sleep_hours") Integer sleepHours,
 //                Integer heartrate,
+//                Integer steps,
 //                @JsonProperty("is_danger") Boolean isDanger
 //        ) {}
 //    }
