@@ -53,24 +53,23 @@ public class HealthDataService {
 
         // 2) AI 서버 요청 바디 생성
         String userRef = "u" + user.getUserId();
-        String isoTs = timestamp.atZone(ZoneId.of(appZone)).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
-        AiServerClient.TelemetryRequest body = new AiServerClient.TelemetryRequest(
-                userRef,
-                isoTs,
-                new AiServerClient.Metrics(req.heartrate(), req.stress())
-        );
+        String isoTimestamp = timestamp.atZone(ZoneId.of("Asia/Seoul"))
+                .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
 
-        // 3) 필수 헤더 값 준비 (X-App-Token, X-Internal-Couple-Id)
+        AiServerClient.Metrics metrics =
+                new AiServerClient.Metrics(req.heartrate(), req.stress());
+        AiServerClient.TelemetryRequest telemetryRequest =
+                new AiServerClient.TelemetryRequest(userRef, isoTimestamp, metrics);
+
+        // (옵션) 앱 토큰 설정 확인 – 인터셉터에서 주입 중이라면 이 체크는 생략 가능
         if (aiAppToken == null || aiAppToken.isBlank()) {
-            // 설정이 없으면 500으로 명확히 실패
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "AI app token is not configured");
         }
-        Long coupleId = user.getCoupleId();
 
-        // 4) 호출
+        // 3) AI 서버 호출 (헤더: X-App-Token은 Feign 인터셉터, X-Internal-Couple-Id는 메서드 인자)
         AiServerClient.AnomalyResponse resp;
         try {
-            resp = aiServerClient.checkTelemetry(aiAppToken, coupleId, body);
+            resp = aiServerClient.checkTelemetry(user.getCoupleId(), telemetryRequest);
         } catch (feign.FeignException.Unauthorized e) {
             log.error("AI server 401 Unauthorized (check app token): {}", e.contentUTF8());
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "AI server unauthorized");
@@ -79,14 +78,14 @@ public class HealthDataService {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "AI server error");
         }
 
-        // 5) 이상 징후면 FCM
-        if (resp != null && resp.mode() != null && ANOMALY_MODES.contains(resp.mode().toUpperCase())) {
+        // 4) 이상 징후면 FCM
+        if (resp != null && resp.mode() != null
+                && ANOMALY_MODES.contains(resp.mode().toUpperCase())) {
             fcmService.sendEmergencyNotification(user.getUserId(), req.heartrate());
         }
 
         return resp;
     }
-
 
     @Transactional
     public GetResponse create(Long coupleId, CreateRequest req) {
