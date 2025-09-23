@@ -18,14 +18,14 @@ public class DeviceTokenController {
     private final AuthUserResolver auth;
     private final DeviceTokenRepository repo;
 
-    public record RegisterReq(String token, String platform) {}
+    public record RegisterReq(String token) {}
     public record UnregisterReq(String token) {}
 
     @PostMapping("/register")
     public ResponseEntity<Void> register(@RequestHeader("Authorization") String authz,
                                          @RequestBody RegisterReq body) {
         Long uid = auth.requireUserId(authz);
-        repo.upsert(uid, body.token(), body.platform());
+        repo.upsert(uid, body.token());
         return ResponseEntity.noContent().build();
     }
 
