@@ -52,6 +52,7 @@ fun DiaryDetailScreen(
     val homeViewModel: HomeViewModel = hiltViewModel()
     val momProfile by homeViewModel.momProfile.collectAsState()
     val userGender by homeViewModel.userGender.collectAsState()
+    val userId by homeViewModel.userId.collectAsState()
     val coupleId by homeViewModel.coupleId.collectAsState()
     val menstrualDate by homeViewModel.menstrualDate.collectAsState()
     val currentPregnancyDay by homeViewModel.currentPregnancyDay.collectAsState()
@@ -60,21 +61,41 @@ fun DiaryDetailScreen(
     val diaryViewModel: DiaryViewModel = hiltViewModel()
     val diaryState by diaryViewModel.state.collectAsStateWithLifecycle()
 
-    // 현재 주차의 총 일수 (1주 = 7일)
+    // 현재 주차의 총 일수 (1주 = 7일, 하지만 임신 마지막 주는 더 적을 수 있음)
     val totalDaysInWeek = 7
 
-    // 실제 임신 일수는 HomeViewModel의 currentPregnancyDay 사용
-    val actualDayNumber = if (initialDay == -1) {
-        // 기본값: 현재 실제 임신 일수 사용 (1은 로딩 중 상태이므로 제외)
-        if (currentPregnancyDay > 1) currentPregnancyDay else 1
+    // 현재 주차의 시작일과 끝일 계산 (UI 표시용)
+    val weekStartDay = if (momProfile.pregnancyWeek > 0) {
+        (momProfile.pregnancyWeek - 1) * 7 + 1
     } else {
-        // 특정 일수가 지정된 경우 해당 값 사용
-        initialDay
+        // 로딩 중일 때는 currentPregnancyDay 기준으로 계산
+        if (currentPregnancyDay > 1) {
+            val currentWeek = ((currentPregnancyDay - 1) / 7) + 1
+            (currentWeek - 1) * 7 + 1
+        } else 1
+    }
+    val weekEndDay = weekStartDay + 6
+
+    // 현재 표시할 일차를 상태로 관리 (네비게이션 없이 내부에서 변경)
+    var currentViewingDay by remember { mutableStateOf(
+        if (initialDay == -1) {
+            // 기본값: 현재 실제 임신 일수 사용, 하지만 현재 주차를 벗어나지 않도록 제한
+            if (currentPregnancyDay > 1) {
+                minOf(currentPregnancyDay, weekEndDay)
+            } else weekStartDay
+        } else {
+            // 특정 일수가 지정된 경우 해당 값 사용
+            initialDay
+        }
+    ) }
+
+    // 현재 보고 있는 날짜의 주차 계산
+    val viewingWeek = remember(currentViewingDay) {
+        ((currentViewingDay - 1) / 7) + 1
     }
 
-    // 현재 주차의 시작일과 끝일 계산 (UI 표시용)
-    val weekStartDay = (momProfile.pregnancyWeek - 1) * 7 + 1
-    val weekEndDay = momProfile.pregnancyWeek * 7
+    // actualDayNumber는 currentViewingDay를 사용
+    val actualDayNumber = currentViewingDay
 
     // 현재 선택된 주차 내 위치 (UI 표시용)
     var currentDayInWeek by remember { mutableStateOf(1) }
@@ -96,10 +117,10 @@ fun DiaryDetailScreen(
     }
 
     // coupleId는 서버에서 토큰으로 자동 처리됨
-    val getLmpDate = { menstrualDate ?: "2025-02-02" } // menstrualDate 사용
+    val getLmpDate = { menstrualDate ?: "2025-01-18" } // menstrualDate 사용 (HomeViewModel과 동일한 기본값)
 
-    // 일별 일기 데이터 로드 - currentPregnancyDay 변경 시 재로드
-    LaunchedEffect(currentPregnancyDay, coupleId, menstrualDate) {
+    // 일별 일기 데이터 로드 - currentViewingDay 변경 시 재로드
+    LaunchedEffect(currentViewingDay, coupleId, menstrualDate) {
         // day API 호출: calendar/diary/day
 //        println("📆 DiaryDetailScreen - 일별 일기 로드")
 //        println("  - initialDay: $initialDay")
@@ -153,14 +174,27 @@ fun DiaryDetailScreen(
 
     // API 데이터를 DailyDiary 형식으로 변환
     val currentDiary = if (apiDiaries.isNotEmpty()) {
-        val birthDiary = apiDiaries.find { it.authorRole == "FEMALE" }?.let { diary ->
+        // 디버깅: 각 일기의 role inference 확인
+        apiDiaries.forEachIndexed { index, diary ->
+            val inferredRole = diary.inferAuthorRole(userId, userGender)
+            println("🔍 DiaryDetailScreen - Diary[$index]: ID=${diary.diaryId}, authorId=${diary.authorId}, authorRole=${diary.authorRole}, inferredRole=${inferredRole}")
+            println("🔍 현재 사용자: userId=$userId, userGender=$userGender")
+        }
+
+        val birthDiary = apiDiaries.find {
+            diary -> diary.inferAuthorRole(userId, userGender, null, null) == "FEMALE"  // TODO: 커플 정보 전달 필요
+        }?.let { diary ->
+            println("✅ 출산일기 찾음: ${diary.diaryTitle}")
             DiaryEntry(
                 title = diary.diaryTitle ?: "",
                 content = diary.diaryContent ?: "",
                 date = diary.targetDate
             )
         }
-        val observationDiary = apiDiaries.find { it.authorRole == "MALE" }?.let { diary ->
+        val observationDiary = apiDiaries.find {
+            diary -> diary.inferAuthorRole(userId, userGender, null, null) == "MALE"  // TODO: 커플 정보 전달 필요
+        }?.let { diary ->
+            println("✅ 관찰일기 찾음: ${diary.diaryTitle}")
             DiaryEntry(
                 title = diary.diaryTitle ?: "",
                 content = diary.diaryContent ?: "",
@@ -189,9 +223,9 @@ fun DiaryDetailScreen(
                         .padding(end = 48.dp), // navigationIcon 크기만큼 오른쪽 패딩 추가
                     contentAlignment = Alignment.Center
                 ) {
-                    if (momProfile.pregnancyWeek > 0) {
+                    if (viewingWeek > 0) {
                         Text(
-                            text = "${momProfile.pregnancyWeek}주차",
+                            text = "${viewingWeek}주차",
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Medium,
                             textAlign = TextAlign.Center
@@ -234,11 +268,19 @@ fun DiaryDetailScreen(
                     currentDay = actualDayNumber,
                     currentDayInWeek = currentDayInWeek,
                     totalDaysInWeek = totalDaysInWeek,
+                    canGoPrevious = actualDayNumber > weekStartDay,
+                    canGoNext = actualDayNumber < weekEndDay, // 주차 내 전체 날짜 이동 허용
                     onPreviousDay = {
-                        if (currentDayInWeek > 1) currentDayInWeek--
+                        // 현재 주차 내에서 이전 날로 이동 (상태 변경만, 네비게이션 없음)
+                        if (actualDayNumber > weekStartDay) {
+                            currentViewingDay = actualDayNumber - 1
+                        }
                     },
                     onNextDay = {
-                        if (currentDayInWeek < totalDaysInWeek) currentDayInWeek++
+                        // 현재 주차 내에서 다음 날로 이동 (상태 변경만, 네비게이션 없음)
+                        if (actualDayNumber < weekEndDay) { // currentPregnancyDay 제한 제거
+                            currentViewingDay = actualDayNumber + 1
+                        }
                     }
                 )
             } else {
@@ -332,6 +374,8 @@ fun DayNavigationHeader(
     currentDay: Int,
     currentDayInWeek: Int,
     totalDaysInWeek: Int,
+    canGoPrevious: Boolean = true,
+    canGoNext: Boolean = true,
     onPreviousDay: () -> Unit,
     onNextDay: () -> Unit
 ) {
@@ -342,13 +386,13 @@ fun DayNavigationHeader(
     ) {
         IconButton(
             onClick = onPreviousDay,
-            enabled = currentDayInWeek > 1
+            enabled = canGoPrevious
         ) {
             Icon(
                 Icons.Default.KeyboardArrowLeft,
                 contentDescription = "이전 날",
                 modifier = Modifier.size(28.dp),
-                tint = if (currentDayInWeek > 1) Color.Black else Color.Gray
+                tint = if (canGoPrevious) Color.Black else Color.Gray
             )
         }
 
@@ -372,13 +416,13 @@ fun DayNavigationHeader(
 
         IconButton(
             onClick = onNextDay,
-            enabled = currentDayInWeek < totalDaysInWeek
+            enabled = canGoNext
         ) {
             Icon(
                 Icons.Default.KeyboardArrowRight,
                 contentDescription = "다음 날",
                 modifier = Modifier.size(28.dp),
-                tint = if (currentDayInWeek < totalDaysInWeek) Color.Black else Color.Gray
+                tint = if (canGoNext) Color.Black else Color.Gray
             )
         }
     }

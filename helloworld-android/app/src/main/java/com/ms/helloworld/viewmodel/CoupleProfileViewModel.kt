@@ -78,15 +78,15 @@ class CoupleProfileViewModel @Inject constructor(
                         val isPartnerConnected = coupleDetail.couple.userAId != null &&
                                                coupleDetail.couple.userBId != null
 
-                        // 기존 형태로 변환하여 호환성 유지 (userA를 기본으로 사용)
-                        val memberProfile = MemberProfile(
-                            id = coupleDetail.userA.id,
-                            googleEmail = null,
-                            nickname = coupleDetail.userA.nickname,
-                            gender = coupleDetail.userA.gender,
-                            imageUrl = coupleDetail.userA.imageUrl,
-                            age = null
-                        )
+                        // 현재 사용자의 실제 정보를 getUserInfo로 가져오기
+                        val userInfoResponse = momProfileRepository.getUserInfo()
+                        val currentUserProfile = userInfoResponse.member
+
+                        println("🔍 CoupleProfileViewModel - 현재 사용자 정보: $currentUserProfile")
+                        println("🔍 age 정보: ${currentUserProfile.age}")
+
+                        // 기존 형태로 변환하여 호환성 유지 (실제 사용자 정보 사용)
+                        val memberProfile = currentUserProfile
 
                         _state.value = _state.value.copy(
                             isLoading = false,

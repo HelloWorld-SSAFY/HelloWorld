@@ -23,9 +23,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import com.ms.helloworld.viewmodel.HomeViewModel
+import androidx.hilt.navigation.compose.hiltViewModel
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 
 // 사진 타입
 enum class PhotoType {
@@ -61,8 +63,38 @@ fun DiaryBoardScreen(
     val backgroundColor = Color(0xFFF5F5F5)
     val title = if (diaryType == "birth") "출산일기" else "관찰일기"
 
+
     // 샘플 데이터
     val diaryData = remember {
+
+    // HomeViewModel에서 실제 데이터 가져오기
+    val homeViewModel: HomeViewModel = hiltViewModel()
+    val momProfile by homeViewModel.momProfile.collectAsState()
+    val menstrualDate by homeViewModel.menstrualDate.collectAsState()
+    val currentPregnancyDay by homeViewModel.currentPregnancyDay.collectAsState()
+
+    // 실제 임신 일수와 마지막 생리일 사용
+    val actualPregnancyDay = if (currentPregnancyDay > 0) currentPregnancyDay else day
+    val actualMenstrualDate = menstrualDate ?: "2025-01-18" // 기본값은 로그에서 확인된 값
+
+    // 현재 날짜 계산 (마지막 생리일 + day)
+    val currentDate = try {
+        val lmpDate = LocalDate.parse(actualMenstrualDate)
+        lmpDate.plusDays((actualPregnancyDay - 1).toLong()).format(DateTimeFormatter.ISO_LOCAL_DATE)
+    } catch (e: Exception) {
+        LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+    }
+
+    // 디버깅용 로그
+    println("🐛 DiaryBoardScreen - pregnancyWeek: $pregnancyWeek, pregnancyDay: $pregnancyDay")
+    println("🐛 DiaryBoardScreen - 실제 데이터:")
+    println("  - actualPregnancyDay: $actualPregnancyDay")
+    println("  - actualMenstrualDate: $actualMenstrualDate")
+    println("  - currentDate: $currentDate")
+    println("  - momProfile.pregnancyWeek: ${momProfile.pregnancyWeek}")
+
+    // 실제 데이터를 사용한 일기 데이터
+    val diaryData = remember(currentDate, actualPregnancyDay) {
         DiaryBoardData(
             title = "My lovely family",
             content = "Today, Sally took care of her cute little sister. She carefully took care of her child I gave the cake to Sally, who took good of her younger sister. I hope that our family will always be healthy and happy in the future.",
@@ -70,7 +102,7 @@ fun DiaryBoardScreen(
                 DiaryPhoto("1", "ultrasound_sample", PhotoType.ULTRASOUND),
                 DiaryPhoto("2", "regular_sample", PhotoType.REGULAR)
             ),
-            date = "2024-01-15",
+            date = currentDate, // 실제 계산된 날짜 사용
             diaryType = diaryType
         )
     }
