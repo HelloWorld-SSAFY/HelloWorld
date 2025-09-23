@@ -75,7 +75,7 @@ fun DiaryScreen(
     LaunchedEffect(Unit) {
 
         // 데이터가 초기 상태이면 강제 새로고침
-        if (homeState.nickname == "로딩중") {
+        if (homeState!!.nickname == "로딩중") {
             homeViewModel.forceRefreshProfile()
         } else {
             homeViewModel.refreshProfile()

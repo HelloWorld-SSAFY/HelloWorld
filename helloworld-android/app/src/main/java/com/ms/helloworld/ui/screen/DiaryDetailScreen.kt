@@ -65,8 +65,8 @@ fun DiaryDetailScreen(
     val totalDaysInWeek = 7
 
     // 현재 주차의 시작일과 끝일 계산 (UI 표시용)
-    val weekStartDay = if (momProfile.pregnancyWeek > 0) {
-        (momProfile.pregnancyWeek - 1) * 7 + 1
+    val weekStartDay = if (momProfile!!.pregnancyWeek > 0) {
+        (momProfile!!.pregnancyWeek - 1) * 7 + 1
     } else {
         // 로딩 중일 때는 currentPregnancyDay 기준으로 계산
         if (currentPregnancyDay > 1) {

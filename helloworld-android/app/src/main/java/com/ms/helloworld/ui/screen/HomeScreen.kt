@@ -23,6 +23,7 @@ import com.ms.helloworld.dto.response.MomProfile
 import com.ms.helloworld.viewmodel.HomeViewModel
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -44,7 +45,6 @@ fun HomeScreen(
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val momProfile by viewModel.momProfile.collectAsState()
-    val isLoading by viewModel.isLoading.collectAsState()
     val calendarEvents by viewModel.calendarEvents.collectAsState()
     val currentPregnancyDay by viewModel.currentPregnancyDay.collectAsState()
 
@@ -54,14 +54,8 @@ fun HomeScreen(
 
     // 앱 시작 시 초기 데이터 로딩
     LaunchedEffect(Unit) {
-        // 데이터가 초기 상태이 강제 새로고침
-        if (momProfile.nickname == "로딩중") {
-            viewModel.forceRefreshProfile()
-        } else {
-            viewModel.refreshProfile()
-        }
-
-        // 캘린더 이벤트도 함께 로딩
+        viewModel.forceRefreshProfile()
+        viewModel.refreshProfile()
         viewModel.refreshCalendarEvents()
     }
 
@@ -90,41 +84,32 @@ fun HomeScreen(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
         ) {
-            if (isLoading && momProfile == null) {
-                // 초기 로딩일 때만 로딩 상태 표시
-                ProfileSection(
-                    momProfile = MomProfile(
-                        nickname = "로딩중",
-                        pregnancyWeek = 1,
-                        dueDate = LocalDate.now()
-                    ),
-                    onClick = {
-                        navController.navigate(Screen.CoupleProfileScreen.route)
-                    }
-                )
-            } else if (momProfile != null) {
-                // 데이터가 있으면 항상 표시 (백그라운드 새로고침 중에도)
-                ProfileSection(
-                    momProfile = momProfile,
-                    currentPregnancyDay = currentPregnancyDay,
-                    onClick = {
-                        navController.navigate(Screen.CoupleProfileScreen.route)
-                    }
-                )
+            // 프로필 섹션 - 데이터가 없으면 로딩 표시
+            if (momProfile != null) {
+                // 실제 데이터가 있을 때만 표시
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    ProfileSection(
+                        momProfile = momProfile!!,
+                        currentPregnancyDay = currentPregnancyDay,
+                        onClick = {
+                            navController.navigate(Screen.CoupleProfileScreen.route)
+                        }
+                    )
+                }
             } else {
-                // 데이터가 없고 로딩도 아닌 경우 (에러 상태)
-                ProfileSection(
-                    momProfile = MomProfile(
-                        nickname = "정보 없음",
-                        pregnancyWeek = 1,
-                        dueDate = LocalDate.now()
-                    ),
-                    onClick = {
-                        navController.navigate(Screen.CoupleProfileScreen.route)
-                    }
-                )
+                // 데이터가 없으면 로딩 스켈레톤 표시
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    ProfileLoadingSkeleton()
+                }
             }
         }
 
@@ -169,7 +154,7 @@ fun HomeScreen(
                 .padding(16.dp)
         ) {
             Text(
-                text = "오늘의 추천",
+                text = "주차별 추천",
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.Black
@@ -199,6 +184,22 @@ fun HomeScreen(
                 locationManager = locationManager
             )
         }
+    }
+}
+
+// 프로필 로딩 스켈레톤 컴포저블
+@Composable
+fun ProfileLoadingSkeleton() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(120.dp), // ProfileSection과 비슷한 높이
+        contentAlignment = Alignment.Center
+    ) {
+        CircularProgressIndicator(
+            modifier = Modifier.size(40.dp),
+            color = MainColor
+        )
     }
 }
 
