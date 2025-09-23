@@ -5,7 +5,7 @@ import uuid
 import requests
 from math import radians, cos, sin, asin, sqrt
 from datetime import datetime, timedelta
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
 import logging
 from django.utils import timezone as dj_timezone
@@ -54,10 +54,7 @@ from services.recommender import recommend_on_session, RecInput
 
 from rest_framework.permissions import AllowAny
 from rest_framework.decorators import api_view, permission_classes
-from drf_spectacular.utils import extend_schema
-from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
-from typing import Optional, Tuple
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 전역 싱글턴 (상태 유지)
@@ -71,8 +68,8 @@ log = logging.getLogger(__name__)
 # ✅ auto precompute cooldown
 AUTO_COOLDOWN = timedelta(minutes=3)
 
-# ✅ 걸음수 격차 임계값(기본 500걸음): avg - cum_steps ≥ THRESHOLD → restrict
-STEPS_GAP_THRESHOLD = int(os.getenv("STEPS_GAP_THRESHOLD", "500"))
+# ✅ 걸음수 격차 임계값(고정 500걸음): avg - cum_steps ≥ THRESHOLD → restrict
+STEPS_GAP_THRESHOLD = 500  # ← env 미사용, 상수 고정
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 헤더/유저 처리 유틸
@@ -111,8 +108,6 @@ def _access_token_from_request(request: HttpRequest) -> Optional[str]:
         return raw[7:].strip()
     return raw
 
-from typing import Optional, Tuple
-
 def _require_user_ref(request: HttpRequest, fallback: Optional[str] = None) -> Tuple[str, Optional[Response]]:
     """
     내부 헤더(request.user_id / request.couple_id) 우선 → 외부/fallback → body/query 순.
@@ -135,7 +130,6 @@ def _require_user_ref(request: HttpRequest, fallback: Optional[str] = None) -> T
 
     # 3) 실패
     return "", Response({"ok": False, "error": "missing user_ref / couple_id"}, status=400)
-
 
 def _now_kst() -> datetime:
     return datetime.now(tz=KST)
@@ -175,7 +169,6 @@ def _parse_couple_id(request: HttpRequest, user_ref: Optional[str]) -> Optional[
             except Exception:
                 pass
     return None
-
 
 def _fetch_steps_overall_avg(*, couple_id: int, slot: str, access_token: Optional[str]) -> Optional[float]:
     """
@@ -339,6 +332,7 @@ class StepsCheckIn(serializers.Serializer):
     user_ref = serializers.CharField(required=False)
     ts = serializers.DateTimeField(help_text="KST 권장, 12:00/16:00 호출")
     cum_steps = serializers.IntegerField(min_value=0, help_text="동시간대 누적 걸음수")
+    avg_steps = serializers.IntegerField(min_value=0, required=False, help_text="동시간대 평균 누적 걸음수(있으면 최우선 사용)")  # ✅ 추가
     lat = serializers.FloatField(help_text="사용자 현재 위도 (필수)")
     lng = serializers.FloatField(help_text="사용자 현재 경도 (필수)")
     max_distance_km = serializers.FloatField(required=False, help_text="기본 3.0, 0.5~10.0")
@@ -409,6 +403,7 @@ class HealthzView(APIView):
     )
     def get(self, request: HttpRequest):
         return Response({"ok": True, "version": "v0.2.2"})
+
 # ──────────────────────────────────────────────────────────────────────────────
 # 유틸
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1118,7 +1113,7 @@ class StepsBaselineImportView(APIView):
         return Response({"ok": True, "saved_buckets": saved})
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Steps Check (외부 평균 우선 사용 + DB 폴백)
+# Steps Check (바디 avg_steps 최우선, 없으면 외부/저장 폴백)
 # ──────────────────────────────────────────────────────────────────────────────
 class StepsCheckView(APIView):
     @extend_schema(
@@ -1136,12 +1131,12 @@ class StepsCheckView(APIView):
             )
         },
         tags=["steps"],
-        summary="Compare cum_steps to external average (fallback: stored); restrict if gap ≥ threshold(기본 500)",
+        summary="Compare cum_steps to avg (prefer body.avg_steps; fallback: external/stored); restrict if gap ≥ 500",
         operation_id="postStepsCheck",
         description=(
-            "입력으로 user_ref/ts/cum_steps/lat/lng를 받고, **메인서버 overall-cumulative-avg(00-12/00-16)**를 우선 조회해 비교합니다. "
-            "외부 실패 시 저장된 평균(cum_mu)로 폴백. (avg - cum_steps) ≥ THRESHOLD(기본 500)이면 OUTING을 내부 추천하여 "
-            "recommend_delivery에 저장합니다(응답엔 미포함)."
+            "입력으로 user_ref/ts/cum_steps/lat/lng를 받고, **바디의 avg_steps가 있으면 그 값을 최우선**으로 사용합니다. "
+            "없으면 메인서버 overall-cumulative-avg(00-12/00-16) → 실패 시 저장된 평균(cum_mu)로 폴백. "
+            "(avg - cum_steps) ≥ 500이면 OUTING을 내부 추천하여 recommend_delivery에 저장합니다(응답엔 미포함)."
         ),
     )
     def post(self, request: HttpRequest):
@@ -1178,37 +1173,46 @@ class StepsCheckView(APIView):
 
         slot = _slot_for(ts_kst)
 
-        # 외부 기준치 우선
-        couple_id_for_external = _parse_couple_id(request, user_ref)
-        external_avg = None
-        if couple_id_for_external is not None:
-            external_avg = _fetch_steps_overall_avg(
-                couple_id=couple_id_for_external, slot=slot, access_token=access_token
-            )
+        # 1) 바디 avg_steps 최우선
+        avg: Optional[float] = None
+        source = None
+        if d.get("avg_steps") is not None:
+            try:
+                avg = float(d["avg_steps"])
+                source = "body"
+            except Exception:
+                avg = None
 
-        # DB 폴백(일별 버킷 평균)
-        hour = ts_kst.hour
-        bucket = hour // 4
-        baseline = None
-        if external_avg is None:
+        # 2) 외부 기준치 (바디 없을 때만)
+        external_avg = None
+        if avg is None:
+            couple_id_for_external = _parse_couple_id(request, user_ref)
+            if couple_id_for_external is not None:
+                external_avg = _fetch_steps_overall_avg(
+                    couple_id=couple_id_for_external, slot=slot, access_token=access_token
+                )
+            if external_avg is not None:
+                avg = float(external_avg)
+                source = "external"
+
+        # 3) DB 폴백(일별 버킷 평균)
+        if avg is None:
+            hour = ts_kst.hour
+            bucket = hour // 4
             baseline = UserStepsTodStatsDaily.objects.filter(
                 user_ref=user_ref,
                 d=ts_kst.date(),
                 bucket=bucket,
             ).first()
+            if baseline and baseline.cum_mu is not None:
+                avg = float(baseline.cum_mu or 0.0)
+                source = f"stored_bucket{bucket}"
 
-        cum_steps = int(d["cum_steps"])
-
-        # 기준 평균 선택
-        if external_avg is not None:
-            avg = float(external_avg)
-            source = "external"
-        elif baseline and baseline.cum_mu is not None:
-            avg = float(baseline.cum_mu or 0.0)
-            source = "stored"
-        else:
+        if avg is None:
+            # 기준이 없으면 normal
             return Response({"ok": True, "anomaly": False, "mode": "normal"})
 
+        cum_steps = int(d["cum_steps"])
         gap = max(0.0, avg - float(cum_steps))
 
         if gap >= float(STEPS_GAP_THRESHOLD):
@@ -1235,12 +1239,14 @@ class StepsCheckView(APIView):
                     session.context = ctx
                     session.save(update_fields=["context"])
 
+            # ✅ OUTING 프리컴퓨트 + DB 기록
             try:
                 _run_places_delivery(session=session, user_ref=user_ref, ctx=user_ctx or {})
             except Exception:
                 log.exception("steps_low places delivery failed (user=%s)", user_ref)
 
-            reasons = [f"avg({avg:.0f}) - cum_steps({cum_steps}) = {int(gap)} ≥ {STEPS_GAP_THRESHOLD} @{slot if source=='external' else f'bucket{bucket}'} (src:{source})"]
+            src_tag = source if source else "unknown"
+            reasons = [f"avg-cum ≥ {STEPS_GAP_THRESHOLD} (Δ={int(gap)}) src:{src_tag} @{slot}"]
             resp = {
                 "ok": True,
                 "anomaly": True,
@@ -1294,7 +1300,6 @@ class PlacesView(APIView):
             if callable(gw):
                 weather_kind, gate = gw(lat=d["lat"], lng=d["lng"])
             else:
-                # ✅ 오타 수정: dng -> lng
                 weather_kind, gate = gw.gate(lat=d["lat"], lng=d["lng"])
         except Exception:
             weather_kind, gate = "unknown", None
