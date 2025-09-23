@@ -42,6 +42,7 @@ public class SecurityConfig {
                                      .requestMatchers("/actuator/**").permitAll()
                         //                        // /api/** 경로는 INTERNAL_USER 역할이 필요합니다.
                                            .requestMatchers("/api/**").hasRole("INTERNAL_USER")
+                .anyRequest().authenticated()
                 )
                 .exceptionHandling(exceptions -> exceptions
                         .accessDeniedHandler((request, response, accessDeniedException) -> {
