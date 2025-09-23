@@ -4,6 +4,7 @@ from django.utils import timezone
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import serializers
+from rest_framework import status  # ✅ 추가
 
 # Swagger
 from drf_spectacular.utils import (
@@ -35,6 +36,18 @@ def _first(*vals):
         if v not in (None, "", {}):
             return v
     return None
+
+def _ok_empty(category: str, session_id: str | None, msg: str):
+    """빈 결과를 200 OK로 표준화 응답"""
+    return Response({
+        "ok": True,
+        "category": category,
+        "session_id": session_id,
+        "has_delivery": False,
+        "count": 0,
+        "deliveries": [],
+        "message": msg,
+    }, status=status.HTTP_200_OK)
 
 def _enforce_ttl(qs, ttl_min: int | None) -> bool:
     if not ttl_min:
@@ -78,9 +91,11 @@ class DeliveryItem(serializers.Serializer):
 class DeliveryOut(serializers.Serializer):
     ok = serializers.BooleanField()
     category = serializers.CharField()
-    session_id = serializers.CharField()
+    session_id = serializers.CharField(required=False, allow_null=True)  # ✅ null 허용
+    has_delivery = serializers.BooleanField()  # ✅ 추가
     count = serializers.IntegerField()
     deliveries = DeliveryItem(many=True)
+    message = serializers.CharField(required=False, allow_blank=True)  # ✅ 추가
 
 
 def _serialize_media_from_recommend(items):
@@ -204,13 +219,10 @@ class _RecommendDeliveryBase(APIView):
             OpenApiParameter("session_id", OpenApiTypes.STR, OpenApiParameter.QUERY, required=False,
                              description="특정 세션으로 한정 조회"),
             OpenApiParameter("ttl_min", OpenApiTypes.INT, OpenApiParameter.QUERY, required=False,
-                             description="최신 노출 TTL(분) — 세션 생성 시간이 TTL 밖이면 404"),
+                             description="최신 노출 TTL(분). TTL 밖이면 200 OK + 빈 결과 반환"),
         ],
         responses={
             200: DeliveryOut,
-            404: inline_serializer("DeliveryNotFound", {"ok": serializers.BooleanField(),
-                                                        "error": serializers.CharField(),
-                                                        "category": serializers.CharField()}),
             401: inline_serializer("AuthErr", {"ok": serializers.BooleanField(),
                                                "error": serializers.CharField()}),
             400: inline_serializer("BadReq", {"ok": serializers.BooleanField(),
@@ -251,7 +263,8 @@ class _RecommendDeliveryBase(APIView):
         # 1) 세션 결정 (user_ref + category 스코프 고정)
         chosen_session_id = session_id or self._latest_session_for_category(user_ref)
         if not chosen_session_id:
-            return Response({"ok": False, "error": "NO_DELIVERY_FOR_CATEGORY", "category": self.CATEGORY}, status=404)
+            # 404 대신 200 + 빈 결과
+            return _ok_empty(self.CATEGORY, None, "no delivery for category")
 
         # 2) 세션 + 카테고리 고정 조회
         qs = (RecommendDelivery.objects
@@ -263,7 +276,8 @@ class _RecommendDeliveryBase(APIView):
 
         # 3) TTL 검사
         if not _enforce_ttl(qs, ttl_min):
-            return Response({"ok": False, "error": "DELIVERY_EXPIRED", "category": self.CATEGORY}, status=404)
+            # 404 대신 200 + 빈 결과
+            return _ok_empty(self.CATEGORY, chosen_session_id, "delivery expired")
 
         # 4) 정렬 (rank > score > created_at) — 필드 없으면 안전하게 fallback
         if _has_field(RecommendDelivery, "rank"):
@@ -275,15 +289,17 @@ class _RecommendDeliveryBase(APIView):
 
         items = list(qs.order_by(*order_by)[:limit])
         if not items:
-            return Response({"ok": False, "error": "NO_DELIVERY_FOR_CATEGORY", "category": self.CATEGORY}, status=404)
+            # 404 대신 200 + 빈 결과
+            return _ok_empty(self.CATEGORY, chosen_session_id, "no delivery for category")
 
         return Response({
             "ok": True,
             "category": self.CATEGORY,
             "session_id": chosen_session_id,
+            "has_delivery": True,
             "count": len(items),
             "deliveries": self.SERIALIZER_FN(items),
-        })
+        }, status=status.HTTP_200_OK)
 
 
 # ───────────── 카테고리 뷰 ─────────────
