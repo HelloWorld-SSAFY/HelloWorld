@@ -27,6 +27,8 @@ public interface DiaryRepository extends JpaRepository<Diary, Long> {
             Long coupleId, LocalDate targetDate
     );
 
+    // 같은 커플 + 같은 날짜의 일기 전체를 최신 작성순으로
+    List<Diary> findAllByCoupleIdAndTargetDateOrderByCreatedAtDesc(Long coupleId, LocalDate targetDate);
 
 
 

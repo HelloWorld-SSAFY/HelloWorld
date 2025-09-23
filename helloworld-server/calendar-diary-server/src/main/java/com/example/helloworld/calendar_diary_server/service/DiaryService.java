@@ -8,6 +8,7 @@ import com.example.helloworld.calendar_diary_server.entity.DiaryPhoto;
 import com.example.helloworld.calendar_diary_server.repository.DiaryPhotoRepository;
 import com.example.helloworld.calendar_diary_server.repository.DiaryRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -27,6 +28,9 @@ import java.util.NoSuchElementException;
 public class DiaryService {
     private final DiaryRepository diaryRepository;
     private final DiaryPhotoRepository diaryPhotoRepository;
+
+    @Value("${app.zone:Asia/Seoul}")
+    private String appZone;
 
     private static final ZoneId ZONE = ZoneId.of("Asia/Seoul");
     private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("yyyy-MM-dd");
@@ -131,15 +135,8 @@ public class DiaryService {
     @Transactional
     public Long create(CreateDiaryRequest req,Long coupleId, Long authorId, String authorRole) {
         LocalDate entry = LocalDate.parse(req.getEntryDate(), DAY);
-        ZonedDateTime startOfDay = entry.atStartOfDay(ZONE);
+        ZonedDateTime now = ZonedDateTime.now(ZoneId.of(appZone));
 
-
-        // 하루에 하나의 일기만 작성 가능 (기존 로직 유지)
-        boolean isDuplicate = diaryRepository.existsByCoupleIdAndCreatedAtBetween(
-                coupleId, startOfDay, startOfDay.plusDays(1));
-        if (isDuplicate) {
-            throw new IllegalStateException("해당 날짜에 이미 작성된 일기가 있습니다.");
-        }
 
         Diary diary = Diary.builder()
                 .coupleId(coupleId) // 신뢰할 수 있는 인증 정보 사용
@@ -147,7 +144,7 @@ public class DiaryService {
                 .authorRole(Diary.AuthorRole.valueOf(authorRole.toUpperCase())) // 신뢰할 수 있는 인증 정보 사용
                 .diaryTitle(req.getDiaryTitle())
                 .diaryContent(req.getDiaryContent())
-                .createdAt(startOfDay)
+                .createdAt(now)
                 .targetDate(req.getTargetDate())
                 .build();
 

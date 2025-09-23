@@ -14,6 +14,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -38,6 +39,9 @@ import java.util.Map;
 public class DiaryController {
     private final DiaryService diaryApiService;
 
+
+    @Value("${app.zone:Asia/Seoul}")
+    private String appZone; //
 
 
     @GetMapping("/week")
@@ -141,6 +145,7 @@ public class DiaryController {
         Long coupleId = getCoupleIdFromPrincipal(userPrincipal);
         return ResponseEntity.ok(diaryApiService.allPhotos(coupleId));
     }
+
 
 
         /* UserPrincipal에서 coupleId를 추출하고, null일 경우 예외를 던지는 헬퍼 메소드
