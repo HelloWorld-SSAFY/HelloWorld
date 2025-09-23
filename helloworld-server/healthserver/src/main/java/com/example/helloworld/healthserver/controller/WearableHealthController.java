@@ -67,13 +67,7 @@ public class WearableHealthController {
     }
 
 
-//    @Operation(summary = "걸음수 누적 평균(전기간)", description = "구간: 00-12, 00-16. steps>0만 포함.")
-//    @GetMapping("/overall-cumulative-avg")
-//    public ResponseEntity<HealthDtos.StepResponse> overallCumulativeAvg(
-//            @RequestParam Long coupleId
-//    ) {
-//        return ResponseEntity.ok(healthService.overallCumulativeAvg(coupleId));
-//    }
+
 
 
     @Operation(summary = "전체 커플 일간 버킷 통계", description = "지정된 날짜(KST)의 모든 커플에 대한 심박수/스트레스 통계를 4시간 단위로 집계하여 피벗된 형태로 반환합니다.")

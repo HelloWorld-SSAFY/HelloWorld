@@ -39,31 +39,6 @@ public interface HealthDataRepository extends JpaRepository<HealthData, Long> {
                                              @Param("from") Instant from,
                                              @Param("to") Instant to);
 
-    @Query(value = """
-    SELECT 0 AS bucket, '00-12' AS label, AVG(hd.steps)::float8 AS avg_steps
-    FROM health_data hd
-    WHERE hd.couple_id = :coupleId
-      AND hd.steps IS NOT NULL
-      AND hd.steps > 0
-      AND EXTRACT(HOUR FROM (hd."date" AT TIME ZONE 'Asia/Seoul')) < 12
-    UNION ALL
-    SELECT 1 AS bucket, '00-16' AS label, AVG(hd.steps)::float8 AS avg_steps
-    FROM health_data hd
-    WHERE hd.couple_id = :coupleId
-      AND hd.steps IS NOT NULL
-      AND hd.steps > 0
-      AND EXTRACT(HOUR FROM (hd."date" AT TIME ZONE 'Asia/Seoul')) < 16
-    UNION ALL
-    SELECT 2 AS bucket, '00-24' AS label, AVG(hd.steps)::float8 AS avg_steps
-    FROM health_data hd
-    WHERE hd.couple_id = :coupleId
-      AND hd.steps IS NOT NULL
-      AND hd.steps > 0
-      AND EXTRACT(HOUR FROM (hd."date" AT TIME ZONE 'Asia/Seoul')) < 24
-    ORDER BY bucket
-    """, nativeQuery = true)
-    List<Object[]> aggregateStepsOverallCumulative(@Param("coupleId") Long coupleId);
-
 
 
     /**
