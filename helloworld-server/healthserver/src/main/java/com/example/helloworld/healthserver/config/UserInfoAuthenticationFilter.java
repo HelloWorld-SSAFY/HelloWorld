@@ -20,7 +20,6 @@ import java.io.IOException;
  */
 @Slf4j
 @Component
-@Order(0)
 public class UserInfoAuthenticationFilter extends OncePerRequestFilter {
 
     private static boolean isBypassPath(HttpServletRequest request) {
@@ -38,49 +37,43 @@ public class UserInfoAuthenticationFilter extends OncePerRequestFilter {
                 || uri.equals("/v3/api-docs")
                 || uri.startsWith("/v3/api-docs/");
     }
-
     @Override
-    protected void doFilterInternal(HttpServletRequest request,
-                                    HttpServletResponse response,
-                                    FilterChain chain)
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
 
-        // 1) 우회 경로는 인증 검사 없이 통과
         if (isBypassPath(request)) {
             chain.doFilter(request, response);
             return;
         }
 
-        // 2) 내부 헤더 기반 인증
         String userIdStr   = request.getHeader("X-Internal-User-Id");
         String coupleIdStr = request.getHeader("X-Internal-Couple-Id");
-        String role        = request.getHeader("X-Internal-Role");
 
         if (StringUtils.hasText(userIdStr)) {
             try {
                 Long userId   = Long.parseLong(userIdStr);
                 Long coupleId = StringUtils.hasText(coupleIdStr) ? Long.parseLong(coupleIdStr) : null;
 
-                // ★ 프로젝트의 UserPrincipal 구현을 사용하세요.
                 UserPrincipal principal = new UserPrincipal(userId, coupleId);
 
-                var auth = new UsernamePasswordAuthenticationToken(
-                        principal, null, principal.getAuthorities());
+                // 🔹 권한 구성: 접두어 없이 쓸 거면 "A", ROLE 방식이면 "ROLE_A"
+                var authorities = new java.util.ArrayList<org.springframework.security.core.GrantedAuthority>();
+
+                var auth = new UsernamePasswordAuthenticationToken(principal, null, authorities);
                 SecurityContextHolder.getContext().setAuthentication(auth);
 
-                log.info("HEALTH_AUDIT userId={}, coupleId={}, role={}, path={}, method={}",
-                        userId, coupleId, role, request.getRequestURI(), request.getMethod());
+                // 🔹 로그 자리수 맞추기(예전 포맷은 role 자리에 path가 찍혔음)
+                log.info("HEALTH_AUDIT userId={}, coupleId={}, path={}, method={}",
+                        userId, coupleId, request.getRequestURI(), request.getMethod());
 
             } catch (NumberFormatException e) {
-                log.error("Invalid X-Internal-* headers: userId='{}', coupleId='{}'",
-                        userIdStr, coupleIdStr, e);
+                log.error("Invalid X-Internal-* headers: userId='{}', coupleId='{}'", userIdStr, coupleIdStr, e);
                 SecurityContextHolder.clearContext();
                 response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                 response.getWriter().write("{\"error\":\"Invalid authentication headers\"}");
                 return;
             }
         } else {
-            // 게이트웨이 미경유 또는 외부 호출
             log.warn("Missing X-Internal-* headers: path={}", request.getRequestURI());
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             response.getWriter().write("{\"error\":\"Authentication required\"}");
@@ -89,4 +82,6 @@ public class UserInfoAuthenticationFilter extends OncePerRequestFilter {
 
         chain.doFilter(request, response);
     }
+
+
 }
