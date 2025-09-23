@@ -13,10 +13,12 @@ public class UserPrincipal implements UserDetails {
     private final Long coupleId;
     private final Collection<? extends GrantedAuthority> authorities;
 
-    public UserPrincipal(Long userId, Long coupleId) {
+    // 생성자를 수정하여 권한 정보를 받도록 변경합니다.
+    public UserPrincipal(Long userId, Long coupleId, Collection<? extends GrantedAuthority> authorities) {
         this.userId = userId;
         this.coupleId = coupleId;
-        this.authorities = Collections.emptyList();
+        // authorities가 null일 경우를 대비하여 방어 코드를 추가합니다.
+        this.authorities = (authorities != null) ? authorities : Collections.emptyList();
     }
 
 

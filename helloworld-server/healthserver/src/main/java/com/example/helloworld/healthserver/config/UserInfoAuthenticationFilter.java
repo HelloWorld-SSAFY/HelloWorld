@@ -55,14 +55,21 @@ public class UserInfoAuthenticationFilter extends OncePerRequestFilter {
                 Long userId   = Long.parseLong(userIdStr);
                 Long coupleId = StringUtils.hasText(coupleIdStr) ? Long.parseLong(coupleIdStr) : null;
 
-                UserPrincipal principal = new UserPrincipal(userId, coupleId);
 
-                //모든 내부 인증 사용자는 'ROLE_INTERNAL_USER' 권한을 갖도록 명시
+                // 1. 먼저 권한 목록을 생성합니다.
                 var authorities = Collections.singletonList(
                         new SimpleGrantedAuthority("ROLE_INTERNAL_USER")
                 );
-                var auth = new UsernamePasswordAuthenticationToken(principal, null, authorities);
+
+                // 2. 권한을 포함하여 UserPrincipal 객체를 생성합니다.
+                UserPrincipal principal = new UserPrincipal(userId, coupleId, authorities);
+
+                // 3. 생성된 principal을 사용하여 인증 토큰을 만듭니다.
+                // 이 생성자는 principal.getAuthorities()를 호출하여 권한을 자동으로 설정합니다.
+                var auth = new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities());
+
                 SecurityContextHolder.getContext().setAuthentication(auth);
+
 
                 // 🔹 로그 자리수 맞추기(예전 포맷은 role 자리에 path가 찍혔음)
                 log.info("HEALTH_AUDIT userId={}, coupleId={}, path={}, method={}",

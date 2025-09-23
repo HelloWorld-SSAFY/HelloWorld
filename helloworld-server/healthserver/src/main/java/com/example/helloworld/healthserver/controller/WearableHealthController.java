@@ -10,9 +10,11 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
-import org.springframework.http.*;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 
@@ -23,6 +25,13 @@ import java.time.LocalDate;
 public class WearableHealthController {
 
     private final HealthDataService healthService;
+
+    // 2. Add a helper method to validate the authenticated principal
+    private void requirePrincipal(UserPrincipal principal) {
+        if (principal == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User principal not found. Check gateway authentication headers.");
+        }
+    }
 
     @Operation(
             summary = "헬스데이터 생성 및 이상탐지",
@@ -37,6 +46,13 @@ public class WearableHealthController {
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal user,
             @Valid @RequestBody HealthDtos.CreateRequest req
     ) {
+        // 메소드 시작 시 인증 정보 유무를 확인합니다.
+        requirePrincipal(user);
+        // API는 커플 ID가 필수이므로, 커플 ID가 없는 경우 명시적인 에러를 반환합니다.
+        if (user.getCoupleId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "User is not associated with a couple.");
+        }
+
         AiServerClient.AnomalyResponse response = healthService.createAndCheckHealthData(user, req);
         return ResponseEntity.ok(response);
     }

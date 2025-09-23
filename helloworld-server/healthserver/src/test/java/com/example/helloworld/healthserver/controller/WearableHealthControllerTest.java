@@ -1,5 +1,5 @@
 package com.example.helloworld.healthserver.controller;
-
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import com.example.helloworld.healthserver.client.AiServerClient;
 import com.example.helloworld.healthserver.config.UserInfoAuthenticationFilter;
 import com.example.helloworld.healthserver.config.UserPrincipal;
@@ -17,7 +17,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
-
+import java.util.Collections;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -53,7 +53,15 @@ class WearableHealthControllerTest {
 
     // 테스트용 인증 객체를 생성하는 헬퍼 메소드
     private Authentication createTestAuth() {
-        UserPrincipal testUser = new UserPrincipal(100L, 1L);
+        // 1. 실제 필터(UserInfoAuthenticationFilter)에서와 동일하게 테스트 사용자에게 권한을 부여합니다.
+        var authorities = Collections.singletonList(
+                new SimpleGrantedAuthority("ROLE_INTERNAL_USER")
+        );
+
+        // 2. 변경된 생성자를 사용하여 UserPrincipal 객체를 생성합니다.
+        UserPrincipal testUser = new UserPrincipal(100L, 1L, authorities);
+
+        // 3. 인증 토큰을 생성하여 반환합니다.
         return new UsernamePasswordAuthenticationToken(testUser, null, testUser.getAuthorities());
     }
 

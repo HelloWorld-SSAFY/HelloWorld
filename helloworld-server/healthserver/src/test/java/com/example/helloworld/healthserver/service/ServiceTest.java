@@ -7,12 +7,16 @@ import com.example.helloworld.healthserver.config.UserPrincipal;
 import com.example.helloworld.healthserver.dto.HealthDtos;
 import com.example.helloworld.healthserver.entity.HealthData;
 import com.example.helloworld.healthserver.persistence.HealthDataRepository;
-import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.*;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+
+import java.util.Collections;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 @ExtendWith(MockitoExtension.class) // Mockito 기능을 사용하기 위한 설정
 class HealthDataServiceTest {
@@ -29,15 +33,13 @@ class HealthDataServiceTest {
     @Mock // 가짜(Mock) 객체로 만들 의존성
     private FcmService fcmService;
 
-    // ... 테스트 메소드들 ...
-    // HealthDataServiceTest 클래스 내부에 추가
-
     @Test
     @DisplayName("정상 상황: AI 서버가 'normal' 모드를 반환하면 FCM 알림을 보내지 않는다")
     void createAndCheck_NormalMode_ShouldNotSendFcm() {
         // given (준비)
-        // 1. 테스트용 요청 데이터 준비
-        UserPrincipal testUser = new UserPrincipal(100L, 1L);
+        // 1. 테스트용 요청 데이터 준비 (권한 포함)
+        var authorities = Collections.singletonList(new SimpleGrantedAuthority("ROLE_INTERNAL_USER"));
+        UserPrincipal testUser = new UserPrincipal(100L, 1L, authorities);
         HealthDtos.CreateRequest request = new HealthDtos.CreateRequest(null, 0.2, 80);
 
         // 2. AI 서버가 'normal' 응답을 주도록 설정
@@ -58,18 +60,19 @@ class HealthDataServiceTest {
         Mockito.verify(aiServerClient, Mockito.times(1)).checkTelemetry(ArgumentMatchers.any(AiServerClient.TelemetryRequest.class));
 
         // 3. FCM 서비스는 호출되지 않았는지 확인 (가장 중요!)
-        Mockito.verify(fcmService, Mockito.never()).sendEmergencyNotification(ArgumentMatchers.any(), ArgumentMatchers.any());
+        Mockito.verify(fcmService, Mockito.never()).sendEmergencyNotification(ArgumentMatchers.anyLong(), ArgumentMatchers.anyInt());
 
         // 4. 서비스가 AI 서버의 응답을 그대로 반환했는지 확인
-        Assertions.assertThat(actualResponse).isEqualTo(normalResponse);
-        Assertions.assertThat(actualResponse.mode()).isEqualTo("normal");
+        assertThat(actualResponse).isEqualTo(normalResponse);
+        assertThat(actualResponse.mode()).isEqualTo("normal");
     }
 
     @Test
     @DisplayName("위험 상황: AI 서버가 'emergency' 모드를 반환하면 FCM 알림을 보낸다")
     void createAndCheck_EmergencyMode_ShouldSendFcm() {
         // given (준비)
-        UserPrincipal testUser = new UserPrincipal(100L, 1L);
+        var authorities = Collections.singletonList(new SimpleGrantedAuthority("ROLE_INTERNAL_USER"));
+        UserPrincipal testUser = new UserPrincipal(100L, 1L, authorities);
         HealthDtos.CreateRequest request = new HealthDtos.CreateRequest(null, 0.8, 130);
 
         // AI 서버가 'emergency' 응답을 주도록 설정
@@ -96,7 +99,7 @@ class HealthDataServiceTest {
 
         Mockito.verify(fcmService).sendEmergencyNotification(userIdCaptor.capture(), heartrateCaptor.capture());
 
-        Assertions.assertThat(userIdCaptor.getValue()).isEqualTo(100L); // testUser의 ID
-        Assertions.assertThat(heartrateCaptor.getValue()).isEqualTo(130); // request의 심박수
+        assertThat(userIdCaptor.getValue()).isEqualTo(100L); // testUser의 ID
+        assertThat(heartrateCaptor.getValue()).isEqualTo(130); // request의 심박수
     }
 }
