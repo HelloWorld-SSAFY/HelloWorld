@@ -32,7 +32,6 @@ import org.springframework.web.bind.annotation.RestController;
 public class StepsController {
 
     private final StepsDataService service;
-    private final HealthDataService healthService;
 
     @Operation(
             summary = "걸음수 등록",
@@ -102,10 +101,10 @@ public class StepsController {
 
     @Operation(summary = "걸음수 누적 평균(전기간)", description = "구간: 00-12, 00-16. steps>0만 포함.")
     @GetMapping("/overall-cumulative-avg")
-    public ResponseEntity<HealthDtos.StepResponse> overallCumulativeAvg(
+    public ResponseEntity<StepsDtos.StepResponse> overallCumulativeAvg(
             @AuthenticationPrincipal UserPrincipal principal
     ) {
-        return ResponseEntity.ok(healthService.overallCumulativeAvg(principal.getCoupleId()));
+        return ResponseEntity.ok(service.overallCumulativeAvg(principal.getCoupleId()));
     }
 
     @GetMapping("/api/_debug/auth")

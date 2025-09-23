@@ -72,6 +72,7 @@ public class HealthDataService {
                 .date(req.date())
                 .stress(req.stress())
                 .heartrate(req.heartrate())
+//                .steps(req.steps())
                 .build();
         hd = repo.save(hd);
         return toGet(hd);
@@ -180,6 +181,8 @@ public class HealthDataService {
         static final Stat EMPTY = new Stat(null, null, 0L);
     }
 
+
+
     // ---- mappers ----
     private GetResponse toGet(HealthData hd) {
         return new GetResponse(
@@ -187,6 +190,7 @@ public class HealthDataService {
                 hd.getDate(),
                 hd.getStress(),
                 hd.getHeartrate()
+//                hd.getSteps()
         );
     }
 
@@ -197,6 +201,7 @@ public class HealthDataService {
 //                hd.getStress(),
 //                hd.getSleepHours(),
 //                hd.getHeartrate(),
+//                hd.getSteps(),
 //                hd.getIsDanger()
 //        );
 //    }

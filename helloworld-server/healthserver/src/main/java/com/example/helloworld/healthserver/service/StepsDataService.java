@@ -1,5 +1,6 @@
 package com.example.helloworld.healthserver.service;
 
+import com.example.helloworld.healthserver.dto.StepsDtos;
 import com.example.helloworld.healthserver.dto.StepsDtos.CreateRequest;
 import com.example.helloworld.healthserver.dto.StepsDtos.CreateResponse;
 import com.example.helloworld.healthserver.entity.StepsData;
@@ -14,6 +15,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 @Service
@@ -63,5 +66,19 @@ public class StepsDataService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Record not found");
         }
         return new CreateResponse(row.getStepsId(), row.getDate(), row.getSteps());
+    }
+
+    @Transactional(readOnly = true)
+    public StepsDtos.StepResponse overallCumulativeAvg(Long coupleId) {
+        List<Object[]> rows = repo.aggregateStepsOverallCumulative(coupleId);
+
+        List<StepsDtos.StepResponse.Item> items = new ArrayList<>(2);
+        for (Object[] r : rows) {
+            String label = (String) r[1];                       // "00-12" | "00-16"
+            Double avg   = (r[2] != null) ? ((Number) r[2]).doubleValue() : null;
+            items.add(new StepsDtos.StepResponse.Item(label, avg));
+        }
+        // 혹시 둘 중 일부가 비어도 일관된 순서가 되도록 보정하고 싶다면 여기서 채워 넣어도 됨.
+        return new StepsDtos.StepResponse(items);
     }
 }
