@@ -17,7 +17,7 @@ import org.springframework.http.*;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
-import io.swagger.v3.oas.annotations.parameters.RequestBody;
+import org.springframework.web.bind.annotation.RequestBody;
 import io.swagger.v3.oas.annotations.media.*;
 import java.net.URI;
 import java.util.Map;
@@ -43,7 +43,7 @@ public class StepsController {
                     @ApiResponse(responseCode = "404", description = "Not Found")
             }
     )
-    @RequestBody(
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(   // ← 문서용은 이걸로
             required = true,
             content = @Content(
                     mediaType = "application/json",
@@ -52,7 +52,7 @@ public class StepsController {
                             name = "valid-steps-request",
                             value = """
       {
-        "date": "2025-09-23T05:08:24.587Z",
+        "date": "2025-09-23T00:00:00Z",
         "steps": 4200,
         "latitude": 32.1,
         "longitude": 31.0
