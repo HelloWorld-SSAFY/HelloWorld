@@ -13,21 +13,18 @@ interface WearApiService {
     // 건강 데이터 전송 (심박수 + 스트레스 지수)
     @POST("/health/api/wearable")
     suspend fun sendHealthData(
-        @Query("coupleId") coupleId: Int,
         @Body healthData: HealthDataRequest
     ): Response<Any>
 
     // 태동 데이터 전송
     @POST("/health/api/fetal-movement")
     suspend fun sendFetalMovement(
-        @Query("coupleId") coupleId: Int,
         @Body request: FetalMovementRequest
     ): Response<Any>
 
     // 진통 세션 전송
     @POST("/health/api/contractions")
     suspend fun sendLaborData(
-        @Query("coupleId") coupleId: Int,
         @Body laborData: LaborDataRequest
     ): Response<Any>
 }

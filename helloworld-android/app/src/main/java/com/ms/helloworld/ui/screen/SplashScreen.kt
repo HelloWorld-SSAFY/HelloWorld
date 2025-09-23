@@ -24,6 +24,10 @@ fun SplashScreen(
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
 
+    // 네비게이션 상태 관리 (한 번만 실행되도록)
+    var hasNavigated by remember { mutableStateOf(false) }
+
+
     // 스플래시 시작 시 자동 로그인 체크
     LaunchedEffect(Unit) {
         viewModel.autoLogin(context)
@@ -31,20 +35,29 @@ fun SplashScreen(
 
     // UI 상태에 따른 네비게이션 처리
     LaunchedEffect(uiState) {
+        // 이미 네비게이션했으면 중복 실행 방지
+        if (hasNavigated) return@LaunchedEffect
+
         when (uiState) {
             is SplashViewModel.UiState.GoHome -> {
+                hasNavigated = true
                 navController.navigate(Screen.HomeScreen.route) {
-                    popUpTo(Screen.SplashScreen.route) { inclusive = true }
+                    popUpTo(0) { inclusive = true } // 전체 백스택 클리어
+                    launchSingleTop = true
                 }
             }
             is SplashViewModel.UiState.GoOnboarding -> {
+                hasNavigated = true
                 navController.navigate(Screen.OnboardingScreens.route) {
-                    popUpTo(Screen.SplashScreen.route) { inclusive = true }
+                    popUpTo(0) { inclusive = true } // 전체 백스택 클리어
+                    launchSingleTop = true
                 }
             }
             is SplashViewModel.UiState.GoLogin -> {
+                hasNavigated = true
                 navController.navigate(Screen.LoginScreen.route) {
-                    popUpTo(Screen.SplashScreen.route) { inclusive = true }
+                    popUpTo(0) { inclusive = true } // 전체 백스택 클리어
+                    launchSingleTop = true
                 }
             }
             is SplashViewModel.UiState.Loading -> {

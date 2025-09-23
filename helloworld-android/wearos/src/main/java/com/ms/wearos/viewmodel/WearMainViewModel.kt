@@ -186,14 +186,12 @@ class WearMainViewModel @Inject constructor(
     fun sendHealthData(date: String, heartRate: Int, stress: Int) {
         viewModelScope.launch {
             try {
-                val userInfo = authRepository.getUserInfo()
-                val coupleId = userInfo?.couple?.couple_id!!
 
                 val healthData = HealthDataRequest(date, heartRate, stress)
 
                 Log.d("WearMainViewModel", "건강 데이터 전송 시도: $healthData")
 
-                val response = wearRepository.sendHealthData(coupleId, healthData)
+                val response = wearRepository.sendHealthData(healthData)
 
                 if (response.isSuccessful) {
                     Log.d("WearMainViewModel", "건강 데이터 전송 성공: 심박수=${healthData.heartrate}, 스트레스=$healthData.stress")
@@ -217,21 +215,11 @@ class WearMainViewModel @Inject constructor(
             try {
                 _uiState.value = _uiState.value.copy(isLoading = true)
 
-                // 커플 ID 조회
-                val coupleId = getCoupleIdIfValid()
-                if (coupleId == null) {
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        errorMessage = "커플 연동이 필요합니다"
-                    )
-                    return@launch
-                }
-
                 // FetalMovementRequest 객체 생성
                 val fetalMovementRequest = FetalMovementRequest(recordedAt = recordedAt)
 
                 // 태동 기록 전송
-                val response = wearRepository.sendFetalMovement(coupleId, fetalMovementRequest)
+                val response = wearRepository.sendFetalMovement(fetalMovementRequest)
 
                 if (response.isSuccessful) {
                     _uiState.value = _uiState.value.copy(
@@ -262,26 +250,16 @@ class WearMainViewModel @Inject constructor(
             try {
                 _uiState.value = _uiState.value.copy(isLoading = true)
 
-                // 커플 ID 조회
-                val coupleId = getCoupleIdIfValid()
-                if (coupleId == null) {
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        errorMessage = "커플 연동이 필요합니다"
-                    )
-                    return@launch
-                }
-
                 // LaborDataRequest 객체 생성
                 val laborDataRequest = LaborDataRequest(
                     startTime = startTime,
                     endTime = endTime
                 )
 
-                Log.d(TAG, "진통 기록 전송 시도: coupleId=$coupleId, startTime=$startTime, endTime=$endTime")
+                Log.d(TAG, "진통 기록 전송 시도: startTime=$startTime, endTime=$endTime")
 
                 // 진통 기록 전송
-                val response = wearRepository.sendLaborData(coupleId, laborDataRequest)
+                val response = wearRepository.sendLaborData(laborDataRequest)
 
                 if (response.isSuccessful) {
                     _uiState.value = _uiState.value.copy(

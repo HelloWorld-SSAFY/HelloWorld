@@ -291,7 +291,8 @@ class MainActivity : ComponentActivity() {
                         val stressIndex = currentStressIndex.value
 
                         // 현재 시간을 ISO 8601 형식으로 생성
-                        val currentTime = java.time.Instant.now().toString()
+                        val currentTime = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Seoul"))
+                            .format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
 
                         Log.d(
                             TAG,
@@ -372,7 +373,8 @@ class MainActivity : ComponentActivity() {
             viewModel = viewModel,
             onAuthenticated = {
                 // 수정: ISO 8601 형식으로 변경 (서버가 기대하는 형식)
-                val currentTime = java.time.Instant.now().toString()
+                val currentTime = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Seoul"))
+                    .format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
                 // 결과: "2025-09-21T11:30:45.123Z" 형식
 
                 Log.d(TAG, "태동 기록됨: $currentTime")
@@ -676,14 +678,16 @@ class MainActivity : ComponentActivity() {
                 onClick = {
                     if (!isLaborActive) {
                         // 진통 시작 - 시작 시간만 저장
-                        val startTime = java.time.Instant.now().toString()
+                        val startTime =  java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Seoul"))
+                            .format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
                         laborStartTime = startTime
                         isLaborActive = true
 
                         Log.d(TAG, "진통 시작됨: $startTime")
                     } else {
                         // 진통 종료 - 서버로 데이터 전송
-                        val endTime = java.time.Instant.now().toString()
+                        val endTime = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Seoul"))
+                            .format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
                         val startTime = laborStartTime
 
                         if (startTime != null) {
