@@ -66,7 +66,7 @@ fun DiaryRegisterScreen(
 
     // coupleId는 서버에서 토큰으로 자동 처리됨
     val getLmpDate = {
-        menstrualDate ?: "2025-05-15" // couple 데이터의 menstrualDate 사용
+        menstrualDate ?: "2025-01-18" // HomeViewModel과 동일한 기본값 사용
     }
 
     // 날짜 계산 (임신 일수 -> 실제 날짜) - 네겔레 법칙 사용
@@ -74,8 +74,8 @@ fun DiaryRegisterScreen(
         val lmpDateString = getLmpDate()
         val lmpDate = LocalDate.parse(lmpDateString)
 
-        // 네겔레 법칙: 마지막 생리일 + day일 (day일차는 LMP + day일)
-        val actualDate = lmpDate.plusDays(day.toLong())
+        // 네겔레 법칙: 마지막 생리일 + (day-1)일 (day일차는 LMP + (day-1)일)
+        val actualDate = lmpDate.plusDays((day - 1).toLong())
         actualDate.format(DateTimeFormatter.ofPattern("yyyy년 MM월 dd일"))
     }
 
@@ -83,8 +83,8 @@ fun DiaryRegisterScreen(
         val lmpDateString = getLmpDate()
         val lmpDate = LocalDate.parse(lmpDateString)
 
-        // 네겔레 법칙: 마지막 생리일 + day일 (day일차는 LMP + day일)
-        val actualDate = lmpDate.plusDays(day.toLong())
+        // 네겔레 법칙: 마지막 생리일 + (day-1)일 (day일차는 LMP + (day-1)일)
+        val actualDate = lmpDate.plusDays((day - 1).toLong())
         val result = actualDate.toString() // yyyy-MM-dd 형식
 
         println("📅 targetDate 계산 (네겔레 법칙):")

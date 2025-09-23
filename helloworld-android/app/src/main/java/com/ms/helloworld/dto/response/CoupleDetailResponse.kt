@@ -12,5 +12,6 @@ data class UserDetail(
     val id: Long,
     @SerializedName("nickname") val nickname: String?,
     @SerializedName("image_url") val imageUrl: String?,
-    @SerializedName("gender") val gender: String?
+    @SerializedName("gender") val gender: String?,
+    @SerializedName("age") val age: Int?
 )

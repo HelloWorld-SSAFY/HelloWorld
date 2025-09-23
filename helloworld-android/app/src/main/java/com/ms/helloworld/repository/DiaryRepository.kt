@@ -169,9 +169,26 @@ class DiaryRepository @Inject constructor(
         return try {
             Log.d(TAG, "📅 주차별 일기 조회 - week: $week, lmpDate: $lmpDate")
             val response = diaryApi.getDiariesByWeek(week, lmpDate)
-            val contentSize = response.content?.size ?: 0
-            Log.d(TAG, "✅ 주차별 일기 조회 성공: ${contentSize}개 (content null: ${response.content == null})")
-            Result.success(response)
+
+            // items 우선 사용, content는 fallback
+            val actualContent = response.items ?: response.content
+            val contentSize = actualContent?.size ?: 0
+            Log.d(TAG, "✅ 주차별 일기 조회 성공: ${contentSize}개")
+            Log.d(TAG, "  - items null 여부: ${response.items == null}")
+            Log.d(TAG, "  - content null 여부: ${response.content == null}")
+
+            if (actualContent != null && actualContent.isNotEmpty()) {
+                Log.d(TAG, "📋 조회된 주간 일기 목록:")
+                actualContent.forEachIndexed { index, diary ->
+                    Log.d(TAG, "  [$index] ID: ${diary.diaryId}, 제목: ${diary.diaryTitle}, 날짜: ${diary.targetDate}")
+                }
+            } else {
+                Log.d(TAG, "📋 해당 주차에 등록된 일기가 없습니다")
+            }
+
+            // items를 content로 치환한 새로운 response 생성
+            val correctedResponse = response.copy(content = actualContent)
+            Result.success(correctedResponse)
         } catch (e: Exception) {
             Log.e(TAG, "❌ 주차별 일기 조회 실패: ${e.message}", e)
             Result.failure(e)
@@ -190,21 +207,26 @@ class DiaryRepository @Inject constructor(
 
             val response = diaryApi.getDiariesByDay(day, lmpDate)
 
-            val contentSize = response.content?.size ?: 0
+            // items 우선 사용, content는 fallback
+            val actualContent = response.items ?: response.content
+            val contentSize = actualContent?.size ?: 0
             Log.d(TAG, "✅ 일별 일기 조회 성공!")
             Log.d(TAG, "  - 조회된 일기 수: ${contentSize}개")
+            Log.d(TAG, "  - items null 여부: ${response.items == null}")
             Log.d(TAG, "  - content null 여부: ${response.content == null}")
 
-            if (response.content != null && response.content.isNotEmpty()) {
+            if (actualContent != null && actualContent.isNotEmpty()) {
                 Log.d(TAG, "📋 조회된 일기 목록:")
-                response.content.forEachIndexed { index, diary ->
+                actualContent.forEachIndexed { index, diary ->
                     Log.d(TAG, "  [$index] ID: ${diary.diaryId}, 제목: ${diary.diaryTitle}, 역할: ${diary.authorRole}, 날짜: ${diary.targetDate}")
                 }
             } else {
                 Log.d(TAG, "📋 해당 날짜에 등록된 일기가 없습니다")
             }
 
-            Result.success(response)
+            // items를 content로 치환한 새로운 response 생성
+            val correctedResponse = response.copy(content = actualContent)
+            Result.success(correctedResponse)
         } catch (e: Exception) {
             Log.e(TAG, "❌ 일별 일기 조회 실패")
             Log.e(TAG, "Exception type: ${e.javaClass.simpleName}")
