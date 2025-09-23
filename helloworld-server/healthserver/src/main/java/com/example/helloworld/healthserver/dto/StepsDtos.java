@@ -2,17 +2,23 @@ package com.example.helloworld.healthserver.dto;
 
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import java.time.Instant;
 
 public final class StepsDtos {
 
     // 등록 요청
     public record CreateRequest(
-            Instant date,     // 측정 시점(UTC Instant). 없으면 서비스에서 now()로 보정 가능
+            @Schema(example = "2025-09-23T05:08:24.587Z")
+            Instant date,
+            @Schema(example = "4200")
             Integer steps,
+            @Schema(example = "32.1")
             Double latitude,
+            @Schema(example = "31.0")
             Double longitude
-            ) {}
+    ) {}
 
     // 등록 응답
     public record CreateResponse(
