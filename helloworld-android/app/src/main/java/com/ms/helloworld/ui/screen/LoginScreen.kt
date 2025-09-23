@@ -63,8 +63,7 @@ fun LoginScreen(
             // Lottie 애니메이션을 Box로 감싸서 절대 위치 지정
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(2.5f),
+                    .fillMaxWidth(),
                 contentAlignment = Alignment.Center
             ) {
                 val composition by rememberLottieComposition(LottieCompositionSpec.RawRes(R.raw.splashlottie))

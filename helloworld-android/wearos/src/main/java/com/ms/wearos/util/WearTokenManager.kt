@@ -97,6 +97,20 @@ class WearTokenManager @Inject constructor(
         dataEventBuffer.release()
     }
 
+    /**
+     * MessageAPI를 통해 받은 토큰을 저장하는 메서드
+     */
+    fun saveTokens(accessToken: String, refreshToken: String) {
+        val timestamp = System.currentTimeMillis()
+
+        Log.d(TAG, "MessageAPI를 통해 토큰 저장")
+        Log.d(TAG, "Access token: ${accessToken.take(20)}...")
+        Log.d(TAG, "Refresh token: ${refreshToken.take(20)}...")
+
+        updateTokensInternal(accessToken, refreshToken, timestamp)
+    }
+
+
     private fun updateTokensInternal(accessToken: String, refreshToken: String?, timestamp: Long) {
         val hadToken = !_accessToken.value.isNullOrEmpty()
 
