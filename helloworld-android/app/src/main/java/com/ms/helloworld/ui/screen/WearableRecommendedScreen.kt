@@ -15,12 +15,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.style.TextAlign
 import androidx.navigation.NavHostController
+import com.ms.helloworld.R
+import com.ms.helloworld.dto.response.StressLevel
 import com.ms.helloworld.navigation.Screen
 import com.ms.helloworld.ui.components.CustomTopAppBar
 import com.ms.helloworld.ui.theme.MainColor
@@ -28,10 +31,12 @@ import com.ms.helloworld.ui.theme.MainColor
 @SuppressLint("NewApi")
 @Composable
 fun WearableRecommendedScreen(
-    navController: NavHostController
+    navController: NavHostController,
+    stressLevel: StressLevel = StressLevel.STABLE,
+    heartRate: Int = 75,      // 현재 심박수 (분당)
+    stressScore: Int = 65,    // 스트레스 점수 (0-100)
+    steps: Int = 6500         // 오늘 걸음수
 ) {
-    val backgroundColor = Color(0xFFF5F5F5)
-
     Column(
         modifier = Modifier.fillMaxSize()
     ) {
@@ -44,17 +49,27 @@ fun WearableRecommendedScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
 
             // 실시간 상태 섹션
-            RealTimeStatusSection()
+            RealTimeStatusSection(stressLevel = stressLevel)
 
             // 건강 지표 섹션
-            HealthMetricsSection()
+            HealthMetricsSection(
+                heartRate = heartRate,
+                stressScore = stressScore,
+                steps = steps
+            )
 
             // 음악 추천 섹션
             MusicRecommendationSection()
+
+            // 명상 추천 섹션
+            MeditationRecommendationSection()
+
+            // 요가 추천 섹션
+            YogaRecommendationSection()
 
             // 나들이 추천 섹션
             OutdoorRecommendationSection()
@@ -69,7 +84,7 @@ fun WearableRecommendedScreen(
 }
 
 @Composable
-fun RealTimeStatusSection() {
+fun RealTimeStatusSection(stressLevel: StressLevel) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -103,26 +118,22 @@ fun RealTimeStatusSection() {
                     color = Color.Gray
                 )
                 Text(
-                    text = "높음",
+                    text = stressLevel.displayName,
                     fontSize = 20.sp,
-                    color = Color.Red,
+                    color = stressLevel.color,
                     fontWeight = FontWeight.Medium
                 )
             }
-
-            Text(
-                text = "안정 필요",
-                fontSize = 16.sp,
-                color = Color.Gray,
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center
-            )
         }
     }
 }
 
 @Composable
-fun HealthMetricsSection() {
+fun HealthMetricsSection(
+    heartRate: Int = 75,      // 현재 심박수 (분당)
+    stressScore: Int = 65,    // 스트레스 점수 (0-100)
+    steps: Int = 6500         // 오늘 걸음수
+) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -140,19 +151,22 @@ fun HealthMetricsSection() {
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
                 CircularProgressChart(
-                    percentage = 87f,
+                    percentage = calculateHeartRatePercentage(heartRate),
+                    label = "심박수",
+                    color = Color(0xFFFF6B6B),
+                    value = "${heartRate}bpm"
+                )
+                CircularProgressChart(
+                    percentage = stressScore.toFloat(),
                     label = "스트레스",
-                    color = Color(0xFFFF6B6B)
+                    color = Color(0xFF4DABF7),
+                    value = "${stressScore}점"
                 )
                 CircularProgressChart(
-                    percentage = 65f,
-                    label = "컨디션",
-                    color = Color(0xFF4DABF7)
-                )
-                CircularProgressChart(
-                    percentage = 26f,
-                    label = "활동량",
-                    color = Color(0xFFFFD93D)
+                    percentage = calculateStepsPercentage(steps),
+                    label = "걸음수",
+                    color = Color(0xFFFFD93D),
+                    value = "${String.format("%.1f", steps / 1000f)}K"
                 )
             }
         }
@@ -163,7 +177,8 @@ fun HealthMetricsSection() {
 fun CircularProgressChart(
     percentage: Float,
     label: String,
-    color: Color
+    color: Color,
+    value: String = "${percentage.toInt()}%"
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally
@@ -175,22 +190,23 @@ fun CircularProgressChart(
             CircularProgressIndicator(
                 progress = percentage / 100f,
                 modifier = Modifier.fillMaxSize(),
-                color = MainColor,
+                color = color,
                 strokeWidth = 6.dp,
                 strokeCap = StrokeCap.Round,
                 trackColor = Color(0xFFE0E0E0)
             )
             Text(
-                text = "${percentage.toInt()}%",
+                text = value,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color.Black
+                color = Color.Black,
+                textAlign = TextAlign.Center
             )
         }
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(8.dp))
         Text(
             text = label,
-            fontSize = 10.sp,
+            fontSize = 14.sp,
             color = Color.Gray
         )
     }
@@ -209,12 +225,24 @@ fun MusicRecommendationSection() {
         Column(
             modifier = Modifier.padding(20.dp)
         ) {
-            Text(
-                text = "음악 추천",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.Black
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "음악 추천",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.Black
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Icon(
+                    painter = painterResource(R.drawable.ic_music),
+                    contentDescription = "음악",
+                    tint = Color.Unspecified,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
 
             Spacer(modifier = Modifier.height(12.dp))
 
@@ -228,7 +256,121 @@ fun MusicRecommendationSection() {
                 Text(
                     text = "마음을 가라앉히는 음악 듣기",
                     fontSize = 14.sp,
+                    color = Color.Gray
+                )
+                Icon(
+                    Icons.Default.KeyboardArrowRight,
+                    contentDescription = "더보기",
+                    tint = Color.Gray,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun MeditationRecommendationSection() {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 10.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "명상 추천",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
                     color = Color.Black
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Icon(
+                    painter = painterResource(R.drawable.ic_meditation),
+                    contentDescription = "명상",
+                    tint = Color.Unspecified,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { },
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "심신 안정에 도움이 되는 명상 시작하기",
+                    fontSize = 14.sp,
+                    color = Color.Gray
+                )
+                Icon(
+                    Icons.Default.KeyboardArrowRight,
+                    contentDescription = "더보기",
+                    tint = Color.Gray,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun YogaRecommendationSection() {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 10.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "요가 추천",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.Black
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Icon(
+                    painter = painterResource(R.drawable.ic_yoga),
+                    contentDescription = "요가",
+                    tint = Color.Unspecified,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { },
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "임산부를 위한 안전한 요가 동작 배우기",
+                    fontSize = 14.sp,
+                    color = Color.Gray
                 )
                 Icon(
                     Icons.Default.KeyboardArrowRight,
@@ -256,7 +398,6 @@ fun OutdoorRecommendationSection() {
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
@@ -265,20 +406,37 @@ fun OutdoorRecommendationSection() {
                     fontWeight = FontWeight.Bold,
                     color = Color.Black
                 )
-                Text(
-                    text = "🌟",
-                    fontSize = 16.sp
+                Spacer(modifier = Modifier.width(10.dp))
+                Icon(
+                    painter = painterResource(R.drawable.ic_outdoor),
+                    contentDescription = "나들이",
+                    tint = Color.Unspecified,
+                    modifier = Modifier.size(24.dp)
                 )
             }
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            Text(
-                text = "오늘은 날씨가 좋아요. 가까운 공원에 가보세요.",
-                fontSize = 14.sp,
-                color = Color.Gray,
-                lineHeight = 20.sp
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { },
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "오늘은 날씨가 좋아요. 가까운 공원에 가보세요.",
+                    fontSize = 14.sp,
+                    color = Color.Gray,
+                    lineHeight = 20.sp
+                )
+                Icon(
+                    Icons.Default.KeyboardArrowRight,
+                    contentDescription = "더보기",
+                    tint = Color.Gray,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
         }
     }
 }
@@ -318,7 +476,7 @@ fun RecordSection(navController: NavHostController?) {
                         fontSize = 12.sp,
                         color = Color.Gray
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
                     Icon(
                         Icons.Default.KeyboardArrowRight,
                         contentDescription = "더보기",
@@ -328,7 +486,7 @@ fun RecordSection(navController: NavHostController?) {
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -342,7 +500,7 @@ fun RecordSection(navController: NavHostController?) {
                 ) {
                     Text(
                         text = "태동 기록",
-                        fontSize = 14.sp,
+                        fontSize = 16.sp,
                         fontWeight = FontWeight.Medium,
                         color = Color.Gray
                     )
@@ -357,7 +515,7 @@ fun RecordSection(navController: NavHostController?) {
                             text = "8.1",
                             fontSize = 28.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color.Black
+                            color = Color(0xFF6BB6FF)
                         )
                     }
 
@@ -385,24 +543,19 @@ fun RecordSection(navController: NavHostController?) {
                 ) {
                     Text(
                         text = "진통 기록",
-                        fontSize = 14.sp,
+                        fontSize = 16.sp,
                         fontWeight = FontWeight.Medium,
                         color = Color.Gray
                     )
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    Box(
-                        modifier = Modifier.height(36.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "12회",
-                            fontSize = 28.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.Black
-                        )
-                    }
+                    Text(
+                        text = "12회",
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFFF6B9D)
+                    )
 
                     Spacer(modifier = Modifier.height(4.dp))
 
@@ -415,6 +568,20 @@ fun RecordSection(navController: NavHostController?) {
             }
         }
     }
+}
+
+// 심박수 퍼센트 계산 (60-100bpm을 정상 범위로 가정)
+fun calculateHeartRatePercentage(heartRate: Int): Float {
+    return when {
+        heartRate < 60 -> (heartRate / 60f) * 50f  // 60 미만은 0-50%
+        heartRate <= 100 -> 50f + ((heartRate - 60f) / 40f) * 30f  // 60-100은 50-80%
+        else -> 80f + ((heartRate - 100f) / 50f) * 20f  // 100 초과는 80-100%
+    }.coerceIn(0f, 100f)
+}
+
+// 걸음수 퍼센트 계산 (10,000걸음을 100%로 가정)
+fun calculateStepsPercentage(steps: Int): Float {
+    return (steps / 10000f * 100f).coerceIn(0f, 100f)
 }
 
 @Preview(showBackground = true)
