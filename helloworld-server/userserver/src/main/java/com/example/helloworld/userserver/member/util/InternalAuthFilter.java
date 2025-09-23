@@ -28,10 +28,9 @@ import java.util.List;
  * 내부 게이트웨이 서명 헤더(X-Internal-*)를 우선 신뢰하고,
  * 없거나 검증 실패 시 Bearer JWT로 폴백하여 SecurityContext에 InternalPrincipal을 주입한다.
  *
- * 우선순위: @Order(0)로 가장 앞단에서 동작하도록 설정.
  */
+
 @Component
-@Order(0)
 public class InternalAuthFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(InternalAuthFilter.class);
