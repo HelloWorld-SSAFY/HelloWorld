@@ -3,9 +3,13 @@ package com.example.helloworld.userserver.alarm.controller;
 import com.example.helloworld.userserver.alarm.dto.FcmTokenResponse;
 import com.example.helloworld.userserver.alarm.entity.DeviceToken;
 import com.example.helloworld.userserver.alarm.persistence.DeviceTokenRepository;
+import com.example.helloworld.userserver.member.util.InternalPrincipal;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
@@ -20,20 +24,29 @@ public class DeviceTokenController {
     public record RegisterReq(String token) {}
     public record UnregisterReq(String token) {}
 
+    // 인증된 사용자 정보가 없을 경우 예외를 던지는 헬퍼 메소드
+    private InternalPrincipal requireAuth(InternalPrincipal principal) {
+        if (principal == null || principal.memberId() == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+        }
+        return principal;
+    }
+
     @PostMapping("/register")
-    public ResponseEntity<Void> register(@RequestHeader("X-Member-Id") Long memberId,
-                                         @RequestBody RegisterReq body) {
-        // 2. 전달받은 memberId를 직접 사용합니다.
-        repo.upsert(memberId, body.token());
+    public ResponseEntity<Void> register(
+            @AuthenticationPrincipal InternalPrincipal principal, // 1. @AuthenticationPrincipal 사용
+            @RequestBody RegisterReq body) {
+        var auth = requireAuth(principal);
+        repo.upsert(auth.memberId(), body.token()); // 2. principal에서 사용자 ID 사용
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/unregister")
-    // 1. `@RequestHeader("Authorization")` 대신 `@RequestHeader("X-Member-Id")`를 받습니다.
-    public ResponseEntity<Void> unregister(@RequestHeader("X-Member-Id") Long memberId,
-                                           @RequestBody UnregisterReq body) {
-        // 2. 전달받은 memberId를 직접 사용합니다.
-        repo.deactivate(memberId, body.token());
+    public ResponseEntity<Void> unregister(
+            @AuthenticationPrincipal InternalPrincipal principal, // 1. @AuthenticationPrincipal 사용
+            @RequestBody UnregisterReq body) {
+        var auth = requireAuth(principal);
+        repo.deactivate(auth.memberId(), body.token()); // 2. principal에서 사용자 ID 사용
         return ResponseEntity.noContent().build();
     }
 
