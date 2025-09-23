@@ -1,6 +1,5 @@
 package com.example.helloworld.healthserver.config;
 
-import org.springframework.http.HttpMethod;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -42,7 +41,6 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/health"
 //                                "/api/wearable/daily-buckets"
                         ).permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/steps").permitAll()
                         // 그 외의 모든 요청은 반드시 인증을 거쳐야 함
                         .anyRequest().authenticated()
 

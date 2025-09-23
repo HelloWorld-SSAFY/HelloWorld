@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.*;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.*;
@@ -19,6 +20,7 @@ import org.springframework.web.server.ResponseStatusException;
 import io.swagger.v3.oas.annotations.parameters.RequestBody;
 import io.swagger.v3.oas.annotations.media.*;
 import java.net.URI;
+import java.util.Map;
 
 @Tag(name = "Steps", description = "걸음수 등록 API")
 @RestController
@@ -88,4 +90,15 @@ public class StepsController {
     ) {
         return ResponseEntity.ok(healthService.overallCumulativeAvg(principal.getCoupleId()));
     }
+
+    @GetMapping("/api/_debug/auth")
+    public Map<String,Object> me(@AuthenticationPrincipal UserPrincipal p, HttpServletRequest r) {
+        return Map.of(
+                "uri", r.getRequestURI(),
+                "userId", p != null ? p.getUserId() : null,
+                "coupleId", p != null ? p.getCoupleId() : null
+        );
+    }
+
+
 }
