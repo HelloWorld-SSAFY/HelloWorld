@@ -9,6 +9,7 @@ from rest_framework.response import Response
 from drf_spectacular.utils import (
     extend_schema,
     PolymorphicProxySerializer,
+    OpenApiExample,   # ✅ 추가: 예시 노출용
 )
 
 # 내부에서 정의된 스키마/유틸 재사용 (중복 방지)
@@ -49,6 +50,20 @@ class StepsCheckView(APIView):
             "바디 avg_steps가 있으면 그 값을 최우선으로 사용하고, 없으면 메인서버 평균 → 저장값 순으로 폴백. "
             "(avg - cum_steps) ≥ 500이면 장소 추천을 내부에서 미리 실행해 recommend_delivery/PlaceExposure에 저장(응답엔 미포함)."
         ),
+        examples=[  # ✅ Swagger에 최소 request 바디 예시 노출
+            OpenApiExample(
+                name="Minimal Request",
+                summary="필수/핵심 필드만",
+                value={
+                    "ts": "2025-09-23T16:42:20.330Z",
+                    "cum_steps": 1000,
+                    "avg_steps": 4999,
+                    "lat": 36.849,
+                    "lng": 127.545
+                },
+                request_only=True,
+            )
+        ]
     )
     def post(self, request: HttpRequest):
         bad = _assert_app_token(request)
