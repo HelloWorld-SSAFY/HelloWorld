@@ -3,6 +3,8 @@ package com.example.helloworld.userserver.alarm.persistence;
 import com.example.helloworld.userserver.alarm.entity.DeviceToken;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Instant;
 import java.util.Optional;
 import java.sql.Timestamp;
 import java.util.List;
@@ -19,22 +21,23 @@ public interface DeviceTokenRepository extends JpaRepository<DeviceToken, Long> 
 
     @Transactional
     default void upsert(Long userId, String token) {
-        var now = new Timestamp(System.currentTimeMillis());
-        var existing = this.findAll().stream()
-                .filter(t -> t.getUserId().equals(userId) && t.getToken().equals(token))
-                .findFirst();
-        if (existing.isPresent()) {
-            var t = existing.get();//로그임실패시
-            t.activate();
-        } else {
-            this.save(DeviceToken.builder()
-                    .userId(userId)
-                    .token(token)
-                    .isActive(true)
-                    .createdAt(now)
-                    .lastSeenAt(now)
-                    .build());
-        }
+        var now = Instant.now();
+        
+        this.findByUserIdAndToken(userId, token)
+                .ifPresentOrElse(
+                        // 토큰이 이미 존재하면 activate만 호출 (lastSeenAt 업데이트)
+                        DeviceToken::activate,
+                        // 토큰이 없으면 새로 생성하여 저장
+                        () -> {
+                            this.save(DeviceToken.builder()
+                                    .userId(userId)
+                                    .token(token)
+                                    .isActive(true)
+                                    .createdAt(now) // 이제 타입이 Instant로 일치합니다.
+                                    .lastSeenAt(now)  // 이제 타입이 Instant로 일치합니다.
+                                    .build());
+                        }
+                );
     }
     @Transactional
     default void deactivate(Long userId, String token) {
