@@ -126,19 +126,20 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        lifecycleScope.launch {
-            delay(1000)
-            val viewModel: WearMainViewModel = ViewModelProvider(this@MainActivity)[WearMainViewModel::class.java]
-
-            // 토큰 상태 확인
-            val hasToken = viewModel.uiState.value.isAuthenticated
-            if (!hasToken) {
-                Log.d(TAG, "토큰 없음 - 폰에 토큰 요청")
-                viewModel.requestTokenFromPhone(this@MainActivity) // 추가 필요
-            }
-
-            logTokenStatus(viewModel)
-        }
+//        lifecycleScope.launch {
+//            delay(1000)
+//            val viewModel: WearMainViewModel = ViewModelProvider(this@MainActivity)[WearMainViewModel::class.java]
+//            // 토큰 상태 확인 및 필요시 핸드폰에 토큰 요청
+//            viewModel.initializeTokenState(this@MainActivity)
+//            // 토큰 상태 확인
+//            val hasToken = viewModel.uiState.value.isAuthenticated
+//            if (!hasToken) {
+//                Log.d(TAG, "토큰 없음 - 폰에 토큰 요청")
+//                viewModel.requestTokenFromPhone(this@MainActivity) // 추가 필요
+//            }
+//
+//            logTokenStatus(viewModel)
+//        }
 
         installSplashScreen()
         super.onCreate(savedInstanceState)
@@ -148,6 +149,10 @@ class MainActivity : ComponentActivity() {
 
         requestHealthPermissions()
         registerBroadcastReceiver()
+
+        // 토큰 초기화 - 앱 시작 시 자동으로 토큰 요청
+        initializeTokens()
+
 
         setContent {
             AppContent()
@@ -159,6 +164,39 @@ class MainActivity : ComponentActivity() {
             val viewModel: WearMainViewModel =
                 ViewModelProvider(this@MainActivity)[WearMainViewModel::class.java]
             logTokenStatus(viewModel)
+        }
+    }
+
+    /**
+     * 토큰 초기화 처리를 하나의 함수로 통합
+     */
+    private fun initializeTokens() {
+        lifecycleScope.launch {
+            delay(1000) // 앱 초기화 완료 후 실행
+
+            val viewModel: WearMainViewModel = ViewModelProvider(this@MainActivity)[WearMainViewModel::class.java]
+
+            // 토큰 상태 초기화 및 필요시 핸드폰에 토큰 요청
+            viewModel.initializeTokenState(this@MainActivity)
+
+            // 토큰 상태 모니터링 시작
+            monitorTokenStatus(viewModel)
+        }
+    }
+
+    /**
+     * 토큰 상태를 지속적으로 모니터링
+     */
+    private fun monitorTokenStatus(viewModel: WearMainViewModel) {
+        lifecycleScope.launch {
+            viewModel.uiState.collect { state ->
+                Log.d(TAG, "인증 상태: ${state.isAuthenticated}")
+                if (state.isAuthenticated) {
+                    Log.d(TAG, "토큰 사용 가능 - 건강 데이터 전송 준비됨")
+                } else {
+                    Log.d(TAG, "토큰 없음 - 핸드폰 연결 및 로그인 필요")
+                }
+            }
         }
     }
 
@@ -276,17 +314,10 @@ class MainActivity : ComponentActivity() {
     private fun startHeartRateServerSync(viewModel: WearMainViewModel) {
         heartRateJob?.cancel()
         heartRateJob = lifecycleScope.launch {
-            Log.d(TAG, "startHeartRateServerSync: ?")
             while (isToggleEnabled.value) {
-                Log.d(TAG, "startHeartRateServerSync: 0")
                 val uiState = viewModel.uiState.value
 
                 if (uiState.isAuthenticated) {
-                    Log.d(TAG, "startHeartRateServerSync: 1")
-                    // 커플 아이디 조회
-                    val coupleId = viewModel.getCoupleIdIfValid()
-                    if (coupleId != null) {
-                        Log.d(TAG, "startHeartRateServerSync: 2")
                         val heartRate = currentHeartRate.value
                         val stressIndex = currentStressIndex.value
 
@@ -305,9 +336,6 @@ class MainActivity : ComponentActivity() {
                             heartRate = if (heartRate > 0) heartRate.toInt() else 0,
                             stress = stressIndex
                         )
-                    } else {
-                        Log.w(TAG, "건강 데이터 서버 전송 실패 - 커플 아이디 조회 실패")
-                    }
                 } else {
                     Log.w(TAG, "심박수 서버 전송 실패 - 인증 필요")
                 }

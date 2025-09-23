@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import com.ms.helloworld.R
 import com.ms.helloworld.navigation.Screen
+import com.ms.helloworld.ui.theme.MainColor
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -36,6 +37,7 @@ fun CustomTopAppBar(
                 "home" -> {
                     Text(
                         text = "Hello World",
+                        color = MainColor,
                         fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.Center,
                         fontSize = 20.sp,
@@ -84,7 +86,7 @@ fun CustomTopAppBar(
                         fontSize = 20.sp,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(end = 16.dp)
+                            .padding(end = 40.dp)
                     )
                 }
                 "calendar", "diary" -> {}

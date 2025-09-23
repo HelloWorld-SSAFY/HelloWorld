@@ -29,13 +29,11 @@ class AuthInterceptor @Inject constructor(
             request
         } else {
             val accessToken = runBlocking { tokenManager.getAccessTokenSuspend() }
-            Log.d(TAG, "accessToken 길이: ${accessToken?.length ?: 0}")
-            Log.d(TAG, "accessToken 비어있음: ${accessToken.isNullOrEmpty()}")
 
             request.newBuilder().apply {
                 if (!accessToken.isNullOrEmpty()) {
                     addHeader("Authorization", "Bearer $accessToken")
-                    Log.d(TAG, "Authorization 헤더 추가됨: Bearer ${accessToken.take(20)}...")
+                    Log.d(TAG, "Authorization 헤더 추가됨: Bearer $accessToken")
                 } else {
                     Log.e(TAG, "토큰이 없어서 Authorization 헤더 추가 안됨!")
                 }

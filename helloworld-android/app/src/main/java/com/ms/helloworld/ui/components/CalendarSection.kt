@@ -133,7 +133,7 @@ fun CalendarSection(
                                     modifier = Modifier
                                         .size(4.dp)
                                         .background(
-                                            if (isSelected) Color.White else Color.Blue,
+                                            if (isSelected) Color.White else MainColor,
                                             CircleShape
                                         )
                                 )
