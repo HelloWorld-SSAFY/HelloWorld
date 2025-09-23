@@ -56,6 +56,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.decorators import api_view, permission_classes
 from drf_spectacular.utils import extend_schema
 from rest_framework.response import Response
+from rest_framework.exceptions import ValidationError
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 전역 싱글턴 (상태 유지)
@@ -108,11 +109,30 @@ def _access_token_from_request(request: HttpRequest) -> Optional[str]:
         return raw[7:].strip()
     return raw
 
-def _require_user_ref(request: HttpRequest, fallback: Optional[str]):
-    uref = _user_ref_from_request(request, fallback)
-    if not uref:
-        return None, Response({"ok": False, "error": "MISSING_USER_REF"}, status=400)
-    return uref, None
+def _require_user_ref(request) -> str:
+    """
+    게이트웨이 내부 헤더 → 외부 헤더/바디 순으로 user_ref 결정.
+    포맷은 기존 DB 규칙에 맞춰 변경 가능 (예: u{user_id} / c{couple_id})
+    """
+    # 미들웨어가 세팅한 속성 우선
+    user_id = getattr(request, "user_id", None)
+    couple_id = getattr(request, "couple_id", None)
+
+    # 최후 폴백: 요청 바디/쿼리
+    if not user_id and not couple_id:
+        body_ref = (getattr(request, "data", {}) or {}).get("user_ref")
+        query_ref = getattr(request, "query_params", {}).get("user_ref")
+        if body_ref:
+            return str(body_ref)
+        if query_ref:
+            return str(query_ref)
+
+    if user_id:
+        return f"u{user_id}"
+    if couple_id is not None:
+        return f"c{couple_id}"
+
+    raise ValidationError({"error": "missing user_ref / couple_id"})
 
 def _now_kst() -> datetime:
     return datetime.now(tz=KST)
