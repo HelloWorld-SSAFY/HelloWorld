@@ -27,7 +27,7 @@ public class DeviceToken {
     @Column(name="last_seen_at")
     private Timestamp lastSeenAt;
 
-    public void activate(String platform) {
+    public void activate() {
         this.isActive = true;
         this.lastSeenAt = new Timestamp(System.currentTimeMillis());
     }

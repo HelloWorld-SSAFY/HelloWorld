@@ -11,10 +11,15 @@ public record DiaryResponse(
         LocalDate targetDate,
         Instant createdAt,
         String title,
-        String content
+        String content,
+        Long authorId,
+        String authorRole
+
 ) {
     public static DiaryResponse from(Diary d) {
         return new DiaryResponse(d.getDiaryId(), d.getCoupleId(), d.getTargetDate(),
-                d.getCreatedAt().toInstant(), d.getDiaryTitle(), d.getDiaryContent());
+                d.getCreatedAt().toInstant(), d.getDiaryTitle(), d.getDiaryContent(),
+                d.getAuthorId(), // 작성자 ID 추가
+                d.getAuthorRole().name());
     }
 }
