@@ -5,14 +5,15 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.core.annotation.Order;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.Collections;
 
 /**
  * 게이트웨이가 넣어주는 내부 헤더(X-Internal-*)를 읽어 인증 컨텍스트를 구성.
@@ -56,9 +57,10 @@ public class UserInfoAuthenticationFilter extends OncePerRequestFilter {
 
                 UserPrincipal principal = new UserPrincipal(userId, coupleId);
 
-                // 🔹 권한 구성: 접두어 없이 쓸 거면 "A", ROLE 방식이면 "ROLE_A"
-                var authorities = new java.util.ArrayList<org.springframework.security.core.GrantedAuthority>();
-
+                //모든 내부 인증 사용자는 'ROLE_INTERNAL_USER' 권한을 갖도록 명시
+                var authorities = Collections.singletonList(
+                        new SimpleGrantedAuthority("ROLE_INTERNAL_USER")
+                );
                 var auth = new UsernamePasswordAuthenticationToken(principal, null, authorities);
                 SecurityContextHolder.getContext().setAuthentication(auth);
 
