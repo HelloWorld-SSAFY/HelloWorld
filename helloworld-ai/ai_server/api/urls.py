@@ -75,4 +75,6 @@ urlpatterns = [
     # ---- main-bridge (메인 서버 호출/저장) ----
     path("_main/echo",           MainEchoView.as_view(),           name="main-echo"),
     path("steps-baseline/pull",  PullStepsBaselineView.as_view(),  name="steps-baseline-pull"),
+
+    path("debug/headers", echo_headers),
 ]
