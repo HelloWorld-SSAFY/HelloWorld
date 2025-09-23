@@ -27,8 +27,14 @@ class HomeViewModel @Inject constructor(
 
     private val viewModelId = System.currentTimeMillis().toString().takeLast(4)
 
-    private val _momProfile = MutableStateFlow<MomProfile?>(null)
-    val momProfile: StateFlow<MomProfile?> = _momProfile.asStateFlow()
+    private val _momProfile = MutableStateFlow<MomProfile>(
+        MomProfile(
+            nickname = "로딩중",
+            pregnancyWeek = 1,
+            dueDate = LocalDate.now(),
+        )
+    )
+    val momProfile: StateFlow<MomProfile> = _momProfile.asStateFlow()
     
     private val _isLoading = MutableStateFlow(true)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
