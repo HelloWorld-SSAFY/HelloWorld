@@ -3,7 +3,6 @@ package com.example.helloworld.userserver.alarm.controller;
 import com.example.helloworld.userserver.alarm.dto.FcmTokenResponse;
 import com.example.helloworld.userserver.alarm.entity.DeviceToken;
 import com.example.helloworld.userserver.alarm.persistence.DeviceTokenRepository;
-import com.example.helloworld.userserver.alarm.security.AuthUserResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
