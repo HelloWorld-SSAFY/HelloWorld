@@ -55,6 +55,8 @@ public class UserInfoAuthenticationFilter extends OncePerRequestFilter {
                 Long userId   = Long.parseLong(userIdStr);
                 Long coupleId = StringUtils.hasText(coupleIdStr) ? Long.parseLong(coupleIdStr) : null;
 
+                log.info("Creating UserPrincipal - userId: {}, coupleId: {}", userId, coupleId);
+
                 UserPrincipal principal = new UserPrincipal(userId, coupleId);
 
                 //모든 내부 인증 사용자는 'ROLE_INTERNAL_USER' 권한을 갖도록 명시
