@@ -57,7 +57,7 @@ class HealthDataServiceTest {
 
         // 3-인자 시그니처에 맞춰 stubbing
         Mockito.when(aiServerClient.checkTelemetry(
-                anyString(), anyLong(), any(AiServerClient.TelemetryRequest.class))
+                anyLong(), any(AiServerClient.TelemetryRequest.class))
         ).thenReturn(normalResponse);
 
         // when
@@ -66,7 +66,7 @@ class HealthDataServiceTest {
         // then
         Mockito.verify(healthDataRepository, Mockito.times(1)).save(any(HealthData.class));
         Mockito.verify(aiServerClient, Mockito.times(1))
-                .checkTelemetry(eq("TEST_APP_TOKEN"), eq(1L), any(AiServerClient.TelemetryRequest.class));
+                .checkTelemetry(eq(1L), any(AiServerClient.TelemetryRequest.class));
         Mockito.verify(fcmService, Mockito.never()).sendEmergencyNotification(anyLong(), anyInt());
 
         assertThat(actual).isEqualTo(normalResponse);
@@ -86,7 +86,7 @@ class HealthDataServiceTest {
         );
 
         Mockito.when(aiServerClient.checkTelemetry(
-                anyString(), anyLong(), any(AiServerClient.TelemetryRequest.class))
+                anyLong(), any(AiServerClient.TelemetryRequest.class))
         ).thenReturn(emergencyResponse);
 
         // when
@@ -95,7 +95,7 @@ class HealthDataServiceTest {
         // then
         Mockito.verify(healthDataRepository, Mockito.times(1)).save(any(HealthData.class));
         Mockito.verify(aiServerClient, Mockito.times(1))
-                .checkTelemetry(eq("TEST_APP_TOKEN"), eq(1L), any(AiServerClient.TelemetryRequest.class));
+                .checkTelemetry( eq(1L), any(AiServerClient.TelemetryRequest.class));
         Mockito.verify(fcmService, Mockito.times(1))
                 .sendEmergencyNotification(anyLong(), anyInt());
 

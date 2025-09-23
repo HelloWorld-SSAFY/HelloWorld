@@ -2,6 +2,7 @@ package com.example.helloworld.healthserver.config;
 
 
 import feign.RequestInterceptor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -9,10 +10,11 @@ import org.springframework.context.annotation.Configuration;
 public class AiServerFeignConfig {
 
     @Bean
-    public RequestInterceptor addAppTokenHeader() {
-        // 이 인터셉터는 요청을 보내기 직전에 헤더를 추가하는 역할을 합니다.
+    public RequestInterceptor addAppTokenHeader(
+            @Value("${ai.app-token}") String appToken
+    ) {
         return template -> {
-            template.header("X-App-Token", "e3d10cf9-bfad-43a7-9817-6b0b5dc2730c");
+            template.header("X-App-Token", appToken);
         };
     }
 }
