@@ -52,6 +52,12 @@ spec:
               name: postgres-secret
               key: POSTGRES_PASSWORD
 
+        - name: APP_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: aiserver-apptoken
+              key: TOKEN
+
         # Actuator가 있다면 /actuator/health 사용, 없으면 / 로 교체
         readinessProbe:
           httpGet: { path: /actuator/health, port: 8080 }
