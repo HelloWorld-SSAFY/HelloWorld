@@ -3,8 +3,7 @@ package com.example.helloworld.healthserver.controller;
 
 import com.example.helloworld.healthserver.config.UserPrincipal;
 import com.example.helloworld.healthserver.dto.HealthDtos;
-import com.example.helloworld.healthserver.dto.StepsDtos.CreateRequest;
-import com.example.helloworld.healthserver.dto.StepsDtos.CreateResponse;
+import com.example.helloworld.healthserver.dto.StepsDtos;
 import com.example.helloworld.healthserver.service.HealthDataService;
 import com.example.helloworld.healthserver.service.StepsDataService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -17,7 +16,8 @@ import org.springframework.http.*;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
-
+import io.swagger.v3.oas.annotations.parameters.RequestBody;
+import io.swagger.v3.oas.annotations.media.*;
 import java.net.URI;
 
 @Tag(name = "Steps", description = "걸음수 등록 API")
@@ -38,14 +38,31 @@ public class StepsController {
                     @ApiResponse(responseCode = "404", description = "Not Found")
             }
     )
-
+    @RequestBody(
+            required = true,
+            content = @Content(
+                    mediaType = "application/json",
+                    schema = @Schema(implementation = StepsDtos.CreateRequest.class),
+                    examples = @ExampleObject(
+                            name = "valid-steps-request",
+                            value = """
+      {
+        "date": "2025-09-23T05:08:24.587Z",
+        "steps": 4200,
+        "latitude": 32.1,
+        "longitude": 31.0
+      }
+      """
+                    )
+            )
+    )
     @PostMapping
-    public ResponseEntity<CreateResponse> create(
+    public ResponseEntity<StepsDtos.CreateResponse> create(
             @AuthenticationPrincipal UserPrincipal principal,
-            @Valid @RequestBody CreateRequest req
+            @Valid @RequestBody StepsDtos.CreateRequest req
     ) {
 
-        CreateResponse res = service.create(principal.getCoupleId(), req);
+        StepsDtos.CreateResponse res = service.create(principal.getCoupleId(), req);
         return ResponseEntity.status(HttpStatus.CREATED).body(res);
     }
 

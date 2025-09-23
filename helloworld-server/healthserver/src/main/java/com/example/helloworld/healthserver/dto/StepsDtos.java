@@ -9,6 +9,7 @@ import java.time.Instant;
 public final class StepsDtos {
 
     // 등록 요청
+    @Schema(name = "StepsCreateRequest")
     public record CreateRequest(
             @Schema(example = "2025-09-23T05:08:24.587Z")
             Instant date,

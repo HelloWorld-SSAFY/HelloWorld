@@ -64,20 +64,6 @@ public class HealthDataService {
         return anomalyResponse;
     }
 
-    // ✨ 보안 강화 예시: coupleId를 파라미터로 받아 소유권 검증
-//    @Transactional(readOnly = true)
-//    public HealthDtos.GetResponse getById(Long coupleId, Long healthId) {
-//        var hd = repo.findByHealthIdAndCoupleId(healthId, coupleId)
-//                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Record not found"));
-//        return new HealthDtos.GetResponse(hd.getHealthId(), hd.getDate(), hd.getStress(), hd.getHeartrate());
-//    }
-
-
-
-
-
-
-
 
     @Transactional
     public GetResponse create(Long coupleId, CreateRequest req) {
