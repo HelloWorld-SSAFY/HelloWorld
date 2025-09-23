@@ -9,12 +9,15 @@ def echo_headers(request):
             "X-Internal-Role","X-Internal-Ts","X-Internal-Sig"]
     return Response({k: request.headers.get(k) for k in keys})
 
+# api/views_debug.py (네가 올린 코드에 한 줄 추가)
 from rest_framework.decorators import api_view, permission_classes, authentication_classes
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
+from rest_framework.authentication import get_authorization_header  # 필요없지만 예시용
+from ai_server.settings import GatewayInternalAuth  # settings에 정의한 클래스 임포트
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])     # 인증 필수
+@authentication_classes([GatewayInternalAuth])   # 여기가 핵심: 내부 헤더 인증을 강제
+@permission_classes([IsAuthenticated])
 def whoami(request):
     u = request.user
     return Response({
