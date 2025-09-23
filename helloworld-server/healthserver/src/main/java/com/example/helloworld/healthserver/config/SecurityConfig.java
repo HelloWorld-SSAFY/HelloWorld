@@ -36,7 +36,7 @@ public class SecurityConfig {
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(auth -> auth
-                        // ▼▼▼▼▼ [수정] WebSecurityCustomizer에서 처리하는 경로는 여기서 제거합니다. ▼▼▼▼▼
+                        // WebSecurityCustomizer에서 처리하는 경로는 여기서 제거
                         // actuator/health 엔드포인트만 인증 없이 접근 허용
                         .requestMatchers("/actuator/health"
 //                                "/api/wearable/daily-buckets"
