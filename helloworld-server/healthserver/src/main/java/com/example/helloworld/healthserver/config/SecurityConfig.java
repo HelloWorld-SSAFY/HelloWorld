@@ -40,10 +40,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // WebSecurityCustomizer에서 처리하는 경로는 여기서 제거
                         // actuator/health 엔드포인트만 인증 없이 접근 허용
-                        .requestMatchers("/actuator/health").permitAll()
-                        .requestMatchers("/api/**")
-                        .hasRole("INTERNAL_USER")
-                        .requestMatchers("/api/**").authenticated()
+                        .requestMatchers("/api/**").hasRole("INTERNAL_USER")
                         // 그 외의 모든 요청은 반드시 인증을 거쳐야 함
                         .anyRequest().authenticated()
                 )
