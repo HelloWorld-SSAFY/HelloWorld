@@ -31,7 +31,9 @@ public class UserInfoAuthenticationFilter extends OncePerRequestFilter {
         // ✅ readiness/liveness/prometheus 포함 전부 우회
         return uri.equals("/actuator/health")
                 || uri.startsWith("/actuator/")
+                || uri.equals("/swagger-ui.html")
                 || uri.startsWith("/swagger-ui/")
+                || uri.equals("/v3/api-docs")
                 || uri.startsWith("/v3/api-docs/");
     }
 
