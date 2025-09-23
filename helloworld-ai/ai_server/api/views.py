@@ -52,6 +52,11 @@ from services.youtube_ingest import ingest_youtube_to_session
 from services.spotify_ingest import ingest_spotify_to_session
 from services.recommender import recommend_on_session, RecInput
 
+from rest_framework.permissions import AllowAny
+from rest_framework.decorators import api_view, permission_classes
+from drf_spectacular.utils import extend_schema
+from rest_framework.response import Response
+
 # ──────────────────────────────────────────────────────────────────────────────
 # 전역 싱글턴 (상태 유지)
 # ──────────────────────────────────────────────────────────────────────────────
@@ -355,6 +360,8 @@ class PlacesOut(serializers.Serializer):
 # Healthz
 # ──────────────────────────────────────────────────────────────────────────────
 class HealthzView(APIView):
+    authentication_classes = []          # ← 전역 JWT 인증 우회
+    permission_classes = [AllowAny]      # ← 누구나 접근 허용
     @extend_schema(
         auth=[],
         responses={200: inline_serializer("Healthz", {"ok": serializers.BooleanField(), "version": serializers.CharField()})},
@@ -365,7 +372,6 @@ class HealthzView(APIView):
     )
     def get(self, request: HttpRequest):
         return Response({"ok": True, "version": "v0.2.2"})
-
 # ──────────────────────────────────────────────────────────────────────────────
 # 유틸
 # ──────────────────────────────────────────────────────────────────────────────

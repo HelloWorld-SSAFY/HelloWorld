@@ -40,13 +40,12 @@ INSTALLED_APPS = [
     'corsheaders',
 ]
 
-
 # ---- 미들웨어 ---------------------------------------------------------------
 MIDDLEWARE = [
     'django_prometheus.middleware.PrometheusBeforeMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'api.middleware.app_token_mw',
-    'api.middleware.couple_id_mw', 
+    'api.middleware.couple_id_mw',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -158,16 +157,25 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # ---- CORS / DRF -------------------------------------------------------------
 CORS_ALLOW_ALL_ORIGINS = True  # 개발용. 운영에서는 False + 화이트리스트 권장
 CORS_ALLOW_HEADERS = list(default_headers) + [
-    "x-app-token",
-    "authorization",      # ← 추가
+    "authorization",      # ← Bearer 토큰 헤더 허용
     "x-app-token",
     "x-access-token",
     "x-couple-id",
 ]
+
 REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
     "DEFAULT_PARSER_CLASSES": ["rest_framework.parsers.JSONParser"],
+
+    # ★ 전역: 모든 요청은 Bearer Access Token 필수
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ),
+    "DEFAULT_PERMISSION_CLASSES": (
+        "rest_framework.permissions.IsAuthenticated",
+    ),
+
     "DEFAULT_THROTTLE_CLASSES": [
         "rest_framework.throttling.AnonRateThrottle",
         "rest_framework.throttling.UserRateThrottle",
@@ -180,24 +188,22 @@ SPECTACULAR_SETTINGS = {
     "TITLE": "임산부 헬스케어 API",
     "VERSION": "v0.2.1",
 
-    # 전역 보안 요구 OFF → 각 API에서 헤더 파라미터로 입력
-    "SECURITY": [],
+    # ★ 전역 보안 요구: Swagger에서 모든 요청이 bearerAuth 필요
+    "SECURITY": [{"bearerAuth": []}],
 
     "SERVERS": [
         {"url": "/ai", "description": "via gateway"},
         {"url": "/",  "description": "in-cluster direct"},
     ],
 
-    # securitySchemes은 유지(원하면 Authorize로도 사용 가능)
     "COMPONENTS": {
         "securitySchemes": {
-            # X-App-Token 필요하다면 남기고,
+            # (선택) App 토큰을 병행 사용 중이면 유지
             "AppToken": {
                 "type": "apiKey",
                 "in": "header",
                 "name": "X-App-Token",
             },
-
             # Bearer JWT
             "bearerAuth": {
                 "type": "http",
@@ -207,10 +213,10 @@ SPECTACULAR_SETTINGS = {
         }
     },
 
-    # 보기 설정(원래 값 유지 + 필요 최소치만)
     "SORT_OPERATION_PARAMETERS": False,
     "SWAGGER_UI_SETTINGS": {
-        "persistAuthorization": False,  # 전역 인증 저장 안 함
+        # ★ Authorize에서 입력한 토큰을 UI에 유지
+        "persistAuthorization": True,
     },
 }
 
