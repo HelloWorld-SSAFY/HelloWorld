@@ -3,6 +3,7 @@ package com.example.helloworld.userserver.alarm.entity;
 import jakarta.persistence.*;
 import lombok.*;
 import java.sql.Timestamp;
+import java.time.Instant;
 
 @Entity
 @Table(name = "device_tokens",
@@ -22,14 +23,14 @@ public class DeviceToken {
     private boolean isActive;
 
     @Column(name="created_at", nullable=false)
-    private Timestamp createdAt;
+    private Instant createdAt;
 
     @Column(name="last_seen_at")
-    private Timestamp lastSeenAt;
+    private Instant lastSeenAt;
 
     public void activate() {
         this.isActive = true;
-        this.lastSeenAt = new Timestamp(System.currentTimeMillis());
+        this.lastSeenAt = Instant.now();
     }
 
     public void deactivate() { this.isActive = false; }
