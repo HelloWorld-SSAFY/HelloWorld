@@ -1,189 +1,179 @@
 # api/views_steps_check.py
-from __future__ import annotations
-from django.utils import timezone
-from django.utils.dateparse import parse_datetime
+import uuid
+from typing import Dict, Any, Optional
+from datetime import timedelta, datetime
+
+from django.http import HttpRequest
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import serializers
-from drf_spectacular.utils import extend_schema, inline_serializer, OpenApiParameter, OpenApiTypes
-
-from services.steps_check import check_steps_low, KST
-
-# ── Swagger 헤더 파라미터
-APP_TOKEN_PARAM = OpenApiParameter(
-    name="X-App-Token", type=OpenApiTypes.STR,
-    location=OpenApiParameter.HEADER, required=True,
-    description="App-level token (.env: APP_TOKEN). 미들웨어에서 검증"
+from drf_spectacular.utils import (
+    extend_schema,
+    PolymorphicProxySerializer,
 )
 
-COUPLE_ID_PARAM = OpenApiParameter(
-    name="X-Couple-Id", type=OpenApiTypes.INT,
-    location=OpenApiParameter.HEADER, required=False,
-    description="커플 ID. 헤더 또는 바디(couple_id)로 전달 가능"
+# 내부에서 정의된 스키마/유틸 재사용 (중복 방지)
+from .views import (
+    # 공통 스웨거 헤더
+    APP_TOKEN_PARAM, COUPLE_ID_PARAM, AUTH_HEADER_PARAM,
+    # 요청/응답 스키마
+    StepsCheckIn, StepsNormalResp, StepsRestrictResp,
+    # 공통 유틸
+    _assert_app_token, _require_user_ref, _access_token_from_request,
+    _slot_for, _parse_couple_id, _fetch_steps_overall_avg,
+    _run_places_delivery,
 )
 
-# ── 요청/응답 스키마(문서 전용)
-class _StepsCheckReq(serializers.Serializer):
-    ts = serializers.DateTimeField(required=True, help_text="ISO8601 (예: 2025-09-23T05:08:00Z)")
-    cum_steps = serializers.IntegerField(required=True, help_text="현재까지의 '하루 누적' 걸음수")
-    lat = serializers.FloatField(required=True, help_text="위도(-90~90)")
-    lng = serializers.FloatField(required=True, help_text="경도(-180~180)")
-    couple_id = serializers.IntegerField(required=False, help_text="헤더 대신 바디로 보낼 때만")
-    limit = serializers.IntegerField(required=False, help_text="장소 추천 개수(기본 3)")
+from services.policy_service import categories_for_trigger
+from services.anomaly import KST
+from api.models import RecommendationSession, UserStepsTodStatsDaily
 
-_PlacesItem = inline_serializer(
-    name="PlacesItem",
-    fields={
-        "name": serializers.CharField(),
-        "lat": serializers.FloatField(),
-        "lng": serializers.FloatField(),
-        "distance_m": serializers.IntegerField(required=False),
-        "air_quality": serializers.CharField(required=False),
-        "weather": serializers.CharField(required=False),
-        "safety": serializers.CharField(required=False),
-    },
-)
+# ---- 정책 상수 (env 안 씀) ----
+STEPS_GAP_THRESHOLD = 500  # avg - cum_steps ≥ 500 → restrict
 
 class StepsCheckView(APIView):
-    """
-    POST /v1/steps-check
-    입력: ts, cum_steps, lat, lng, (couple_id|X-Couple-Id), limit?
-    동작: 저활동(steps_low)일 때 내부적으로 장소 추천까지 수행하여 같은 응답에 포함
-    """
-
     @extend_schema(
-        tags=["steps"],
-        summary="누적 걸음수 저활동 판정(+ 필요 시 장소 추천)",
-        description=(
-            "`ts/cum_steps/lat/lng` 을 필수로 받습니다. "
-            "커플 식별은 `X-Couple-Id` 헤더 또는 바디 `couple_id` 중 하나를 사용합니다. "
-            "판정이 `steps_low`이면 내부에서 장소 추천을 수행하여 `places`를 포함해 반환합니다. "
-            "(limit 기본값=3)"
-        ),
-        parameters=[APP_TOKEN_PARAM, COUPLE_ID_PARAM],
-        operation_id="postStepsCheck",
-        request=_StepsCheckReq,
+        parameters=[APP_TOKEN_PARAM, COUPLE_ID_PARAM, AUTH_HEADER_PARAM],
+        request=StepsCheckIn,
         responses={
-            200: inline_serializer(
-                name="StepsCheckResponse",
-                fields={
-                    "ok": serializers.BooleanField(),
-                    "status": serializers.ChoiceField(choices=["normal", "steps_low"]),
-                    "session_id": serializers.CharField(required=False, help_text="steps_low일 때만 생성"),
-                    "categories": serializers.ListField(child=serializers.CharField(), required=False),
-                    "places": serializers.ListField(child=_PlacesItem, required=False),
-                    "places_meta": inline_serializer(
-                        name="PlacesMeta",
-                        fields={
-                            "limit": serializers.IntegerField(required=False),
-                            "used_location": serializers.BooleanField(required=False),
-                        },
-                    ),
-                    "meta": inline_serializer(
-                        name="StepsCheckMeta",
-                        fields={
-                            "bucket": serializers.CharField(),
-                            "baseline": serializers.IntegerField(),
-                            "steps": serializers.IntegerField(),
-                            "decision": serializers.CharField(),
-                            "main": serializers.CharField(),
-                            "ts_kst": serializers.CharField(),
-                        },
-                    ),
-                },
-            ),
-            400: inline_serializer(
-                name="StepsCheckBadRequest",
-                fields={"ok": serializers.BooleanField(), "error": serializers.CharField()},
-            ),
-        },
-    )
-    def post(self, request):
-        body = request.data or {}
-
-        # couple_id: 헤더/바디 모두 허용
-        couple_id = (
-            body.get("couple_id")
-            or request.headers.get("X-Couple-Id")
-            or request.META.get("HTTP_X_COUPLE_ID")
-        )
-        if couple_id is None:
-            return Response({"ok": False, "error": "missing couple_id"}, status=400)
-        try:
-            couple_id = int(couple_id)
-        except Exception:
-            return Response({"ok": False, "error": "invalid couple_id"}, status=400)
-
-        # 필수값 파싱/검증
-        ts_str = body.get("ts")
-        if not ts_str:
-            return Response({"ok": False, "error": "missing ts"}, status=400)
-        dt = parse_datetime(ts_str)
-        if not dt:
-            return Response({"ok": False, "error": "invalid ts"}, status=400)
-        ts_kst = (dt.astimezone(KST) if dt.tzinfo else timezone.localtime())
-
-        try:
-            steps = int(body.get("cum_steps"))
-        except Exception:
-            return Response({"ok": False, "error": "invalid cum_steps"}, status=400)
-
-        try:
-            lat = float(body.get("lat"))
-            lng = float(body.get("lng"))
-        except Exception:
-            return Response({"ok": False, "error": "invalid lat/lng"}, status=400)
-        if not (-90.0 <= lat <= 90.0 and -180.0 <= lng <= 180.0):
-            return Response({"ok": False, "error": "lat/lng out of range"}, status=400)
-
-        try:
-            limit = int(body.get("limit", 3))
-        except Exception:
-            limit = 3
-        limit = max(1, min(limit, 20))  # 간단한 가드
-
-        # 판정
-        result = check_steps_low(couple_id=couple_id, cum_steps=steps, ts_kst=ts_kst)
-
-        base_payload = {
-            "ok": True,
-            "meta": {
-                "bucket": result["bucket"],
-                "baseline": result["baseline"],
-                "steps": steps,
-                "decision": result["decision"],
-                "main": result["main"],
-                "ts_kst": result["ts_kst_iso"],
-            }
-        }
-
-        if result["status"] != "steps_low":
-            base_payload["status"] = "normal"
-            return Response(base_payload)
-
-        # steps_low → 내부 장소 추천 수행
-        import uuid
-        session_id = str(uuid.uuid4())
-        places = []
-        places_meta = {"limit": limit, "used_location": True}
-
-        try:
-            from services.places_service import recommend_places
-            places, pm = recommend_places(
-                lat=lat, lng=lng, limit=limit, ts_kst=ts_kst, couple_id=couple_id
+            200: PolymorphicProxySerializer(
+                component_name="StepsCheckResponse",
+                resource_type_field_name="mode",
+                serializers={"normal": StepsNormalResp, "restrict": StepsRestrictResp},
+                many=False,
             )
-            if isinstance(pm, dict):
-                places_meta.update(pm)
-        except Exception as e:
-            # 실패해도 steps_low 응답은 주되, places는 생략/빈 리스트
-            places = []
-            places_meta["error"] = "places_unavailable"
+        },
+        tags=["steps"],
+        summary="Compare cum_steps to avg (prefer body.avg_steps; fallback: external/stored); restrict if gap ≥ 500",
+        operation_id="postStepsCheck",
+        description=(
+            "바디 avg_steps가 있으면 그 값을 최우선으로 사용하고, 없으면 메인서버 평균 → 저장값 순으로 폴백. "
+            "(avg - cum_steps) ≥ 500이면 장소 추천을 내부에서 미리 실행해 recommend_delivery/PlaceExposure에 저장(응답엔 미포함)."
+        ),
+    )
+    def post(self, request: HttpRequest):
+        bad = _assert_app_token(request)
+        if bad:
+            return bad
 
-        base_payload.update({
-            "status": "steps_low",
-            "session_id": session_id,
-            "categories": ["WALK", "OUTING"],
-            "places": places,
-            "places_meta": places_meta,
-        })
-        return Response(base_payload)
+        ser = StepsCheckIn(data=request.data)
+        ser.is_valid(raise_exception=True)
+        d = ser.validated_data
+
+        user_ref, missing = _require_user_ref(request, d.get("user_ref"))
+        if missing:
+            return missing
+
+        access_token = _access_token_from_request(request)
+
+        # user_ctx 구성(장소 프리컴퓨트에 사용)
+        user_ctx: Dict[str, Any] = {"lat": float(d["lat"]), "lng": float(d["lng"])}
+        if d.get("max_distance_km") is not None:
+            user_ctx["max_distance_km"] = float(d["max_distance_km"])
+        if d.get("limit") is not None:
+            user_ctx["limit"] = int(d["limit"])
+        if d.get("ctx"):
+            extra = dict(d["ctx"])
+            extra.pop("lat", None); extra.pop("lng", None)
+            user_ctx.update(extra)
+        user_ctx["location_source"] = "steps-check"
+
+        ts = d["ts"]
+        try:
+            ts_kst = ts.astimezone(KST)
+        except Exception:
+            ts_kst = ts
+        slot = _slot_for(ts_kst)
+        bucket = ts_kst.hour // 4
+
+        # 1) body.avg_steps 최우선
+        avg: Optional[float] = None
+        source = None
+        if d.get("avg_steps") is not None:
+            try:
+                avg = float(d["avg_steps"])
+                source = "body"
+            except Exception:
+                avg = None
+
+        # 2) 외부 평균 (바디 없을 때만)
+        if avg is None:
+            ext_avg = None
+            couple_id_for_external = _parse_couple_id(request, user_ref)
+            if couple_id_for_external is not None:
+                ext_avg = _fetch_steps_overall_avg(
+                    couple_id=couple_id_for_external, slot=slot, access_token=access_token
+                )
+            if ext_avg is not None:
+                avg = float(ext_avg)
+                source = "external"
+
+        # 3) 저장값 폴백
+        if avg is None:
+            baseline = UserStepsTodStatsDaily.objects.filter(
+                user_ref=user_ref, d=ts_kst.date(), bucket=bucket
+            ).first()
+            if baseline and baseline.cum_mu is not None:
+                avg = float(baseline.cum_mu or 0.0)
+                source = f"stored_bucket{bucket}"
+
+        if avg is None:
+            # 기준이 없으면 정상으로 처리
+            return Response({"ok": True, "anomaly": False, "mode": "normal"})
+
+        cum_steps = int(d["cum_steps"])
+        gap = max(0.0, avg - float(cum_steps))
+
+        if gap >= STEPS_GAP_THRESHOLD:
+            # 카테고리 정책
+            cats = categories_for_trigger("steps_low") or []
+            session = RecommendationSession.objects.create(
+                user_ref=user_ref, trigger="steps_low", mode="restrict", context={}
+            )
+
+            # 세션 컨텍스트 기록
+            cat_payload = []
+            if cats:
+                cats_sorted = sorted(cats, key=lambda x: x.get("priority", 999))
+                for i, c in enumerate(cats_sorted, 1):
+                    item = {"category": c["code"], "rank": i, "reason": "steps low vs avg"}
+                    cat_payload.append(item)
+
+            ctx = {
+                "session_id": str(session.id),
+                "categories": cat_payload,
+                "user_ctx": user_ctx,
+                "ts": ts_kst.isoformat(),
+            }
+            try:
+                session.set_context(ctx, save=True)
+            except Exception:
+                try:
+                    session.update_context(ctx, save=True)
+                except Exception:
+                    session.context = ctx
+                    session.save(update_fields=["context"])
+
+            # ✅ 장소 프리컴퓨트 + 저장
+            try:
+                _run_places_delivery(session=session, user_ref=user_ref, ctx=user_ctx or {})
+            except Exception:
+                # 로깅만, 응답 포맷 영향 없음
+                import logging
+                logging.getLogger(__name__).exception("steps_low places delivery failed (user=%s)", user_ref)
+
+            src_tag = source or "unknown"
+            reasons = [f"avg-cum \u2265 {STEPS_GAP_THRESHOLD} (\u0394={int(gap)}) src:{src_tag} @{slot}"]
+            return Response({
+                "ok": True,
+                "anomaly": True,
+                "mode": "restrict",
+                "trigger": "steps_low",
+                "reasons": reasons,
+                "recommendation": {
+                    "session_id": str(session.id),
+                    "categories": cat_payload,
+                },
+            })
+
+        # 정상
+        return Response({"ok": True, "anomaly": False, "mode": "normal"})
