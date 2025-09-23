@@ -43,9 +43,27 @@ class DiaryViewModel @Inject constructor(
     // LMP 날짜는 외부에서 설정
     private var actualLmpDate: String = "2025-02-02"
 
+    // 사용자 정보는 외부에서 설정
+    private var currentUserId: Long? = null
+    private var currentUserGender: String? = null
+    private var userAId: Long? = null
+    private var userBId: Long? = null
+
     fun setLmpDate(lmpDate: String) {
         actualLmpDate = lmpDate
         println("📝 DiaryViewModel - LMP 날짜 업데이트: lmpDate=$lmpDate")
+    }
+
+    fun setUserInfo(userId: Long?, userGender: String?) {
+        currentUserId = userId
+        currentUserGender = userGender
+        println("📝 DiaryViewModel - 사용자 정보 업데이트: userId=$userId, userGender=$userGender")
+    }
+
+    fun setCoupleInfo(userAId: Long?, userBId: Long?) {
+        this.userAId = userAId
+        this.userBId = userBId
+        println("📝 DiaryViewModel - 커플 정보 업데이트: userAId=$userAId, userBId=$userBId")
     }
 
     private fun getLmpDate(): String = actualLmpDate
@@ -318,12 +336,18 @@ class DiaryViewModel @Inject constructor(
 
     // 주간 일기 상태 생성
     private fun createWeeklyStatus(week: Int, diaries: List<DiaryResponse>): List<WeeklyDiaryStatus> {
-        // 현재 주의 시작 날짜 계산 (월요일부터 시작)
-        val today = LocalDate.now()
-        val weekFields = WeekFields.of(Locale.getDefault())
-        val currentWeek = today.get(weekFields.weekOfYear())
-        val weekOffset = week - currentWeek
-        val startOfWeek = today.with(weekFields.dayOfWeek(), 1).plusWeeks(weekOffset.toLong())
+        // 임신 주차를 기반으로 날짜 범위 계산
+        val lmpDate = LocalDate.parse(getLmpDate())
+
+        // 임신 주차 계산: week주차 = LMP + (week-1) * 7일
+        val weekStartDay = (week - 1) * 7 + 1 // 해당 주차의 첫 번째 날 (임신 일수)
+        val startOfWeek = lmpDate.plusDays((weekStartDay - 1).toLong()) // LMP + (일수-1)
+
+        println("📅 DiaryViewModel - createWeeklyStatus: ${week}주차")
+        println("  - LMP 날짜: $lmpDate")
+        println("  - 주차 시작일: ${weekStartDay}일차")
+        println("  - 주간 시작 날짜: $startOfWeek")
+        println("  - 주간 종료 날짜: ${startOfWeek.plusDays(6)}")
 
         return (0..6).map { dayOffset ->
             val targetDate = startOfWeek.plusDays(dayOffset.toLong())
@@ -333,8 +357,25 @@ class DiaryViewModel @Inject constructor(
                 diary.targetDate == targetDateString
             }
 
-            val momDiary = dayDiaries.find { it.authorRole == "FEMALE" }
-            val dadDiary = dayDiaries.find { it.authorRole == "MALE" }
+            // 디버깅: 각 날짜별 일기 확인
+            println("📅 DiaryViewModel - calculateWeeklyStatus: ${targetDateString}")
+            println("  - 해당 날짜 일기 수: ${dayDiaries.size}")
+            dayDiaries.forEachIndexed { idx, diary ->
+                val inferredRole = diary.inferAuthorRole(currentUserId, currentUserGender)
+                println("    [$idx] ID=${diary.diaryId}, 제목=${diary.diaryTitle}, inferredRole=$inferredRole")
+                println("    [$idx] authorId=${diary.authorId}, authorRole=${diary.authorRole}")
+                println("    [$idx] currentUserId=$currentUserId, currentUserGender=$currentUserGender")
+            }
+
+            val momDiary = dayDiaries.find {
+                it.inferAuthorRole(currentUserId, currentUserGender, userAId, userBId) == "FEMALE"
+            }
+            val dadDiary = dayDiaries.find {
+                it.inferAuthorRole(currentUserId, currentUserGender, userAId, userBId) == "MALE"
+            }
+
+            println("  - momDiary found: ${momDiary != null}")
+            println("  - dadDiary found: ${dadDiary != null}")
 
             WeeklyDiaryStatus(
                 day = dayOffset + 1,
