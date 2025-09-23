@@ -8,6 +8,7 @@ import com.example.helloworld.healthserver.dto.HealthDtos.*;
 import com.example.helloworld.healthserver.entity.HealthData;
 import com.example.helloworld.healthserver.persistence.HealthDataRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -19,6 +20,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class HealthDataService {
 
@@ -26,6 +28,10 @@ public class HealthDataService {
 
     private final AiServerClient aiServerClient;
     private final FcmService fcmService;
+
+    // application.yml 에 넣어둔 앱 토큰을 주입
+    @Value("${ai.app-token}")  
+    private String aiAppToken;
 
     @Value("${app.zone:Asia/Seoul}")
     private String appZone;
@@ -35,8 +41,8 @@ public class HealthDataService {
 
     @Transactional
     public AiServerClient.AnomalyResponse createAndCheckHealthData(UserPrincipal user, HealthDtos.CreateRequest req) {
-        // 1. DB에 데이터 저장
-        Instant timestamp = req.date() != null ? req.date() : Instant.now();
+        // 1) DB 저장
+        Instant timestamp = (req.date() != null) ? req.date() : Instant.now();
         HealthData healthData = HealthData.builder()
                 .coupleId(user.getCoupleId())
                 .date(timestamp)
@@ -45,23 +51,40 @@ public class HealthDataService {
                 .build();
         repo.save(healthData);
 
-        // 2. AI 서버에 분석 요청
+        // 2) AI 서버 요청 바디 생성
         String userRef = "u" + user.getUserId();
-        String isoTimestamp = timestamp.atZone(ZoneId.of("Asia/Seoul")).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+        String isoTs = timestamp.atZone(ZoneId.of(appZone)).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+        AiServerClient.TelemetryRequest body = new AiServerClient.TelemetryRequest(
+                userRef,
+                isoTs,
+                new AiServerClient.Metrics(req.heartrate(), req.stress())
+        );
 
-        AiServerClient.Metrics metrics = new AiServerClient.Metrics(req.heartrate(), req.stress());
-        AiServerClient.TelemetryRequest telemetryRequest = new AiServerClient.TelemetryRequest(userRef, isoTimestamp, metrics);
+        // 3) 필수 헤더 값 준비 (X-App-Token, X-Internal-Couple-Id)
+        if (aiAppToken == null || aiAppToken.isBlank()) {
+            // 설정이 없으면 500으로 명확히 실패
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "AI app token is not configured");
+        }
+        Long coupleId = user.getCoupleId();
 
-        AiServerClient.AnomalyResponse anomalyResponse = aiServerClient.checkTelemetry(telemetryRequest);
+        // 4) 호출
+        AiServerClient.AnomalyResponse resp;
+        try {
+            resp = aiServerClient.checkTelemetry(aiAppToken, coupleId, body);
+        } catch (feign.FeignException.Unauthorized e) {
+            log.error("AI server 401 Unauthorized (check app token): {}", e.contentUTF8());
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "AI server unauthorized");
+        } catch (feign.FeignException e) {
+            log.error("AI server error status={}, body={}", e.status(), e.contentUTF8());
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "AI server error");
+        }
 
-        // 3. 이상 징후 시 비동기 FCM 알림 전송
-        if (anomalyResponse != null && ANOMALY_MODES.contains(anomalyResponse.mode().toUpperCase())) {
-            //fcmService.sendEmergencyNotification(user.getUserId(), user.getCoupleId(), req.heartrate());
+        // 5) 이상 징후면 FCM
+        if (resp != null && resp.mode() != null && ANOMALY_MODES.contains(resp.mode().toUpperCase())) {
             fcmService.sendEmergencyNotification(user.getUserId(), req.heartrate());
         }
 
-        // 4. AI 서버 응답 반환
-        return anomalyResponse;
+        return resp;
     }
 
 

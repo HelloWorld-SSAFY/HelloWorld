@@ -1,105 +1,110 @@
 package com.example.helloworld.healthserver.service;
 
-
 import com.example.helloworld.healthserver.alarm.service.FcmService;
 import com.example.helloworld.healthserver.client.AiServerClient;
 import com.example.helloworld.healthserver.config.UserPrincipal;
 import com.example.helloworld.healthserver.dto.HealthDtos;
 import com.example.helloworld.healthserver.entity.HealthData;
 import com.example.helloworld.healthserver.persistence.HealthDataRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.*;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Collections;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.*;
 
-@ExtendWith(MockitoExtension.class) // Mockito 기능을 사용하기 위한 설정
+@ExtendWith(MockitoExtension.class)
 class HealthDataServiceTest {
 
-    @InjectMocks // @Mock으로 만들어진 가짜 객체들을 주입받을 실제 테스트 대상
+    @InjectMocks
     private HealthDataService healthDataService;
 
-    @Mock // 가짜(Mock) 객체로 만들 의존성
+    @Mock
     private HealthDataRepository healthDataRepository;
 
-    @Mock // 가짜(Mock) 객체로 만들 의존성
+    @Mock
     private AiServerClient aiServerClient;
 
-    @Mock // 가짜(Mock) 객체로 만들 의존성
+    @Mock
     private FcmService fcmService;
 
+    @BeforeEach
+    void setUp() {
+        // HealthDataService의 @Value 주입 필드에 테스트용 값 세팅
+        ReflectionTestUtils.setField(healthDataService, "aiAppToken", "TEST_APP_TOKEN");
+        // 필요하면 타임존도 세팅 가능
+        ReflectionTestUtils.setField(healthDataService, "appZone", "Asia/Seoul");
+    }
+
     @Test
-    @DisplayName("정상 상황: AI 서버가 'normal' 모드를 반환하면 FCM 알림을 보내지 않는다")
+    @DisplayName("정상: AI 서버가 normal 모드면 FCM을 보내지 않는다")
     void createAndCheck_NormalMode_ShouldNotSendFcm() {
-        // given (준비)
-        // 1. 테스트용 요청 데이터 준비 (권한 포함)
+        // given
         var authorities = Collections.singletonList(new SimpleGrantedAuthority("ROLE_INTERNAL_USER"));
         UserPrincipal testUser = new UserPrincipal(100L, 1L, authorities);
         HealthDtos.CreateRequest request = new HealthDtos.CreateRequest(null, 0.2, 80);
 
-        // 2. AI 서버가 'normal' 응답을 주도록 설정
         AiServerClient.AnomalyResponse normalResponse = new AiServerClient.AnomalyResponse(
                 true, false, "low", "normal", null, null, null, null, null
         );
-        Mockito.when(aiServerClient.checkTelemetry(ArgumentMatchers.any(AiServerClient.TelemetryRequest.class)))
-                .thenReturn(normalResponse);
 
-        // when (실행)
-        AiServerClient.AnomalyResponse actualResponse = healthDataService.createAndCheckHealthData(testUser, request);
+        // 3-인자 시그니처에 맞춰 stubbing
+        Mockito.when(aiServerClient.checkTelemetry(
+                anyString(), anyLong(), any(AiServerClient.TelemetryRequest.class))
+        ).thenReturn(normalResponse);
 
-        // then (검증)
-        // 1. DB 저장 메소드가 1번 호출되었는지 확인
-        Mockito.verify(healthDataRepository, Mockito.times(1)).save(ArgumentMatchers.any(HealthData.class));
+        // when
+        AiServerClient.AnomalyResponse actual = healthDataService.createAndCheckHealthData(testUser, request);
 
-        // 2. AI 서버 호출이 1번 되었는지 확인
-        Mockito.verify(aiServerClient, Mockito.times(1)).checkTelemetry(ArgumentMatchers.any(AiServerClient.TelemetryRequest.class));
+        // then
+        Mockito.verify(healthDataRepository, Mockito.times(1)).save(any(HealthData.class));
+        Mockito.verify(aiServerClient, Mockito.times(1))
+                .checkTelemetry(eq("TEST_APP_TOKEN"), eq(1L), any(AiServerClient.TelemetryRequest.class));
+        Mockito.verify(fcmService, Mockito.never()).sendEmergencyNotification(anyLong(), anyInt());
 
-        // 3. FCM 서비스는 호출되지 않았는지 확인 (가장 중요!)
-        Mockito.verify(fcmService, Mockito.never()).sendEmergencyNotification(ArgumentMatchers.anyLong(), ArgumentMatchers.anyInt());
-
-        // 4. 서비스가 AI 서버의 응답을 그대로 반환했는지 확인
-        assertThat(actualResponse).isEqualTo(normalResponse);
-        assertThat(actualResponse.mode()).isEqualTo("normal");
+        assertThat(actual).isEqualTo(normalResponse);
+        assertThat(actual.mode()).isEqualTo("normal");
     }
 
     @Test
-    @DisplayName("위험 상황: AI 서버가 'emergency' 모드를 반환하면 FCM 알림을 보낸다")
+    @DisplayName("위험: AI 서버가 emergency 모드면 FCM을 보낸다")
     void createAndCheck_EmergencyMode_ShouldSendFcm() {
-        // given (준비)
+        // given
         var authorities = Collections.singletonList(new SimpleGrantedAuthority("ROLE_INTERNAL_USER"));
         UserPrincipal testUser = new UserPrincipal(100L, 1L, authorities);
         HealthDtos.CreateRequest request = new HealthDtos.CreateRequest(null, 0.8, 130);
 
-        // AI 서버가 'emergency' 응답을 주도록 설정
         AiServerClient.AnomalyResponse emergencyResponse = new AiServerClient.AnomalyResponse(
                 true, true, "critical", "emergency", null, null, null, null, null
         );
-        Mockito.when(aiServerClient.checkTelemetry(ArgumentMatchers.any(AiServerClient.TelemetryRequest.class)))
-                .thenReturn(emergencyResponse);
 
-        // when (실행)
+        Mockito.when(aiServerClient.checkTelemetry(
+                anyString(), anyLong(), any(AiServerClient.TelemetryRequest.class))
+        ).thenReturn(emergencyResponse);
+
+        // when
         healthDataService.createAndCheckHealthData(testUser, request);
 
-        // then (검증)
-        // 1. DB 저장과 AI 서버 호출 확인
-        Mockito.verify(healthDataRepository, Mockito.times(1)).save(ArgumentMatchers.any(HealthData.class));
-        Mockito.verify(aiServerClient, Mockito.times(1)).checkTelemetry(ArgumentMatchers.any());
+        // then
+        Mockito.verify(healthDataRepository, Mockito.times(1)).save(any(HealthData.class));
+        Mockito.verify(aiServerClient, Mockito.times(1))
+                .checkTelemetry(eq("TEST_APP_TOKEN"), eq(1L), any(AiServerClient.TelemetryRequest.class));
+        Mockito.verify(fcmService, Mockito.times(1))
+                .sendEmergencyNotification(anyLong(), anyInt());
 
-        // 2. FCM 서비스가 정확히 1번 호출되었는지 확인 (가장 중요!)
-        Mockito.verify(fcmService, Mockito.times(1)).sendEmergencyNotification(ArgumentMatchers.anyLong(), ArgumentMatchers.anyInt());
-
-        // 3. FCM 서비스에 올바른 인자가 전달되었는지 상세 검증 (선택적이지만 매우 유용)
+        // 상세 인자 캡처
         ArgumentCaptor<Long> userIdCaptor = ArgumentCaptor.forClass(Long.class);
-        ArgumentCaptor<Integer> heartrateCaptor = ArgumentCaptor.forClass(Integer.class);
+        ArgumentCaptor<Integer> hrCaptor = ArgumentCaptor.forClass(Integer.class);
+        Mockito.verify(fcmService).sendEmergencyNotification(userIdCaptor.capture(), hrCaptor.capture());
 
-        Mockito.verify(fcmService).sendEmergencyNotification(userIdCaptor.capture(), heartrateCaptor.capture());
-
-        assertThat(userIdCaptor.getValue()).isEqualTo(100L); // testUser의 ID
-        assertThat(heartrateCaptor.getValue()).isEqualTo(130); // request의 심박수
+        assertThat(userIdCaptor.getValue()).isEqualTo(100L);
+        assertThat(hrCaptor.getValue()).isEqualTo(130);
     }
 }

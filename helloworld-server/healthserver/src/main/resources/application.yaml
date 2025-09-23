@@ -19,6 +19,7 @@ ai:
   server:
     base-url: http://aiserver-svc:8000
   telemetry-path: /api/health/telemetry
+  app-token: ${APP_TOKEN}
 
 
 userserver:
