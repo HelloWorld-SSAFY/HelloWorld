@@ -171,7 +171,6 @@ class SplashViewModel @Inject constructor(
                         token = storedToken,
                         platform = com.ms.helloworld.dto.request.Platforms.ANDROID
                     )
-                    Log.d(TAG, "FCM 토큰 등록 완료")
                 } else {
                     Log.d(TAG, "저장된 FCM 토큰 없음, 현재 토큰 가져와서 등록")
                     registerCurrentFcmToken()
