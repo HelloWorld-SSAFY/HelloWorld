@@ -11,6 +11,7 @@ from .views import (
     FeedbackView,
     PlacesView,     # ✅ 클래스 기반
     RecommendView,  # ✅ 추가
+    echo_headers,
 )
 
 # ✅ StepsCheckView는 새 모듈에서 import
