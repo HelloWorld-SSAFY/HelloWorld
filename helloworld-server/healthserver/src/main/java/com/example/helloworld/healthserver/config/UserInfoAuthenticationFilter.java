@@ -55,6 +55,7 @@ public class UserInfoAuthenticationFilter extends OncePerRequestFilter {
                 Long userId   = Long.parseLong(userIdStr);
                 Long coupleId = StringUtils.hasText(coupleIdStr) ? Long.parseLong(coupleIdStr) : null;
 
+                log.info("Creating UserPrincipal - userId: {}, coupleId: {}", userId, coupleId);
 
                 // 1. 먼저 권한 목록을 생성합니다.
                 var authorities = Collections.singletonList(
@@ -69,7 +70,6 @@ public class UserInfoAuthenticationFilter extends OncePerRequestFilter {
                 var auth = new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities());
 
                 SecurityContextHolder.getContext().setAuthentication(auth);
-
 
                 // 🔹 로그 자리수 맞추기(예전 포맷은 role 자리에 path가 찍혔음)
                 log.info("HEALTH_AUDIT userId={}, coupleId={}, path={}, method={}",

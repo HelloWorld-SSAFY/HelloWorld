@@ -1,6 +1,7 @@
 package com.example.helloworld.healthserver.config;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -13,6 +14,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 
 @Configuration
 @EnableWebSecurity
+@Slf4j
 @RequiredArgsConstructor
 public class SecurityConfig {
 
@@ -41,9 +43,17 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/health").permitAll()
                         .requestMatchers("/api/**")
                         .hasRole("INTERNAL_USER")
+                        .requestMatchers("/api/**").authenticated()
                         // 그 외의 모든 요청은 반드시 인증을 거쳐야 함
                         .anyRequest().authenticated()
-
+                )
+                .exceptionHandling(exceptions -> exceptions
+                        .accessDeniedHandler((request, response, accessDeniedException) -> {
+                            log.error("Access denied: {}", accessDeniedException.getMessage());
+                            response.setStatus(403);
+                            response.setContentType("application/json");
+                            response.getWriter().write("{\"error\":\"Forbidden\"}");
+                        })
                 )
                 .addFilterBefore(userInfoAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 

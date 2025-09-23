@@ -21,8 +21,11 @@ import io.swagger.v3.oas.annotations.parameters.RequestBody;
 import io.swagger.v3.oas.annotations.media.*;
 import java.net.URI;
 import java.util.Map;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "Steps", description = "걸음수 등록 API")
+@Slf4j
 @RestController
 @RequestMapping("/api/steps")
 @RequiredArgsConstructor
@@ -63,9 +66,23 @@ public class StepsController {
             @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody StepsDtos.CreateRequest req
     ) {
+        log.info("StepsController - principal class: {}", principal.getClass().getName());
+        log.info("StepsController - userId: {}, coupleId: {}",
+                principal.getUserId(), principal.getCoupleId());
 
-        StepsDtos.CreateResponse res = service.create(principal.getCoupleId(), req);
-        return ResponseEntity.status(HttpStatus.CREATED).body(res);
+        // 이 부분이 실행되는지 확인
+        try {
+            StepsDtos.CreateResponse res = service.create(principal.getCoupleId(), req);
+            log.info("Steps created successfully: {}", res.stepsId());
+            return ResponseEntity.status(HttpStatus.CREATED).body(res);
+        } catch (ResponseStatusException e) {
+            log.error("Service threw exception: status={}, reason={}",
+                    e.getStatusCode(), e.getReason());
+            throw e;
+        }
+
+//        StepsDtos.CreateResponse res = service.create(principal.getCoupleId(), req);
+//        return ResponseEntity.status(HttpStatus.CREATED).body(res);
     }
 
 //    @GetMapping("/my-steps")
