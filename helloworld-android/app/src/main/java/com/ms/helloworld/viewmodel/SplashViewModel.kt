@@ -244,7 +244,7 @@ class SplashViewModel @Inject constructor(
     private suspend fun clearTokensAndGoLogin(): UiState {
         Log.d(TAG, "토큰 삭제 후 로그인으로 이동")
         try {
-            tokenManager.clearTokens()
+//            tokenManager.clearTokens()
         } catch (e: Exception) {
             Log.e(TAG, "토큰 삭제 중 오류: ${e.message}")
         }

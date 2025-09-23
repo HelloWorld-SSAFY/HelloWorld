@@ -47,11 +47,4 @@ class EncryptedDataStore @Inject constructor(
         }
     }
 
-    // 토큰 삭제
-    suspend fun clearTokens() {
-        context.dataStore.edit { preferences ->
-            preferences.remove(accessTokenKey)
-            preferences.remove(refreshTokenKey)
-        }
-    }
 }

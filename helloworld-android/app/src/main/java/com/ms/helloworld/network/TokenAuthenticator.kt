@@ -62,14 +62,14 @@ class TokenAuthenticator @Inject constructor(
                                 .build()
                         } else {
                             Log.e(TAG, "토큰 갱신 응답 본문이 null")
-                            tokenManager.clearTokens()
+//                            tokenManager.clearTokens()
                             Log.d(TAG, "🗑토큰 삭제됨 - 재로그인 필요")
                             null
                         }
                     } else {
                         Log.e(TAG, "토큰 갱신 실패: ${refreshResponse.code()}")
-                        tokenManager.clearTokens()
-                        Log.d(TAG, "🗑토큰 삭제됨 - 재로그인 필요")
+//                        tokenManager.clearTokens()
+                        Log.d(TAG, "토큰 삭제됨 - 재로그인 필요")
                         null
                     }
 
@@ -78,7 +78,7 @@ class TokenAuthenticator @Inject constructor(
 
                     // 갱신 실패 시 토큰 삭제 (로그아웃 처리)
                     try {
-                        tokenManager.clearTokens()
+//                        tokenManager.clearTokens()
                         Log.d(TAG, "토큰 삭제됨 - 재로그인 필요")
                     } catch (clearException: Exception) {
                         Log.e(TAG, "토큰 삭제 실패", clearException)

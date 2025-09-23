@@ -115,11 +115,18 @@ class LoginViewModel @Inject constructor(
                     Log.d(TAG, "저장된 accessToken 확인: ${tokenManager.getAccessToken()}")
                     Log.d(TAG, "저장된 refreshToken 확인: ${tokenManager.getRefreshToken()}")
 
-                    // WearOS로 토큰 전송
-                    sendTokenToWearOS(context, loginResponse.accessToken, loginResponse.refreshToken)
+                    launch {
+                        sendTokenToWearOS(context, loginResponse.accessToken, loginResponse.refreshToken)
+                    }
+                    launch {
+                        registerStoredFcmToken(context)
+                    }
 
-                    // 로그인 성공 후 저장된 FCM 토큰 등록
-                    registerStoredFcmToken(context)
+//                    // WearOS로 토큰 전송
+//                    sendTokenToWearOS(context, loginResponse.accessToken, loginResponse.refreshToken)
+//
+//                    // 로그인 성공 후 저장된 FCM 토큰 등록
+//                    registerStoredFcmToken(context)
 
 
                     _state.value = _state.value.copy(

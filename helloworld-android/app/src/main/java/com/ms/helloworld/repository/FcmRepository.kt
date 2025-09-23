@@ -19,7 +19,7 @@ class FcmRepository @Inject constructor(
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val t = token ?: FirebaseMessaging.getInstance().token.await()
-                val fcmTokenRequest = FcmRegisterRequest(t, platform)
+                val fcmTokenRequest = FcmRegisterRequest(t)
 
                 Log.d("FCM", "토큰 등록 API 호출 : $token")
                 val res = api.registerFcmToken(fcmTokenRequest)

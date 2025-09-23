@@ -91,7 +91,7 @@ class WearMainViewModel @Inject constructor(
                 if (nodes.isEmpty()) {
                     Log.w(TAG, "연결된 폰이 없습니다")
                     _uiState.value = _uiState.value.copy(
-                        errorMessage = "폰과 연결되지 않았습니다"
+                        errorMessage = "핸드폰과 연결되지 않았습니다"
                     )
                     return@launch
                 }
