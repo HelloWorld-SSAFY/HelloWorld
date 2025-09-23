@@ -70,13 +70,19 @@ public class StepsController {
         log.info("StepsController - userId: {}, coupleId: {}",
                 principal.getUserId(), principal.getCoupleId());
 
-        if (principal.getCoupleId() == null) {
-            log.error("CoupleId is null!");
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "커플 등록 필요");
+        // 이 부분이 실행되는지 확인
+        try {
+            StepsDtos.CreateResponse res = service.create(principal.getCoupleId(), req);
+            log.info("Steps created successfully: {}", res.stepsId());
+            return ResponseEntity.status(HttpStatus.CREATED).body(res);
+        } catch (ResponseStatusException e) {
+            log.error("Service threw exception: status={}, reason={}",
+                    e.getStatusCode(), e.getReason());
+            throw e;
         }
 
-        StepsDtos.CreateResponse res = service.create(principal.getCoupleId(), req);
-        return ResponseEntity.status(HttpStatus.CREATED).body(res);
+//        StepsDtos.CreateResponse res = service.create(principal.getCoupleId(), req);
+//        return ResponseEntity.status(HttpStatus.CREATED).body(res);
     }
 
 //    @GetMapping("/my-steps")
