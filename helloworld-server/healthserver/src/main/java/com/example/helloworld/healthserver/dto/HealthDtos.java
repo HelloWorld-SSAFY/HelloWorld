@@ -31,7 +31,6 @@ public final class HealthDtos {
 //                Integer stress,
 //                @JsonProperty("sleep_hours") Integer sleepHours,
 //                Integer heartrate,
-//                Integer steps,
 //                @JsonProperty("is_danger") Boolean isDanger
 //        ) {}
 //    }
@@ -47,14 +46,7 @@ public final class HealthDtos {
 //    }
 
 
-    public record StepResponse(
-            List<Item> records // 0-12, 0-16, 0-24 (항상 3개)
-    ) {
-        public record Item(
-                @JsonProperty("hour_range") String hourRange, // "00-12", "00-16", "00-24"
-                @JsonProperty("avg_steps") Double avgSteps
-        ) {}
-    }
+
 
     /**
      * 전체 커플의 일별 통계 응답
