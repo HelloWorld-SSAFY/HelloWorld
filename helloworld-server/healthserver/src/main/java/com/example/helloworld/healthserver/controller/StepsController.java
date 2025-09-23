@@ -44,11 +44,6 @@ public class StepsController {
             @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody CreateRequest req
     ) {
-        // 커플 권한 확인
-        if (!principal.hasCouple()) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "커플 등록이 필요합니다");
-        }
 
         CreateResponse res = service.create(principal.getCoupleId(), req);
         return ResponseEntity.status(HttpStatus.CREATED).body(res);
