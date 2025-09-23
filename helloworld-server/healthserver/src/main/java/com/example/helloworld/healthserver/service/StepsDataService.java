@@ -40,6 +40,8 @@ public class StepsDataService {
                 .coupleId(coupleId)
                 .date(when)
                 .steps(req.steps())
+                .latitude(req.latitude())
+                .longitude(req.longitude())
                 .build();
 
         row = repo.save(row);

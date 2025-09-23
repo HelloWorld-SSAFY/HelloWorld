@@ -56,7 +56,7 @@ dependencies {
 
 
 	implementation 'com.google.firebase:firebase-admin:9.2.0'
-	implementation 'org.springframework.boot:spring-boot-starter-security' // Spring Security 추가
+//	implementation 'org.springframework.boot:spring-boot-starter-security' // Spring Security 추가
 
 	//ring Security 테스트 라이브러리를 명시적으로 포함
 	testImplementation 'org.springframework.security:spring-security-test'
