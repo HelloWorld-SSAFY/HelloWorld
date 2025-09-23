@@ -5,6 +5,7 @@ import com.example.helloworld.healthserver.dto.StepsDtos.CreateResponse;
 import com.example.helloworld.healthserver.entity.StepsData;
 import com.example.helloworld.healthserver.persistence.StepsDataRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -17,6 +18,7 @@ import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class StepsDataService {
 
     private final StepsDataRepository repo;
@@ -26,9 +28,14 @@ public class StepsDataService {
 
     @Transactional
     public CreateResponse create(Long coupleId, CreateRequest req) {
+        log.info("StepsDataService.create - coupleId: {}, req: {}", coupleId, req);
+
         if (coupleId == null || coupleId <= 0) {
+            log.error("Invalid couple_id: {}", coupleId);
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid couple_id");
         }
+
+
         if (req == null || req.steps() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "steps is required");
         }
@@ -45,6 +52,7 @@ public class StepsDataService {
                 .build();
 
         row = repo.save(row);
+        log.info("Steps saved with id: {}", row.getStepsId());
         return new CreateResponse(row.getStepsId(), row.getDate(), row.getSteps());
     }
 
