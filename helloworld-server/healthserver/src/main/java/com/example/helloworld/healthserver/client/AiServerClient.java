@@ -13,10 +13,10 @@ import java.util.Map;
         url = "${ai.server.base-url}",
         configuration = AiServerFeignConfig.class
 )
-@RequestMapping("${ai.telemetry-path:/v1/telemetry}") // ← 경로 프로퍼티는 여기
+
 public interface AiServerClient {
 
-    @PostMapping
+    @PostMapping(path = "${ai.telemetry-path:/v1/telemetry}")
     AnomalyResponse checkTelemetry(
             @RequestHeader("X-Internal-Couple-Id") Long coupleId, // ← 이거만 파라미터로
             @RequestBody TelemetryRequest request

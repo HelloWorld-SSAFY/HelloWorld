@@ -9,12 +9,15 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class AiServerFeignConfig {
 
+    @Value("${ai.app-token}")
+    private String appToken;
+
     @Bean
-    public RequestInterceptor addAppTokenHeader(
-            @Value("${ai.app-token}") String appToken
-    ) {
+    public RequestInterceptor addAppTokenHeader() {
         return template -> {
-            template.header("X-App-Token", appToken);
+            if (appToken != null && !appToken.isBlank()) {
+                template.header("X-App-Token", appToken);
+            }
         };
     }
 }
