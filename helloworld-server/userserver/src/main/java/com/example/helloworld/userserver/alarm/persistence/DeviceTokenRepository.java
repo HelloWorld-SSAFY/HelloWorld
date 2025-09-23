@@ -38,7 +38,7 @@ public interface DeviceTokenRepository extends JpaRepository<DeviceToken, Long> 
     }
     @Transactional
     default void deactivate(Long userId, String token) {
-        // ▼▼▼ [수정] 훨씬 간결하고 효율적으로 수정합니다. ▼▼▼
+        // 훨씬 간결하고 효율적으로 수정
         this.findByUserIdAndToken(userId, token)
                 .ifPresent(DeviceToken::deactivate);
     }

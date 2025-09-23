@@ -15,25 +15,26 @@ import java.util.List;
 @RequiredArgsConstructor
 public class DeviceTokenController {
 
-    private final AuthUserResolver auth;
+
     private final DeviceTokenRepository repo;
 
     public record RegisterReq(String token) {}
     public record UnregisterReq(String token) {}
 
     @PostMapping("/register")
-    public ResponseEntity<Void> register(@RequestHeader("Authorization") String authz,
+    public ResponseEntity<Void> register(@RequestHeader("X-Member-Id") Long memberId,
                                          @RequestBody RegisterReq body) {
-        Long uid = auth.requireUserId(authz);
-        repo.upsert(uid, body.token());
+        // 2. 전달받은 memberId를 직접 사용합니다.
+        repo.upsert(memberId, body.token());
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/unregister")
-    public ResponseEntity<Void> unregister(@RequestHeader("Authorization") String authz,
+    // 1. `@RequestHeader("Authorization")` 대신 `@RequestHeader("X-Member-Id")`를 받습니다.
+    public ResponseEntity<Void> unregister(@RequestHeader("X-Member-Id") Long memberId,
                                            @RequestBody UnregisterReq body) {
-        Long uid = auth.requireUserId(authz);
-        repo.deactivate(uid, body.token());
+        // 2. 전달받은 memberId를 직접 사용합니다.
+        repo.deactivate(memberId, body.token());
         return ResponseEntity.noContent().build();
     }
 
