@@ -36,7 +36,4 @@ public class HealthData {
 
     @Column(name = "heartrate")
     private Integer heartrate;             // 심박수 (nullable)
-
-    @Column(name = "steps")
-    private Integer steps;                 // 걸음수 (nullable)
 }
