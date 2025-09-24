@@ -5,8 +5,9 @@ from rest_framework.permissions import AllowAny
 from rest_framework import serializers
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema, inline_serializer
-from .views_debug import echo_headers
-from .views_debug import whoami
+
+# ── debug views ──
+from .views_debug import echo_headers, whoami, debug_headers, app_token_probe
 
 from .views import (
     TelemetryView,
@@ -14,8 +15,6 @@ from .views import (
     PlacesView,     # ✅ 클래스 기반
     RecommendView,  # ✅ 추가
 )
-
-
 
 # ✅ StepsCheckView는 새 모듈에서 import
 from .views_steps_check import StepsCheckView
@@ -32,10 +31,7 @@ from .views_delivery import (
 from .views_main_bridge import (
     MainEchoView,
     PullStepsBaselineView,
-
 )
-
-# from .views_main_bridge import IngestDailyBucketsView 
 
 # 선택: reverse 네임스페이스용
 app_name = "api"
@@ -69,7 +65,7 @@ urlpatterns = [
     path("telemetry",    TelemetryView.as_view(),   name="telemetry"),
     path("feedback",     FeedbackView.as_view(),    name="feedback"),
     path("steps-check",  StepsCheckView.as_view(),  name="steps-check"),
-    path("places",       PlacesView.as_view(),      name="places"), 
+    path("places",       PlacesView.as_view(),      name="places"),
     path("recommend",    RecommendView.as_view(),   name="recommend"),
     path("healthz",      healthz,                   name="healthz"),
 
@@ -82,7 +78,11 @@ urlpatterns = [
     # ---- main-bridge (메인 서버 호출/저장) ----
     path("_main/echo",           MainEchoView.as_view(),           name="main-echo"),
     path("steps-baseline/pull",  PullStepsBaselineView.as_view(),  name="steps-baseline-pull"),
-    # path("main/ingest-daily-buckets", IngestDailyBucketsView.as_view()),
-    path("debug/headers", echo_headers),
-    path("debug/whoami", whoami),
+
+    # ---- debug ----
+    # 전체 경로는 /v1/debug/... (최상위에서 path("v1/", include("api.urls")) 기준)
+    path("debug/headers",     debug_headers,   name="debug-headers"),
+    path("debug/echo-headers", echo_headers,   name="echo-headers"),
+    path("debug/whoami",      whoami,          name="whoami"),
+    path("debug/app-token",   app_token_probe, name="app-token-probe"),
 ]
