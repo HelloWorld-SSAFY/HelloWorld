@@ -3,50 +3,55 @@ from datetime import datetime, timezone
 import re
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import serializers
 from rest_framework.permissions import AllowAny
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import extend_schema, OpenApiParameter
+from drf_spectacular.types import OpenApiTypes
 
 from services.anomaly import to_kst, bucket_index_4h
 from api.models import UserTodStatsDaily
 
-# 공용 스웨거 헤더/토큰 검사 유틸
+# 공용 헤더 파라미터/토큰 검사
 from api.views import _assert_app_token, APP_TOKEN_PARAM, ACCESS_TOKEN_PARAM
 
 BUCKET_KEYS = ["v_0_4", "v_4_8", "v_8_12", "v_12_16", "v_16_20", "v_20_24"]
 _re_user = re.compile(r"^[cC]?0*(\d+)$")
-
-
 def _norm_user_ref(v: str) -> str:
     s = str(v).strip()
     m = _re_user.match(s)
     return m.group(1) if m else s
 
 
-class BaselineProbeQuery(serializers.Serializer):
-    user_ref = serializers.CharField(help_text="예: 11 또는 c11 (자동 정규화)")
-    ts = serializers.DateTimeField(
-        required=False,
-        help_text="ISO8601. 기본: 서버 now(UTC). KST 버킷 계산에 사용됩니다.",
-    )
-    metric = serializers.ChoiceField(choices=["hr", "stress"], default="hr")
-
-
 class BaselineProbeView(APIView):
     """
     KST 기준 4시간 버킷의 기준선(μ,σ)을 raw DB에서 확인하는 GET 디버그 엔드포인트.
     - 헤더: X-App-Token (필수), Authorization (게이트웨이 통과용)
-    - 쿼리: user_ref(필수), ts(옵션), metric(hr|stress)
+    - 쿼리: user_ref(필수), ts(옵션 ISO8601), metric=hr|stress(기본 hr)
     """
-    authentication_classes = []          # 전역 인증 우회
-    permission_classes = [AllowAny]      # 앱 토큰만 자체 검사
+    authentication_classes = []         # 전역 인증 우회
+    permission_classes = [AllowAny]     # 앱 토큰만 자체 검사
 
     @extend_schema(
         tags=["debug"],
         summary="(GET) 버킷 기준선(μ,σ) 프로브",
-        description="쿼리스트링으로 user_ref, ts(옵션), metric(hr|stress) 전달. 헤더에 X-App-Token 및 Authorization 필요.",
-        # ✅ Swagger에 헤더와 쿼리 모두 노출
-        parameters=[APP_TOKEN_PARAM, ACCESS_TOKEN_PARAM, BaselineProbeQuery],
+        description="쿼리로 user_ref, ts(옵션), metric(hr|stress). 헤더에 X-App-Token, Authorization 필요.",
+        parameters=[
+            # ── 헤더 ──
+            APP_TOKEN_PARAM,
+            ACCESS_TOKEN_PARAM,  # Authorization: Bearer <token>
+            # ── 쿼리 ──
+            OpenApiParameter(
+                name="user_ref", type=OpenApiTypes.STR, location=OpenApiParameter.QUERY,
+                required=True, description="예: 11 또는 c11 (자동 정규화)"
+            ),
+            OpenApiParameter(
+                name="ts", type=OpenApiTypes.DATETIME, location=OpenApiParameter.QUERY,
+                required=False, description="ISO8601. 기본: 서버 now(UTC). KST 버킷 계산에 사용"
+            ),
+            OpenApiParameter(
+                name="metric", type=OpenApiTypes.STR, location=OpenApiParameter.QUERY,
+                required=False, enum=["hr", "stress"], description="기본 hr"
+            ),
+        ],
         request=None,
         responses={200: None},
         operation_id="getDebugBaseline",
@@ -57,7 +62,7 @@ class BaselineProbeView(APIView):
         if bad:
             return bad
 
-        # 0-1) 게이트웨이 통과용 헤더가 실제로 왔는지(선택) 친절 메시지
+        # 0-1) 게이트웨이 통과용 Authorization 유무 안내(로컬에서만 의미 있음)
         auth = (
             request.headers.get("Authorization")
             or request.headers.get("Access-Token")
@@ -65,28 +70,35 @@ class BaselineProbeView(APIView):
             or request.META.get("HTTP_ACCESS_TOKEN")
         )
         if not auth:
-            # 게이트웨이가 먼저 401을 줄 수 있지만, 로컬/개발 환경에서 힌트 제공
             return Response(
                 {"error": "ACCESS_TOKEN_REQUIRED",
-                 "hint": "헤더 Authorization: Bearer <token> (또는 Access-Token) 를 넣어주세요."},
+                 "hint": "헤더 Authorization: Bearer <token> 를 추가하세요."},
                 status=400,
             )
 
         # 1) 쿼리 파싱
-        ser = BaselineProbeQuery(data=request.query_params)
-        ser.is_valid(raise_exception=True)
-        d = ser.validated_data
+        user_ref = request.query_params.get("user_ref")
+        if not user_ref:
+            return Response({"error": "user_ref required"}, status=400)
+        metric = (request.query_params.get("metric") or "hr").strip().lower()
+        ts_q = request.query_params.get("ts")
 
-        # 2) 시각 → KST 버킷 결정
-        ts = d.get("ts") or datetime.now(timezone.utc)
-        if ts.tzinfo is None:
-            ts = ts.replace(tzinfo=timezone.utc)
+        # 2) ts → KST, 버킷 결정
+        if ts_q:
+            try:
+                ts = datetime.fromisoformat(ts_q)
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=timezone.utc)
+            except Exception:
+                return Response({"error": "bad ts format"}, status=400)
+        else:
+            ts = datetime.now(timezone.utc)
+
         kst = to_kst(ts)
         bucket_idx = bucket_index_4h(kst)
         bucket_key = BUCKET_KEYS[bucket_idx]
 
-        ref = _norm_user_ref(d["user_ref"])
-        metric = d["metric"]
+        ref = _norm_user_ref(user_ref)
 
         # 3) 동일 날짜(as_of) raw 값 조회
         rows = list(
@@ -99,13 +111,13 @@ class BaselineProbeView(APIView):
 
         return Response({
             "user_ref": ref,
+            "metric": metric,
             "as_of": kst.date().isoformat(),
             "kst_ts": kst.isoformat(),
             "bucket_idx": bucket_idx,
             "bucket_key": bucket_key,
-            "metric": metric,
             "mu": mu,
             "sd": sd,
             "rows": rows,
-            "hint": "mu/sd가 null이면 이 버킷에서는 Z 기반 감지가 불가합니다. 다른 버킷/날짜를 사용하거나 Provider fallback 로그를 확인하세요."
+            "hint": "mu/sd가 null이면 이 버킷에 기준선이 없어 Z기반 감지가 불가합니다."
         })
