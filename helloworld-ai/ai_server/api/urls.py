@@ -30,9 +30,12 @@ from .views_delivery import (
 
 # ⬇️ 메인 서버 브릿지(메인 API 호출/저장)
 from .views_main_bridge import (
-    MainEchoView,             # 메인 API 결과 그대로 보기(디버그용)
-    PullStepsBaselineView,    # 메인에서 일일 누적걸음 평균 가져와 업서트
+    MainEchoView,
+    PullStepsBaselineView,
+
 )
+
+# from .views_main_bridge import IngestDailyBucketsView 
 
 # 선택: reverse 네임스페이스용
 app_name = "api"
@@ -79,7 +82,7 @@ urlpatterns = [
     # ---- main-bridge (메인 서버 호출/저장) ----
     path("_main/echo",           MainEchoView.as_view(),           name="main-echo"),
     path("steps-baseline/pull",  PullStepsBaselineView.as_view(),  name="steps-baseline-pull"),
-
+    # path("main/ingest-daily-buckets", IngestDailyBucketsView.as_view()),
     path("debug/headers", echo_headers),
     path("debug/whoami", whoami),
 ]
