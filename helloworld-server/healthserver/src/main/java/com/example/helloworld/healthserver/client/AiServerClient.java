@@ -66,7 +66,7 @@ public interface AiServerClient {
             Integer rank,
             String reason
     ) {}
-    
+
     record Metrics(
             @JsonProperty("hr") Integer heartrate,
             @JsonProperty("stress") Double stress
