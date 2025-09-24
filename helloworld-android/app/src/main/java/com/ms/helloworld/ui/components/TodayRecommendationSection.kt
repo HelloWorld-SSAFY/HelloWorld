@@ -30,8 +30,8 @@ fun TodayRecommendationSection(
 ) {
     val recommendations = listOf(
         RecommendationItem("음식", Color.White, onClick = onDietClick),
-        RecommendationItem("할 일", Color.White, onClick = onWorkoutClick),
-        RecommendationItem("현황", Color.White, onClick = onInfoClick)
+        RecommendationItem("루틴", Color.White, onClick = onWorkoutClick),
+        RecommendationItem("리포트", Color.White, onClick = onInfoClick)
     )
 
     Row(
@@ -52,8 +52,8 @@ fun RecommendationCard(
     // title에 따라 아이콘 결정
     val iconRes = when (item.title) {
         "음식" -> R.drawable.ic_food
-        "할 일" -> R.drawable.ic_todo
-        "현황" -> R.drawable.ic_status
+        "루틴" -> R.drawable.ic_todo
+        "리포트" -> R.drawable.ic_status
         else -> R.drawable.ic_food
     }
 

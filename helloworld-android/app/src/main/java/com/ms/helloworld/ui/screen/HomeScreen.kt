@@ -28,6 +28,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.navigation.NavHostController
+import com.airbnb.lottie.compose.LottieAnimation
+import com.airbnb.lottie.compose.LottieClipSpec
+import com.airbnb.lottie.compose.LottieCompositionSpec
+import com.airbnb.lottie.compose.LottieConstants
+import com.airbnb.lottie.compose.animateLottieCompositionAsState
+import com.airbnb.lottie.compose.rememberLottieComposition
 import com.ms.helloworld.R
 import com.ms.helloworld.navigation.Screen
 import com.ms.helloworld.repository.StepsRepository
@@ -119,16 +125,25 @@ fun HomeScreen(
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            Image(
-                painter = painterResource(R.drawable.baby),
-                contentDescription = "태아",
+            // Lottie 애니메이션으로 변경
+            val composition by rememberLottieComposition(LottieCompositionSpec.RawRes(R.raw.home_baby))
+            val progress by animateLottieCompositionAsState(
+                composition = composition,
+                isPlaying = true,
+                iterations = LottieConstants.IterateForever,
+                speed = 0.4f,
+                clipSpec = LottieClipSpec.Frame(min = 0, max = 10),
+            )
+
+            LottieAnimation(
+                composition = composition,
+                progress = { progress },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(350.dp)
-                    .clip(RoundedCornerShape(16.dp)),
-                contentScale = ContentScale.Crop
+                    .height(300.dp)
+                    .padding(end = 60.dp)
+                    .clip(RoundedCornerShape(16.dp))
             )
-            Spacer(modifier = Modifier.height(16.dp))
 
             HorizontalDivider(
                 thickness = 0.5.dp,
@@ -183,24 +198,24 @@ fun HomeScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            Text(
-                text = "걸음수 API 테스트(개발용)",
-                fontSize = 18.sp,
-                color = Color.Black,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-
-            StepsTestButton(
-                stepsRepository = stepsRepository,
-                locationManager = locationManager
-            )
-        }
+//        Column(
+//            modifier = Modifier
+//                .fillMaxWidth()
+//                .padding(16.dp)
+//        ) {
+//            Text(
+//                text = "걸음수 API 테스트(개발용)",
+//                fontSize = 18.sp,
+//                color = Color.Black,
+//                fontWeight = FontWeight.Bold
+//            )
+//            Spacer(modifier = Modifier.height(16.dp))
+//
+//            StepsTestButton(
+//                stepsRepository = stepsRepository,
+//                locationManager = locationManager
+//            )
+//        }
     }
 }
 
