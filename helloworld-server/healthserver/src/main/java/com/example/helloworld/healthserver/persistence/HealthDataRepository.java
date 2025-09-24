@@ -59,7 +59,7 @@ public interface HealthDataRepository extends JpaRepository<HealthData, Long> {
      */
     @Query(value = """
     SELECT
-        hd.couple_id                                                                                    AS "coupleId",
+        couples.couple_id                                                                               AS "coupleId",
         -- Heart Rate AVG
         AVG(hd.heartrate) FILTER (WHERE ((EXTRACT(HOUR FROM (hd."date" AT TIME ZONE 'Asia/Seoul'))::int) / 4) = 0) AS "avgHr0",
         AVG(hd.heartrate) FILTER (WHERE ((EXTRACT(HOUR FROM (hd."date" AT TIME ZONE 'Asia/Seoul'))::int) / 4) = 1) AS "avgHr1",
@@ -89,11 +89,11 @@ public interface HealthDataRepository extends JpaRepository<HealthData, Long> {
         STDDEV_SAMP(hd.stress) FILTER (WHERE ((EXTRACT(HOUR FROM (hd."date" AT TIME ZONE 'Asia/Seoul'))::int) / 4) = 4) AS "stdSt4",
         STDDEV_SAMP(hd.stress) FILTER (WHERE ((EXTRACT(HOUR FROM (hd."date" AT TIME ZONE 'Asia/Seoul'))::int) / 4) = 5) AS "stdSt5"
     FROM
-        health_data hd
-    WHERE
-        hd."date" >= :from AND hd."date" < :to
+        (SELECT DISTINCT couple_id FROM health_data) AS couples
+    LEFT JOIN
+        health_data hd ON couples.couple_id = hd.couple_id AND hd."date" >= :from AND hd."date" < :to
     GROUP BY
-        hd.couple_id
+        couples.couple_id
     """, nativeQuery = true)
     List<GlobalDailyBucketStats> aggregateGlobalDailyBuckets(@Param("from") Instant from, @Param("to") Instant to);
 
