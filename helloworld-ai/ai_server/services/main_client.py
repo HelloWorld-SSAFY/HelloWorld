@@ -26,29 +26,6 @@ def _ensure_base() -> str:
         raise RuntimeError("MAIN_BASE_URL is not set")
     return base
 
-def _get_access_token(sess: requests.Session, override: Optional[str] = None) -> str:
-    # 우선순위: 요청에서 받은 토큰 → 고정 토큰 → OAuth2 Client Credentials
-    if override:
-        return override
-    fixed = os.getenv("MAIN_ACCESS_TOKEN")
-    if fixed:
-        return fixed
-
-    token_url = os.getenv("AUTH_TOKEN_URL")
-    cid = os.getenv("AUTH_CLIENT_ID")
-    csec = os.getenv("AUTH_CLIENT_SECRET")
-    if not (token_url and cid and csec):
-        raise RuntimeError("Access token missing. Set MAIN_ACCESS_TOKEN or AUTH_* env vars.")
-
-    resp = sess.post(
-        token_url,
-        data={"grant_type": "client_credentials"},
-        auth=(cid, csec),
-        timeout=10,
-    )
-    resp.raise_for_status()
-    return resp.json()["access_token"]
-
 def _parse_resp(resp: requests.Response) -> Any:
     try:
         return resp.json()
@@ -60,22 +37,25 @@ def call_main(
     method: str = "GET",
     json_body: Optional[Dict[str, Any]] = None,
     couple_id: Optional[str] = None,
-    access_token: Optional[str] = None,
+    access_token: Optional[str] = None,  # ← 반드시 Swagger에서 전달해야 함
     timeout: int = 15,
 ) -> Tuple[int, Any]:
     """
     메인 서버에 요청 후 (status_code, body) 반환.
+    ※ 토큰은 반드시 인자로 전달되어야 하며, ENV 토큰/자동발급을 절대 사용하지 않는다.
     """
+    if not access_token:
+        # 498: nginx/varnish에서 토큰 없을 때 쓰는 비표준 코드. 우리 쪽만의 신호로 사용.
+        return 498, {"error": "ACCESS_TOKEN_REQUIRED", "message": "Provide Authorization: Bearer <token> header."}
+
     base = _ensure_base()
     if not path.startswith("/"):
         path = "/" + path
     url = f"{base}{path}"
 
     s = _session()
-    token = _get_access_token(s, override=access_token)
-
     headers = {
-        "Authorization": f"Bearer {token}",
+        "Authorization": f"Bearer {access_token}",
         "Accept": "application/json",
     }
     if couple_id:
@@ -92,14 +72,9 @@ def call_main(
         elif m == "DELETE":
             resp = s.delete(url, headers=headers, json=json_body, timeout=timeout)
         else:
-            raise ValueError(f"Unsupported method: {method}")
+            return 400, {"error": "UNSUPPORTED_METHOD", "method": method}
     except requests.RequestException as e:
         log.exception("call_main: request error")
         return 599, {"error": "REQUEST_FAILED", "detail": str(e)}
 
     return resp.status_code, _parse_resp(resp)
-
-# (옵션) 특정 엔드포인트용 래퍼 예시
-def get_daily_buckets(date_str: str, couple_id: Optional[str] = None, access_token: Optional[str] = None):
-    return call_main(f"/health/api/wearable/daily-buckets?date={date_str}",
-                     method="GET", couple_id=couple_id, access_token=access_token)
