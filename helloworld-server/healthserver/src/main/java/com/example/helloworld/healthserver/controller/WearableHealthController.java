@@ -29,6 +29,7 @@ import java.time.LocalDate;
 public class WearableHealthController {
 
     private final HealthDataService healthService;
+    private final HealthLatestService lasthealthService;
 
     // 2. Add a helper method to validate the authenticated principal
     private void requirePrincipal(UserPrincipal principal) {
@@ -82,19 +83,11 @@ public class WearableHealthController {
         return ResponseEntity.ok(healthService.getGlobalDailyStats(date));
     }
 
-    @Tag(name = "Health Combined", description = "심박/스트레스 + 걸음수 최신 1건")
-    @RestController
-    @RequestMapping("/api/health/combined")
-    @RequiredArgsConstructor
-    public class HealthLatestController {
 
-        private final HealthLatestService service;
-
-        @Operation(summary = "걸음수 & 심박/스트레스 최신 1건 조회")
-        @GetMapping("/latest")
-        public ResponseEntity<HealthLatestResponse> getLatest(@AuthenticationPrincipal UserPrincipal principal) {
-            var resp = service.getLatest(principal.getCoupleId());
-            return ResponseEntity.ok(resp);
-        }
+    @Operation(summary = "걸음수 & 심박/스트레스 최신 1건 조회")
+    @GetMapping("/latest")
+    public ResponseEntity<HealthLatestResponse> getLatest(@AuthenticationPrincipal UserPrincipal principal) {
+        var resp = lasthealthService.getLatest(principal.getCoupleId());
+        return ResponseEntity.ok(resp);
     }
 }
