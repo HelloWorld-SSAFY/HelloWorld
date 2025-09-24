@@ -45,4 +45,46 @@ public final class StepsDtos {
                 @JsonProperty("avg_steps") Double avgSteps
         ) {}
     }
+
+    @Schema(name = "StepsCreateWithAnomalyResponse",
+            description = "걸음수 생성 및 AI 이상탐지 통합 응답")
+    public record CreateWithAnomalyResponse(
+            @JsonProperty("steps_id")
+            @Schema(description = "생성된 걸음수 ID")
+            Long stepsId,
+
+            @JsonProperty("date")
+            @Schema(description = "측정 시간")
+            Instant date,
+
+            @JsonProperty("steps")
+            @Schema(description = "걸음수")
+            Integer steps,
+
+            @JsonProperty("ok")
+            @Schema(description = "AI 서버 응답 성공 여부")
+            boolean ok,
+
+            @JsonProperty("anomaly")
+            @Schema(description = "이상 징후 감지 여부")
+            boolean anomaly,
+
+            @JsonProperty("mode")
+            @Schema(description = "이상 징후 모드", example = "normal/restrict/emergency")
+            String mode,
+
+            @JsonProperty("trigger")  String trigger,
+            @JsonProperty("reasons")  List<String> reasons,
+            @JsonProperty("recommendation") StepsRecommendation recommendation
+    ) {
+        public record StepsRecommendation(
+                @JsonProperty("session_id") String sessionId,
+                List<StepsCategory> categories
+        ) {}
+        public record StepsCategory(
+                String category,
+                Integer rank,
+                String reason
+        ) {}
+    }
 }

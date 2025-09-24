@@ -14,6 +14,8 @@ public interface StepsDataRepository extends JpaRepository<StepsData, Long> {
     // 단건 조회(권한검증용)
     StepsData findByStepsIdAndCoupleId(Long stepsId, Long coupleId);
 
+    StepsData findFirstByCoupleIdOrderByDateDesc(Long coupleId);
+
     // 기간 조회(옵션)
     List<StepsData> findByCoupleIdAndDateBetweenOrderByDateDesc(Long coupleId, Instant from, Instant to);
 
