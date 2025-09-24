@@ -18,7 +18,7 @@ import java.util.Map;
 
 public interface AiServerClient {
 
-    @PostMapping("/api/telemetry")
+    @PostMapping("/v1/telemetry")
     AnomalyResponse checkTelemetry(
             @RequestHeader("X-Internal-Couple-Id") Long coupleId, // ← 이거만 파라미터로
             @RequestBody TelemetryRequest request

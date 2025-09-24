@@ -29,10 +29,6 @@ public class HealthDataService {
     private final AiServerClient aiServerClient;
     private final FcmService fcmService;
 
-    // application.yml 에 넣어둔 앱 토큰을 주입
-    @Value("${ai.app-token}")  
-    private String aiAppToken;
-
     @Value("${app.zone:Asia/Seoul}")
     private String appZone;
 
@@ -60,11 +56,6 @@ public class HealthDataService {
                 new AiServerClient.Metrics(req.heartrate(), req.stress());
         AiServerClient.TelemetryRequest telemetryRequest =
                 new AiServerClient.TelemetryRequest(userRef, isoTimestamp, metrics);
-
-        // (옵션) 앱 토큰 설정 확인 – 인터셉터에서 주입 중이라면 이 체크는 생략 가능
-        if (aiAppToken == null || aiAppToken.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "AI app token is not configured");
-        }
 
         // 3) AI 서버 호출 (헤더: X-App-Token은 Feign 인터셉터, X-Internal-Couple-Id는 메서드 인자)
         AiServerClient.AnomalyResponse resp;
