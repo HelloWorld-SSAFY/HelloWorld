@@ -13,11 +13,13 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.time.Instant;
 
 import static org.springframework.http.HttpStatus.NOT_FOUND;
+
 
 @Service
 @RequiredArgsConstructor
@@ -30,10 +32,18 @@ public class ContractionService {
 
     @Transactional
     public CsCreateResponse create(Long coupleId, CsCreateRequest req) {
+        ZoneId zone = ZoneId.of(appZone);
+
+        // 서울 기준으로 시간 처리
+        Instant startTime = req.start_time() != null ? req.start_time() :
+                LocalDateTime.now(zone).atZone(zone).toInstant();
+        Instant endTime = req.end_time() != null ? req.end_time() :
+                LocalDateTime.now(zone).atZone(zone).toInstant();
+
         ContractionSession cs = ContractionSession.builder()
                 .coupleId(coupleId)
-                .startTime(req.start_time())
-                .endTime(req.end_time())
+                .startTime(startTime)
+                .endTime(endTime)
                 .build();
 
         // 파생 필드 계산
@@ -67,16 +77,21 @@ public class ContractionService {
         List<ContractionSession> list =
                 repo.findByCoupleIdAndStartTimeBetweenOrderByStartTimeDesc(coupleId, start, end);
 
-        var items = list.stream().map(s ->
-                new CsListResponse.CSItem(
-                        s.getId(),
-                        s.getStartTime(),   // Instant라면 그대로 반환(클라 포맷은 컨트롤러/DTO에서)
-                        s.getEndTime(),
-                        s.getDurationSec(),
-                        s.getIntervalMin(),
-                        s.isAlertSent()
-                )
-        ).toList();
+        var items = list.stream().map(s -> {
+                    // 서울 기준으로 날짜 변환
+                    LocalDate startDate2 = s.getStartTime().atZone(zone).toLocalDate();
+                    LocalDate endDate2 = s.getEndTime().atZone(zone).toLocalDate();
+
+                    return new CsListResponse.CSItem(
+                            s.getId(),
+                            startDate2,   // LocalDate로 변경
+                            endDate2,     // LocalDate로 변경
+                            s.getDurationSec(),
+                            s.getIntervalMin(),
+                            s.isAlertSent()
+                    );
+                })
+                .toList();
 
         return new CsListResponse(items);
     }
