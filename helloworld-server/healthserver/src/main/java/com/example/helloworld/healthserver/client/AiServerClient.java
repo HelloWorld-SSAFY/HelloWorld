@@ -24,12 +24,36 @@ public interface AiServerClient {
             @RequestBody TelemetryRequest request
     );
 
+    @PostMapping("/v1/steps-check")  // 하드코딩으로 변경
+    StepsCheckResponse checkSteps(
+            @RequestHeader("X-Internal-Couple-Id") Long coupleId,
+            @RequestBody StepsCheckRequest request
+    );
+
+
+
     // --- DTOs ---
     record TelemetryRequest(
             @JsonProperty("user_ref") String userRef,
             @JsonProperty("ts") String timestamp,
             Metrics metrics
     ) {}
+
+    public record StepsCheckRequest(
+            @JsonProperty("ts") String date,
+            @JsonProperty("cum_steps") Integer steps,
+            @JsonProperty("avg_steps") Integer avgSteps,
+            @JsonProperty("lat") Double lat,
+            @JsonProperty("lng") Double lng
+    ) {}
+
+    // ✔ 최소 응답 필드
+    public record StepsCheckResponse(
+            boolean ok,
+            boolean anomaly,
+            String mode
+    ) {}
+
 
     record Metrics(
             @JsonProperty("hr") Integer heartrate,
