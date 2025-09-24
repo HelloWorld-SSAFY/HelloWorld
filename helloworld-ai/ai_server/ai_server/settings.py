@@ -171,6 +171,7 @@ REST_FRAMEWORK = {
     # ★ 전역: 모든 요청은 Bearer Access Token 필수
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "api.auth_internal.GatewayInternalAuth",
+        "api.auth_internal_cid.InternalAuth",
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": (

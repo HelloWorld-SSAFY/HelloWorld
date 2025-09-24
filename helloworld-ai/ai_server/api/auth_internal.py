@@ -19,8 +19,8 @@ class GatewayInternalAuth(BaseAuthentication):
         role= request.headers.get("X-Internal-Role") or ""
 
         # 내부 헤더 없으면 다음 인증(JWT)으로
-        if not (uid and ts and sig):
-            log.debug("GW-AUTH: missing internal headers uid=%s ts=%s sig=%s", uid, ts, bool(sig))
+        if not (cid and ts and sig):
+            log.debug("GW-AUTH: missing internal headers cid=%s ts=%s sig=%s", cid, ts, bool(sig))
             return None
 
         # timestamp 검증
@@ -43,16 +43,16 @@ class GatewayInternalAuth(BaseAuthentication):
             raise exceptions.AuthenticationFailed("invalid internal signature")
 
         if not hmac.compare_digest(expect, recvd):
-            log.warning("GW-AUTH: signature mismatch uid=%s", uid)
+            log.warning("GW-AUTH: signature mismatch cid=%s", cid)
             raise exceptions.AuthenticationFailed("bad internal signature")
 
         # OK → User 구성
         User = get_user_model()
         try:
-            user = User.objects.get(pk=int(uid))
+            user = User.objects.get(pk=int(cid))
         except User.DoesNotExist:
-            user = User(id=int(uid), username=f"internal-{uid}")
+            user = User(id=int(cid), username=f"internal-{cid}")
             user.set_unusable_password()
 
-        log.info("GW-AUTH: OK uid=%s", uid)
+        log.info("GW-AUTH: OK cid=%s", cid)
         return (user, None)
