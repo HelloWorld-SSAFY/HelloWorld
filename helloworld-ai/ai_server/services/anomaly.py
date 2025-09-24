@@ -5,6 +5,7 @@ from datetime import datetime, timezone, timedelta, date
 from typing import Dict, Tuple, Protocol, Optional, runtime_checkable
 import uuid
 import math
+import os, logging
 
 # ──────────────────────────────────────────────────────────────────────────────
 # KST / 버킷
@@ -18,6 +19,12 @@ def to_kst(dt_utc: datetime) -> datetime:
 
 def bucket_index_4h(kst_dt: datetime) -> int:
     return kst_dt.hour // 4  # 0..5: [0-4), [4-8), ...
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 로깅/디버그 스위치
+# ──────────────────────────────────────────────────────────────────────────────
+log = logging.getLogger(__name__)
+ANOMALY_DEBUG = os.getenv("ANOMALY_DEBUG", "false").lower() in ("1", "true", "yes")
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 기준선 공급자
@@ -38,15 +45,13 @@ class AnomalyConfig:
     z_restrict: float = 2.5
     z_emergency: float = 5.0
 
-    # HR 절대값 임계(리스트릭트 전용)
+    # HR 절대값 임계(Restrict 전용, 연속 3틱)
     hr_inst_restrict_high: int = 150
     hr_inst_restrict_low:  int = 45
 
-    # 연속 틱 요구 개수
+    # 연속 틱 요구 개수 / 최대 간격(초)
     consecutive_required: int = 3
-
-    # 연속 인정 최대 간격(초) — 10초 간격 가정, 여유 30초
-    max_gap_sec: int = 30
+    max_gap_sec: int = 30  # 10초 간격 가정, 여유 30초
 
     supported_metrics: Tuple[str, ...] = ("hr", "stress")
 
@@ -63,7 +68,7 @@ class UserState:
     emg_hr_z_c: int = 0
     emg_stress_z_c: int = 0
 
-    # 리스트릭트 카운터(스트레스 제외: HR만)
+    # Restrict 카운터(심박 ↑/↓)
     res_hr_high_c: int = 0      # HR_Z>=2.5  또는 HR_inst>=150
     res_hr_low_c:  int = 0      # HR_Z<=-2.5 또는 HR_inst<=45
 
@@ -169,8 +174,9 @@ class AnomalyDetector:
 
         # 2) 연속성/시간 역행
         self._reset_counters_if_gap(S, ts_utc)
-        forward = not (S.last_ts and ts_utc <= S.last_ts)
-        S.last_ts = ts_utc
+        forward = (S.last_ts is None) or (ts_utc > S.last_ts)  # 과거 ts는 카운터 미반영
+        if forward:
+            S.last_ts = ts_utc
 
         # 3) HR
         hr = metrics.get("hr")
@@ -215,6 +221,17 @@ class AnomalyDetector:
                 emg_stress_z = (stress_z is not None and abs(stress_z) >= self.cfg.z_emergency)
                 if forward:
                     S.emg_stress_z_c = (S.emg_stress_z_c + 1) if emg_stress_z else 0
+
+        if ANOMALY_DEBUG:
+            log.info(
+                "[ANOM] user=%s ts=%s bkt=%d hr=%s hr_z=%s st=%s st_z=%s "
+                "cnt(emg_hr=%d,emg_st=%d,res_hi=%d,res_lo=%d) "
+                "cd(res=%s,emg=%s)",
+                user_ref, kst.isoformat(), bucket, hr, hr_z, stress, stress_z,
+                S.emg_hr_z_c, S.emg_stress_z_c, S.res_hr_high_c, S.res_hr_low_c,
+                S.restrict_until.isoformat() if S.restrict_until else None,
+                S.emergency_until.isoformat() if S.emergency_until else None,
+            )
 
         # 5) EMERGENCY: |Z|>=5 3틱 (HR 또는 STRESS)
         if S.emg_hr_z_c >= self.cfg.consecutive_required:
@@ -262,9 +279,11 @@ class AnomalyDetector:
         if S.res_hr_high_c >= self.cfg.consecutive_required:
             S.res_hr_high_c = S.res_hr_low_c = 0
             S.restrict_until = ts_utc + timedelta(seconds=self.cfg.restrict_cooldown_sec)
-            reason = ("HR_Z>={:.1f} x{}".format(self.cfg.z_restrict, self.cfg.consecutive_required)
-                      if (hr_z is not None and hr_z >= self.cfg.z_restrict)
-                      else "HR_inst>={} x{}".format(self.cfg.hr_inst_restrict_high, self.cfg.consecutive_required))
+            reason = (
+                "HR_Z>={:.1f} x{}".format(self.cfg.z_restrict, self.cfg.consecutive_required)
+                if (hr_z is not None and hr_z >= self.cfg.z_restrict)
+                else "HR_inst>={} x{}".format(self.cfg.hr_inst_restrict_high, self.cfg.consecutive_required)
+            )
             res = AnomalyResult(True, True, "high", "restrict", (reason,), trigger="hr_high", z=hr_z)
             res.cooldown_min = max(1, math.ceil(self.cfg.restrict_cooldown_sec / 60))
             res.cooldown_source = "restrict"
@@ -274,9 +293,11 @@ class AnomalyDetector:
         if S.res_hr_low_c >= self.cfg.consecutive_required:
             S.res_hr_high_c = S.res_hr_low_c = 0
             S.restrict_until = ts_utc + timedelta(seconds=self.cfg.restrict_cooldown_sec)
-            reason = ("HR_Z<={:.1f} x{}".format(-self.cfg.z_restrict, self.cfg.consecutive_required)
-                      if (hr_z is not None and hr_z <= -self.cfg.z_restrict)
-                      else "HR_inst<={} x{}".format(self.cfg.hr_inst_restrict_low, self.cfg.consecutive_required))
+            reason = (
+                "HR_Z<={:.1f} x{}".format(-self.cfg.z_restrict, self.cfg.consecutive_required)
+                if (hr_z is not None and hr_z <= -self.cfg.z_restrict)
+                else "HR_inst<={} x{}".format(self.cfg.hr_inst_restrict_low, self.cfg.consecutive_required)
+            )
             res = AnomalyResult(True, True, "high", "restrict", (reason,), trigger="hr_low", z=hr_z)
             res.cooldown_min = max(1, math.ceil(self.cfg.restrict_cooldown_sec / 60))
             res.cooldown_source = "restrict"
@@ -307,6 +328,10 @@ class AnomalyDetector:
         # 세션 ID는 restrict/emergency에서만 발급
         if res.mode in ("restrict", "emergency"):
             out["session_id"] = str(uuid.uuid4())
+
+        # reasons 전달(views.py에서 사용 가능)
+        if res.reasons:
+            out["reasons"] = list(res.reasons)
 
         # cooldown payload
         if res.cooldown_min is not None:
