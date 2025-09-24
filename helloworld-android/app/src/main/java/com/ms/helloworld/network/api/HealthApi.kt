@@ -3,6 +3,8 @@ package com.ms.helloworld.network.api
 import com.ms.helloworld.dto.request.StepsRequest
 import com.ms.helloworld.dto.request.MaternalHealthCreateRequest
 import com.ms.helloworld.dto.request.MaternalHealthUpdateRequest
+import com.ms.helloworld.dto.response.ContractionsResponse
+import com.ms.helloworld.dto.response.FetalMovementResponse
 import com.ms.helloworld.dto.response.MaternalHealthGetResponse
 import com.ms.helloworld.dto.response.MaternalHealthUpdateResponse
 import com.ms.helloworld.dto.response.MaternalHealthListResponse
@@ -33,4 +35,16 @@ interface HealthApi {
         @Query("from") from: String? = null,
         @Query("to") to: String? = null
     ): Response<MaternalHealthListResponse>
+
+    @GET("/health/api/contractions")
+    suspend fun getContractions(
+        @Query("from") from: String? = null,  // 시작 날짜 (선택적)
+        @Query("to") to: String? = null       // 종료 날짜 (선택적)
+    ): Response<ContractionsResponse>
+
+    @GET("/health//api/fetal-movement")
+    suspend fun getFetalMovement(
+        @Query("from") from: String? = null,  // 시작 날짜 (YYYY-MM-DD)
+        @Query("to") to: String? = null       // 종료 날짜 (YYYY-MM-DD)
+    ): Response<FetalMovementResponse>
 }
