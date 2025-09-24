@@ -12,48 +12,49 @@ import feign.Logger;
 @Configuration
 public class AiServerFeignConfig {
 
-    // Feign 자체 로그를 상세(FULL)로
+    /** 요청/응답 전문을 모두 찍음 (헤더/바디 포함) */
     @Bean
     Logger.Level feignLoggerLevel() {
         return Logger.Level.FULL;
     }
 
-    @Value("${ai.app-token}")
-    private String appToken;
-
     @Bean
     public RequestInterceptor aiHeadersAndLoggingInterceptor(
-            @Value("${ai.server.app-token:}") String appToken,
+            // ⚠ yml의 키와 반드시 일치시켜 주세요: ai.server.app-token
+            @Value("${ai.app-token:}") String appToken,
             @Value("${ai.server.log-requests:true}") boolean enableLog
     ) {
         return template -> {
-            // 공통 헤더(앱 토큰) 주입
+            // 1) 공통 헤더 주입
             if (appToken != null && !appToken.isBlank()) {
                 template.header("X-App-Token", appToken);
             }
 
-            // 사람이 읽기 쉽게, 우리도 별도 로그 남기기 (토큰은 마스킹)
+            // 2) 사람이 보기 쉬운 디버그 로그 (민감정보 마스킹)
             if (enableLog && log.isDebugEnabled()) {
-                String url = template.feignTarget() != null
-                        ? template.feignTarget().url() + template.path()
-                        : template.path();
+                String url = (template.feignTarget() != null
+                        ? template.feignTarget().url()
+                        : "") + template.path();
 
-                String method = template.method();
-                String maskedToken = (appToken == null || appToken.isBlank())
-                        ? "(none)"
-                        : appToken.substring(0, Math.min(6, appToken.length())) + "***";
-
-                String body = null;
-                if (template.requestBody() != null) {
-                    try {
-                        body = template.requestBody().asString(); // UTF-8 기본
-                    } catch (Exception ignore) {
-                        body = "(binary or unavailable)";
-                    }
+                String maskedToken;
+                if (appToken == null || appToken.isBlank()) {
+                    maskedToken = "(none)";
+                } else {
+                    int keep = Math.min(6, appToken.length());
+                    maskedToken = appToken.substring(0, keep) + "***";
                 }
 
-                log.debug("\n[AI-REQ] {} {}\nHeaders: {}\nX-App-Token: {}\nBody: {}\n",
-                        method, url, template.headers(), maskedToken, body);
+                String body;
+                try {
+                    body = (template.requestBody() != null) ? template.requestBody().asString() : "(no-body)";
+                } catch (Exception e) {
+                    body = "(binary/unavailable)";
+                }
+
+                log.debug(
+                        "\n[AI-REQ] {} {}\nX-App-Token: {}\nHeaders: {}\nBody: {}\n",
+                        template.method(), url, maskedToken, template.headers(), body
+                );
             }
         };
     }
