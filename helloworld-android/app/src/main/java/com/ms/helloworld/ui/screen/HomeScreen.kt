@@ -94,7 +94,7 @@ fun HomeScreen(
                         .padding(16.dp)
                 ) {
                     ProfileSection(
-                        momProfile = momProfile!!,
+                        momProfile = momProfile,
                         currentPregnancyDay = currentPregnancyDay,
                         onClick = {
                             navController.navigate(Screen.CoupleProfileScreen.route)
@@ -145,6 +145,7 @@ fun HomeScreen(
                 },
                 postsMap = calendarEvents
             )
+            Spacer(modifier = Modifier.height(12.dp))
         }
 
         // 오늘의 추천 섹션
@@ -178,7 +179,7 @@ fun HomeScreen(
                 .padding(16.dp)
         ) {
             Text(
-                text = "걸음수 AI 테스트(개발용)",
+                text = "걸음수 API 테스트(개발용)",
                 fontSize = 18.sp,
                 color = Color.Black,
                 fontWeight = FontWeight.Bold

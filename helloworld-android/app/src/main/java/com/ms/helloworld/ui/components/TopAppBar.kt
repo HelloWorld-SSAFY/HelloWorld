@@ -37,7 +37,7 @@ fun CustomTopAppBar(
                 "home" -> {
                     Text(
                         text = "Hello World",
-                        color = MainColor,
+                        color = Color.Black,
                         fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.Center,
                         fontSize = 20.sp,

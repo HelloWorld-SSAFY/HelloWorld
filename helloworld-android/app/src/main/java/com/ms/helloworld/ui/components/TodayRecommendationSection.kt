@@ -27,9 +27,9 @@ fun TodayRecommendationSection(
     onWeeklyRecommendationClick: (() -> Unit)? = null
 ) {
     val recommendations = listOf(
-        RecommendationItem("음식", Color(0xFFB8E6B8), onClick = onWeeklyRecommendationClick),
-        RecommendationItem("현황", Color(0xFFE6B8E6), onClick = onWeeklyRecommendationClick),
-        RecommendationItem("할 일", Color(0xFFB8E6E6), onClick = onWeeklyRecommendationClick)
+        RecommendationItem("음식", Color.White, onClick = onWeeklyRecommendationClick),
+        RecommendationItem("할 일", Color.White, onClick = onWeeklyRecommendationClick),
+        RecommendationItem("현황", Color.White, onClick = onWeeklyRecommendationClick)
     )
 
     Row(
@@ -51,13 +51,12 @@ fun RecommendationCard(
     val iconRes = when (item.title) {
         "음식" -> R.drawable.ic_food
         "할 일" -> R.drawable.ic_todo
-        "현황" -> R.drawable.ic_steps
-        else -> R.drawable.ic_food // 기본 아이콘
+        "현황" -> R.drawable.ic_status
+        else -> R.drawable.ic_food
     }
 
     Card(
         modifier = modifier
-            .width(120.dp)
             .height(120.dp)
             .then(
                 if (item.onClick != null) {
@@ -87,7 +86,7 @@ fun RecommendationCard(
                     tint = Color.Unspecified,
                     modifier = Modifier.size(40.dp)
                 )
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     item.title,
                     fontSize = 16.sp,

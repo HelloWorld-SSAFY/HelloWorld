@@ -131,7 +131,7 @@ fun CalendarSection(
                             if (hasPost && isCurrentMonth) {
                                 Box(
                                     modifier = Modifier
-                                        .size(4.dp)
+                                        .size(5.dp)
                                         .background(
                                             if (isSelected) Color.White else MainColor,
                                             CircleShape
