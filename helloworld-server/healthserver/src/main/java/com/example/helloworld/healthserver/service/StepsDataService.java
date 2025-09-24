@@ -37,20 +37,36 @@ public class StepsDataService {
 
     @Transactional
     public StepsDtos.CreateWithAnomalyResponse createAndCheck(UserPrincipal user, CreateRequest req) {
-        // 1. 걸음수 데이터 저장
+        // 1) 저장
         StepsDtos.CreateResponse stepsResponse = create(user.getCoupleId(), req);
 
-        // 2. AI 서버로 이상탐지 요청
-        AiServerClient.StepsCheckResponse aiResponse = checkStepsAnomaly(user, req);
+        // 2) AI 서버 호출
+        AiServerClient.StepsCheckResponse aiResp = checkStepsAnomaly(user, req);
 
-        // 3. 통합 응답 생성
+        // 2-1) recommendation 매핑 (Client -> DTO)
+        StepsDtos.CreateWithAnomalyResponse.StepsRecommendation recDto = null;
+        if (aiResp != null && aiResp.recommendation() != null) {
+            var rec = aiResp.recommendation();
+            var catDtos = Optional.ofNullable(rec.categories()).orElse(List.of())
+                    .stream()
+                    .map(c -> new StepsDtos.CreateWithAnomalyResponse.StepsCategory(
+                            c.category(), c.rank(), c.reason()
+                    ))
+                    .toList();
+            recDto = new StepsDtos.CreateWithAnomalyResponse.StepsRecommendation(rec.sessionId(), catDtos);
+        }
+
+        // 3) 통합 응답
         return new StepsDtos.CreateWithAnomalyResponse(
                 stepsResponse.stepsId(),
                 stepsResponse.date(),
                 stepsResponse.steps(),
-                aiResponse.ok(),
-                aiResponse.anomaly(),
-                aiResponse.mode()
+                aiResp != null && aiResp.ok(),
+                aiResp != null && aiResp.anomaly(),
+                aiResp != null ? aiResp.mode() : null,
+                aiResp != null ? aiResp.trigger() : null,
+                aiResp != null ? aiResp.reasons() : null,
+                recDto
         );
     }
 
