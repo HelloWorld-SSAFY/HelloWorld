@@ -14,6 +14,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
+import java.time.LocalDate;
 
 @Tag(name = "Contractions", description = "진통 세션 API")
 @RestController
@@ -36,8 +37,8 @@ public class ContractionController {
     @GetMapping
     public ResponseEntity<CsListResponse> list(
             @AuthenticationPrincipal UserPrincipal userPrincipal,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDate to
     ) {
         return ResponseEntity.ok(contractionService.list(userPrincipal.getCoupleId(), from, to));
     }
