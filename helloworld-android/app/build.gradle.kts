@@ -85,6 +85,7 @@ dependencies {
 
     // Hilt
     implementation("com.google.dagger:hilt-android:2.48.1")
+    implementation(libs.volley)
     kapt("com.google.dagger:hilt-android-compiler:2.48.1")
 
     // WorkManager
@@ -130,5 +131,8 @@ dependencies {
 
     // Location
     implementation("com.google.android.gms:play-services-location:21.0.1")
+
+    // Coil - Image Loading
+    implementation("io.coil-kt:coil-compose:2.5.0")
 
 }

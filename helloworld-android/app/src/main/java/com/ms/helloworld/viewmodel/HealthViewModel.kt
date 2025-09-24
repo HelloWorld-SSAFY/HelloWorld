@@ -22,7 +22,9 @@ data class HealthState(
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
     val todayHealthData: MaternalHealthGetResponse? = null,
-    val healthHistory: List<MaternalHealthItem> = emptyList()
+    val healthHistory: List<MaternalHealthItem> = emptyList(),
+    val editingData: MaternalHealthItem? = null,
+    val isEditMode: Boolean = false
 )
 
 @HiltViewModel
@@ -238,5 +240,46 @@ class HealthViewModel @Inject constructor(
     // 혈압 포맷 헬퍼 함수
     fun formatBloodPressure(systolic: Int, diastolic: Int): String {
         return "$systolic/$diastolic"
+    }
+
+    // 수정용 데이터 설정
+    fun setEditingData(data: MaternalHealthItem) {
+        _state.value = _state.value.copy(
+            editingData = data,
+            isEditMode = true
+        )
+        Log.d(TAG, "📝 수정용 데이터 설정: ID=${data.maternalId}, 체중=${data.weight}, 혈압=${data.bloodPressure}, 혈당=${data.bloodSugar}")
+    }
+
+    // 수정 모드 초기화
+    fun clearEditingData() {
+        _state.value = _state.value.copy(
+            editingData = null,
+            isEditMode = false
+        )
+        Log.d(TAG, "🧹 수정 모드 초기화")
+    }
+
+    // HealthData를 MaternalHealthItem으로 변환하여 수정용 데이터 설정
+    fun setEditingDataFromHealthData(healthData: com.ms.helloworld.ui.screen.HealthData) {
+        try {
+            // HealthData를 MaternalHealthItem으로 변환
+            val maternalHealthItem = MaternalHealthItem(
+                maternalId = 0L, // HealthData에는 ID가 없으므로 0으로 설정 (실제 수정 시 다른 방법으로 ID를 찾아야 함)
+                recordDate = healthData.recordDate ?: "",
+                weight = java.math.BigDecimal(healthData.weight?.toDouble() ?: 0.0),
+                bloodPressure = "${healthData.bloodPressureHigh?.toInt() ?: 0}/${healthData.bloodPressureLow?.toInt() ?: 0}",
+                bloodSugar = healthData.bloodSugar?.toInt() ?: 0,
+                createdAt = ""
+            )
+
+            _state.value = _state.value.copy(
+                editingData = maternalHealthItem,
+                isEditMode = true
+            )
+            Log.d(TAG, "📝 HealthData에서 수정용 데이터 설정: 체중=${maternalHealthItem.weight}, 혈압=${maternalHealthItem.bloodPressure}, 혈당=${maternalHealthItem.bloodSugar}")
+        } catch (e: Exception) {
+            Log.e(TAG, "HealthData 변환 실패: ${e.message}", e)
+        }
     }
 }

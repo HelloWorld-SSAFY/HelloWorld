@@ -30,7 +30,10 @@ import androidx.navigation.NavHostController
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ms.helloworld.dto.response.MaternalHealthGetResponse
+import com.ms.helloworld.dto.response.MaternalHealthItem
 import com.ms.helloworld.viewmodel.HealthViewModel
+import com.ms.helloworld.viewmodel.HomeViewModel
+import android.util.Log
 import kotlin.math.max
 import kotlin.math.abs
 import java.time.LocalDate
@@ -72,8 +75,22 @@ fun HealthStatusScreen(
     val healthViewModel: HealthViewModel = androidx.hilt.navigation.compose.hiltViewModel()
     val healthState by healthViewModel.state.collectAsStateWithLifecycle()
 
-    // 마지막 생리일 정보 상태
-    var lastMenstrualDate by remember { mutableStateOf<String?>(null) }
+    // HomeViewModel 추가 (DiaryDetailScreen과 동일)
+    val homeViewModel: HomeViewModel = hiltViewModel()
+    val momProfile by homeViewModel.momProfile.collectAsState()
+    val menstrualDate by homeViewModel.menstrualDate.collectAsState()
+    val currentPregnancyDay by homeViewModel.currentPregnancyDay.collectAsState()
+
+    // 현재 주차의 시작일과 끝일 계산 (DiaryDetailScreen과 동일)
+    val weekStartDay = if (momProfile.pregnancyWeek > 0) {
+        (momProfile.pregnancyWeek - 1) * 7 + 1
+    } else {
+        if (currentPregnancyDay > 1) {
+            val currentWeek = ((currentPregnancyDay - 1) / 7) + 1
+            (currentWeek - 1) * 7 + 1
+        } else 1
+    }
+    val weekEndDay = weekStartDay + 6
 
     // 애니메이션 상태
     var targetHealthType by remember { mutableStateOf(selectedHealthType) }
@@ -88,48 +105,107 @@ fun HealthStatusScreen(
         (currentIndex - targetIndex).toFloat() * 100f
     }
 
-    // 서버 데이터를 HealthData 형식으로 변환
-    val healthDataList = remember(healthState.healthHistory, healthState.todayHealthData) {
-        val allData = mutableListOf<HealthData>()
+    // 서버 데이터를 HealthData 형식으로 변환 (주차별 1일~7일 순서)
+    val healthDataList = remember(healthState.healthHistory, healthState.todayHealthData, menstrualDate, weekStartDay, weekEndDay) {
+        if (menstrualDate == null) {
+            Log.d("HealthStatusScreen", "menstrualDate가 null이므로 빈 데이터 반환")
+            emptyList<HealthData>()
+        } else {
+            Log.d("HealthStatusScreen", "주차별 건강 데이터 정렬: ${weekStartDay}일~${weekEndDay}일")
 
-        // 히스토리 데이터 추가
-        healthState.healthHistory.forEachIndexed { index, item ->
-            val bloodPressure = healthViewModel.parseBloodPressure(item.bloodPressure)
-            allData.add(HealthData(
-                day = index + 1,
-                weight = item.weight.toFloat(),
-                bloodPressureHigh = bloodPressure?.first?.toFloat(),
-                bloodPressureLow = bloodPressure?.second?.toFloat(),
-                bloodSugar = item.bloodSugar.toFloat(),
-                recordDate = item.recordDate
-            ))
-        }
+            // 모든 서버 데이터를 날짜별로 정리 (MaternalHealthItem과 MaternalHealthGetResponse 혼용)
+            val historyDataMap = mutableMapOf<String, MaternalHealthItem>()
+            val todayDataMap = mutableMapOf<String, MaternalHealthGetResponse>()
 
-        // 오늘 데이터가 있고, 히스토리에 같은 날짜가 없으면 추가
-        healthState.todayHealthData?.let { todayData ->
-            val isAlreadyInHistory = allData.any { it.recordDate == todayData.recordDate }
-            if (!isAlreadyInHistory) {
-                val bloodPressure = healthViewModel.parseBloodPressure(todayData.bloodPressure)
-                allData.add(HealthData(
-                    day = allData.size + 1,
-                    weight = todayData.weight.toFloat(),
-                    bloodPressureHigh = bloodPressure?.first?.toFloat(),
-                    bloodPressureLow = bloodPressure?.second?.toFloat(),
-                    bloodSugar = todayData.bloodSugar.toFloat(),
-                    recordDate = todayData.recordDate
-                ))
+            // 히스토리 데이터 추가 (MaternalHealthItem)
+            healthState.healthHistory.forEach { item ->
+                historyDataMap[item.recordDate] = item
             }
-        }
 
-        allData.toList()
+            // 오늘 데이터 추가 (MaternalHealthGetResponse)
+            healthState.todayHealthData?.let { todayData ->
+                todayDataMap[todayData.recordDate] = todayData
+            }
+
+            // 현재 주차의 1일~7일 순서대로 HealthData 생성
+            val weeklyData = mutableListOf<HealthData>()
+            for (day in weekStartDay..weekEndDay) {
+                // 임신 일수를 날짜로 변환
+                val targetDate = try {
+                    val lmpDate = LocalDate.parse(menstrualDate)
+                    lmpDate.plusDays((day - 1).toLong())
+                } catch (e: Exception) {
+                    Log.e("HealthStatusScreen", "날짜 계산 오류: ${e.message}")
+                    null
+                }
+
+                val targetDateString = targetDate?.toString()
+                Log.d("HealthStatusScreen", "${day}일차 -> 날짜: $targetDateString")
+
+                // 해당 날짜의 서버 데이터 찾기 (히스토리 우선, 없으면 오늘 데이터)
+                val historyData = targetDateString?.let { historyDataMap[it] }
+                val todayData = targetDateString?.let { todayDataMap[it] }
+
+                when {
+                    historyData != null -> {
+                        // 히스토리 데이터가 있는 경우 (MaternalHealthItem)
+                        val bloodPressure = healthViewModel.parseBloodPressure(historyData.bloodPressure)
+                        weeklyData.add(HealthData(
+                            day = ((day - weekStartDay) % 7) + 1, // 주차 내 1~7일
+                            weight = historyData.weight.toFloat(),
+                            bloodPressureHigh = bloodPressure?.first?.toFloat(),
+                            bloodPressureLow = bloodPressure?.second?.toFloat(),
+                            bloodSugar = historyData.bloodSugar.toFloat(),
+                            recordDate = historyData.recordDate
+                        ))
+                        Log.d("HealthStatusScreen", "${day}일차 히스토리 데이터: 체중=${historyData.weight}")
+                    }
+                    todayData != null -> {
+                        // 오늘 데이터가 있는 경우 (MaternalHealthGetResponse)
+                        val bloodPressure = healthViewModel.parseBloodPressure(todayData.bloodPressure)
+                        weeklyData.add(HealthData(
+                            day = ((day - weekStartDay) % 7) + 1, // 주차 내 1~7일
+                            weight = todayData.weight.toFloat(),
+                            bloodPressureHigh = bloodPressure?.first?.toFloat(),
+                            bloodPressureLow = bloodPressure?.second?.toFloat(),
+                            bloodSugar = todayData.bloodSugar.toFloat(),
+                            recordDate = todayData.recordDate
+                        ))
+                        Log.d("HealthStatusScreen", "${day}일차 오늘 데이터: 체중=${todayData.weight}")
+                    }
+                    else -> {
+                        // 데이터가 없는 경우 - null 값으로 HealthData 생성
+                        weeklyData.add(HealthData(
+                            day = ((day - weekStartDay) % 7) + 1, // 주차 내 1~7일
+                            weight = null,
+                            bloodPressureHigh = null,
+                            bloodPressureLow = null,
+                            bloodSugar = null,
+                            recordDate = targetDateString
+                        ))
+                        Log.d("HealthStatusScreen", "${day}일차 데이터 없음 - 빈 값으로 처리")
+                    }
+                }
+            }
+
+            Log.d("HealthStatusScreen", "최종 데이터 개수: ${weeklyData.size}")
+            weeklyData.toList()
+        }
     }
 
-    // 초기 로딩 및 에러 처리
+    // 초기 로딩 및 에러 처리 (DiaryDetailScreen과 동일)
     LaunchedEffect(Unit) {
+        Log.d("HealthStatusScreen", "HomeViewModel 데이터 로드 시작")
+        homeViewModel.refreshProfile()
         healthViewModel.loadHealthHistory()
+    }
 
-        // 임시로 하드코딩된 마지막 생리일 사용
-        lastMenstrualDate = "2025-07-01"
+    // HomeViewModel 데이터 로딩 상태 확인
+    LaunchedEffect(menstrualDate, weekStartDay, weekEndDay) {
+        Log.d("HealthStatusScreen", "HomeViewModel 데이터 변경:")
+        Log.d("HealthStatusScreen", "  - menstrualDate: $menstrualDate")
+        Log.d("HealthStatusScreen", "  - weekStartDay: $weekStartDay")
+        Log.d("HealthStatusScreen", "  - weekEndDay: $weekEndDay")
     }
 
     // 에러 메시지 자동 클리어
@@ -142,6 +218,22 @@ fun HealthStatusScreen(
 
     // 현재 선택된 건강 지표의 평균값 계산
     val currentAverage = calculateAverage(healthDataList, selectedHealthType)
+
+    // 오늘 날짜의 데이터가 이미 존재하는지 확인
+    val today = LocalDate.now().toString()
+    val hasTodayData = remember(healthDataList, today) {
+        val todayData = healthDataList.find { it.recordDate == today }
+        val hasData = todayData != null && (
+            todayData.weight != null ||
+            todayData.bloodPressureHigh != null ||
+            todayData.bloodSugar != null
+        )
+        Log.d("HealthStatusScreen", "🔍 오늘 날짜: $today")
+        Log.d("HealthStatusScreen", "🔍 전체 healthDataList: ${healthDataList.map { "${it.recordDate}: weight=${it.weight}, bp=${it.bloodPressureHigh}/${it.bloodPressureLow}, bs=${it.bloodSugar}" }}")
+        Log.d("HealthStatusScreen", "🔍 찾은 todayData: $todayData")
+        Log.d("HealthStatusScreen", "🔍 오늘 날짜($today) 데이터 존재: $hasData")
+        hasData
+    }
 
     Column(
         modifier = Modifier.fillMaxWidth()
@@ -166,16 +258,48 @@ fun HealthStatusScreen(
                 )
             }
             
-            IconButton(
-                onClick = { navController.navigate("health_register") },
-                modifier = Modifier.size(40.dp)
-            ) {
-                Icon(
-                    Icons.Default.Add,
-                    contentDescription = "건강 데이터 추가",
-                    tint = Color.Black,
-                    modifier = Modifier.size(20.dp)
-                )
+            if (hasTodayData) {
+                // 오늘 데이터가 있으면 수정 버튼 표시
+                IconButton(
+                    onClick = {
+                        // 오늘 날짜 데이터를 찾아서 수정 모드로 이동
+                        val todayData = healthDataList.find { it.recordDate == today }
+                        Log.d("HealthStatusScreen", "수정 버튼 클릭 - 오늘 데이터: ${todayData?.recordDate}")
+                        Log.d("HealthStatusScreen", "수정 버튼 클릭 - 체중: ${todayData?.weight}, 혈압: ${todayData?.bloodPressureHigh}/${todayData?.bloodPressureLow}, 혈당: ${todayData?.bloodSugar}")
+
+                        if (todayData != null) {
+                            // 기존 데이터가 있으면 수정 모드로 ViewModel에 데이터 설정
+                            Log.d("HealthStatusScreen", "수정 모드 - ViewModel에 데이터 설정: $todayData")
+                            healthViewModel.setEditingDataFromHealthData(todayData)
+                            navController.navigate("health_register")
+                        } else {
+                            // 데이터가 없으면 일반 등록 모드
+                            healthViewModel.clearEditingData()
+                            navController.navigate("health_register")
+                        }
+                    },
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Edit,
+                        contentDescription = "건강 데이터 수정",
+                        tint = Color.Black,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            } else {
+                // 오늘 데이터가 없으면 추가 버튼 표시
+                IconButton(
+                    onClick = { navController.navigate("health_register?isEdit=false") },
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Add,
+                        contentDescription = "건강 데이터 추가",
+                        tint = Color.Black,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
         }
 
@@ -302,7 +426,8 @@ fun HealthStatusScreen(
                         onDataPointClick = { dataPoint ->
                             selectedDataPoint = dataPoint
                         },
-                        todayHealthData = healthState.todayHealthData
+                        todayHealthData = healthState.todayHealthData,
+                        menstrualDate = menstrualDate
                     )
                 }
 
@@ -324,9 +449,12 @@ fun HealthStatusScreen(
                     SelectedDataPointInfo(
                         dataPoint = dataPoint,
                         selectedType = selectedHealthType,
+                        menstrualDate = menstrualDate,
                         onDismiss = { selectedDataPoint = null },
                         onEdit = {
-                            // HealthRegisterScreen으로 이동
+                            // 선택된 데이터 점의 정보로 수정 모드로 ViewModel에 데이터 설정
+                            Log.d("HealthStatusScreen", "선택된 데이터 수정 - ViewModel에 데이터 설정: $dataPoint")
+                            healthViewModel.setEditingDataFromHealthData(dataPoint)
                             navController.navigate("health_register")
                         },
                         onDelete = {
@@ -350,7 +478,7 @@ fun HealthStatusScreen(
                 )
             },
             text = {
-                Text("${formatPregnancyWeeks(selectedDataPoint!!.recordDate, null, "${selectedDataPoint!!.day}일차")} 데이터를 삭제하시겠습니까?\n삭제된 데이터는 복구할 수 없습니다.")
+                Text("${formatPregnancyWeeks(selectedDataPoint!!.recordDate, menstrualDate, "${selectedDataPoint!!.day}일차")} 데이터를 삭제하시겠습니까?\n삭제된 데이터는 복구할 수 없습니다.")
             },
             confirmButton = {
                 Button(
@@ -397,12 +525,24 @@ fun HealthTypeSelector(
             Card(
                 modifier = Modifier
                     .weight(1f)
-                    .height(75.dp)
-                    .clickable { 
+                    .height(80.dp)
+                    .clickable {
                         if (selectedType == type) {
                             // 이미 선택된 타입을 다시 클릭하면 오늘 데이터 표시
-                            val todayData = healthDataList.lastOrNull()
-                            todayData?.let { onDataPointClick(it) }
+                            val today = LocalDate.now().toString()
+                            val todayData = healthDataList.find { it.recordDate == today }
+
+                            Log.d("HealthStatusScreen", "더블클릭 - 오늘 날짜: $today")
+                            Log.d("HealthStatusScreen", "더블클릭 - 찾은 오늘 데이터: ${todayData?.recordDate}")
+
+                            if (todayData != null) {
+                                onDataPointClick(todayData)
+                            } else {
+                                Log.d("HealthStatusScreen", "더블클릭 - 오늘 데이터가 없어서 가장 최근 데이터 선택")
+                                // 오늘 데이터가 없으면 가장 최근 데이터 선택
+                                val latestData = healthDataList.maxByOrNull { it.recordDate ?: "" }
+                                latestData?.let { onDataPointClick(it) }
+                            }
                         } else {
                             onTypeSelected(type)
                         }
@@ -421,24 +561,27 @@ fun HealthTypeSelector(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(12.dp),
+                        .padding(8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
                     Text(
                         text = type.displayName,
-                        fontSize = 14.sp,
+                        fontSize = 13.sp,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                        color = Color.Black
+                        color = Color.Black,
+                        textAlign = TextAlign.Center
                     )
 
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(2.dp))
 
                     Text(
                         text = typeAverage,
-                        fontSize = if (isSelected) 16.sp else 14.sp,
+                        fontSize = if (isSelected) 14.sp else 12.sp,
                         fontWeight = FontWeight.Bold,
-                        color = if (isSelected) Color(0xFFF49699) else Color.Gray
+                        color = if (isSelected) Color(0xFFF49699) else Color.Gray,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1
                     )
                 }
             }
@@ -452,7 +595,8 @@ fun HealthStatisticsChart(
     selectedType: HealthType,
     selectedDataPoint: HealthData?,
     onDataPointClick: (HealthData) -> Unit,
-    todayHealthData: MaternalHealthGetResponse? = null
+    todayHealthData: MaternalHealthGetResponse? = null,
+    menstrualDate: String? = null
 ) {
     val chartData = extractChartData(healthDataList, selectedType)
     val (minValue, maxValue) = calculateChartRange(chartData, selectedType)
@@ -487,7 +631,7 @@ fun HealthStatisticsChart(
                 val lastData = chartData.lastOrNull()
                 if (lastData != null) {
                     val pregnancyInfo = todayHealthData?.recordDate?.let {
-                        formatPregnancyWeeks(it)
+                        formatPregnancyWeeks(it, menstrualDate)
                     } ?: "데이터 없음"
 
                     Column(
@@ -718,6 +862,7 @@ fun LineChart(
 fun SelectedDataPointInfo(
     dataPoint: HealthData,
     selectedType: HealthType,
+    menstrualDate: String?,
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit
@@ -739,7 +884,7 @@ fun SelectedDataPointInfo(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "${formatPregnancyWeeks(dataPoint.recordDate, null, "${dataPoint.day}일차")} 데이터",
+                    text = "${formatPregnancyWeeks(dataPoint.recordDate, menstrualDate, "${dataPoint.day}일차")} 데이터",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.Black
@@ -771,7 +916,7 @@ fun SelectedDataPointInfo(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = formatPregnancyWeeks(dataPoint.recordDate, null, "${dataPoint.day}일차"),
+                    text = formatPregnancyWeeks(dataPoint.recordDate, menstrualDate, "${dataPoint.day}일차"),
                     fontSize = 14.sp,
                     color = Color.Gray
                 )
@@ -995,24 +1140,25 @@ data class PregnancyWeeks(
 
 fun calculatePregnancyWeeks(recordDate: String, lastMenstrualPeriod: String? = null): PregnancyWeeks {
     return try {
-        // 마지막 생리일이 없으면 임시로 2025년 7월 1일을 기준으로 설정 (나중에 사용자 입력으로 변경 필요)
+        // 마지막 생리일이 없으면 기본값 반환
         val lmpDate = if (lastMenstrualPeriod != null) {
             LocalDate.parse(lastMenstrualPeriod, DateTimeFormatter.ISO_LOCAL_DATE)
         } else {
-            // 임시 기준일 - 실제로는 사용자 프로필에서 가져와야 함
-            LocalDate.of(2025, 7, 1)
+            Log.e("HealthStatusScreen", "마지막 생리일이 null입니다")
+            return PregnancyWeeks(0, 0)
         }
 
         val currentDate = LocalDate.parse(recordDate, DateTimeFormatter.ISO_LOCAL_DATE)
-        val daysDifference = ChronoUnit.DAYS.between(lmpDate, currentDate).toInt()
+        val daysDifference = ChronoUnit.DAYS.between(lmpDate, currentDate).toInt() + 1
 
-        // 임신 주차 계산 (7일 = 1주)
-        val weeks = daysDifference / 7
-        val days = daysDifference % 7
+        // 임신 주차 계산 (7일 = 1주) - DiaryDetailScreen과 동일한 방식
+        val weeks = ((daysDifference - 1) / 7) + 1
+        val days = ((daysDifference - 1) % 7) + 1
 
+        Log.d("HealthStatusScreen", "임신 주차 계산: ${recordDate} -> ${weeks}주 ${days}일 (${daysDifference}일차)")
         PregnancyWeeks(weeks, days)
     } catch (e: Exception) {
-        // 오류 시 기본값 반환
+        Log.e("HealthStatusScreen", "임신 주차 계산 오류: ${e.message}")
         PregnancyWeeks(0, 0)
     }
 }

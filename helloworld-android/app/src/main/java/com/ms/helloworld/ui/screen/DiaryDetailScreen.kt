@@ -26,6 +26,7 @@ import com.ms.helloworld.viewmodel.HomeViewModel
 import com.ms.helloworld.viewmodel.DiaryViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.DisposableEffect
+import android.util.Log
 
 // 데이터 클래스들
 data class DiaryEntry(
@@ -100,6 +101,20 @@ fun DiaryDetailScreen(
     // 현재 선택된 주차 내 위치 (UI 표시용)
     var currentDayInWeek by remember { mutableStateOf(1) }
 
+    // DiaryDetailScreen에서 HomeViewModel 데이터를 먼저 로드
+    LaunchedEffect(Unit) {
+        Log.d("DiaryDetailScreen", "HomeViewModel 데이터 로드 시작")
+        homeViewModel.refreshProfile()
+    }
+
+    // HomeViewModel 데이터 로딩 상태 확인
+    LaunchedEffect(coupleId, menstrualDate, userId, userGender) {
+        Log.d("DiaryDetailScreen", "HomeViewModel 데이터 변경:")
+        Log.d("DiaryDetailScreen", "  - coupleId: $coupleId")
+        Log.d("DiaryDetailScreen", "  - menstrualDate: $menstrualDate")
+        Log.d("DiaryDetailScreen", "  - userId: $userId")
+        Log.d("DiaryDetailScreen", "  - userGender: $userGender")
+    }
     // actualDayNumber가 업데이트되면 currentDayInWeek도 업데이트
     LaunchedEffect(actualDayNumber) {
         if (actualDayNumber > 1) {
@@ -119,30 +134,32 @@ fun DiaryDetailScreen(
     // coupleId는 서버에서 토큰으로 자동 처리됨
     val getLmpDate = { menstrualDate ?: "2025-01-18" } // menstrualDate 사용 (HomeViewModel과 동일한 기본값)
 
+    // 필수 데이터 부족 시 재로딩
+    LaunchedEffect(currentViewingDay) {
+        if (coupleId == null || menstrualDate == null) {
+            Log.d("DiaryDetailScreen", "필수 데이터 부족, HomeViewModel 재로딩 시도")
+            homeViewModel.refreshProfile()
+        }
+    }
+
     // 일별 일기 데이터 로드 - currentViewingDay 변경 시 재로드
     LaunchedEffect(currentViewingDay, coupleId, menstrualDate) {
-        // day API 호출: calendar/diary/day
-//        println("📆 DiaryDetailScreen - 일별 일기 로드")
-//        println("  - initialDay: $initialDay")
-//        println("  - currentPregnancyDay: $currentPregnancyDay")
-//        println("  - currentDayInWeek: $currentDayInWeek")
-//        println("  - actualDayNumber: ${actualDayNumber}일차")
-//        println("  - pregnancyWeek: ${momProfile.pregnancyWeek}주차")
-//        println("  - weekStartDay: $weekStartDay")
-//        println("  - weekEndDay: $weekEndDay")
-//        println("🔍 DiaryDetailScreen - API 파라미터:")
-//        println("  - coupleId: 토큰에서 자동 처리")
-//        println("  - day: $actualDayNumber")
-//        println("  - lmpDate: ${getLmpDate()}")
+        // 날짜 변경 시 즉시 이전 데이터 초기화
+        diaryViewModel.clearDiaries()
 
-        // currentPregnancyDay가 유효한 값(1보다 큰 값)일 때만 API 호출
-        if (actualDayNumber > 1 && coupleId != null && menstrualDate != null) {
+        Log.d("DiaryDetailScreen", "API 호출 조건 체크:")
+        Log.d("DiaryDetailScreen", "  - actualDayNumber: $actualDayNumber (>= 1: ${actualDayNumber >= 1})")
+        Log.d("DiaryDetailScreen", "  - coupleId: $coupleId (not null: ${coupleId != null})")
+        Log.d("DiaryDetailScreen", "  - menstrualDate: $menstrualDate (not null: ${menstrualDate != null})")
+
+        if (actualDayNumber >= 1 && coupleId != null && menstrualDate != null) {
+            Log.d("DiaryDetailScreen", "API 호출 시작: ${actualDayNumber}일차")
             diaryViewModel.loadDiariesByDay(
                 day = actualDayNumber,
                 lmpDate = getLmpDate()
             )
         } else {
-            println("DiaryDetailScreen - 데이터 로딩 대기 중 (currentPregnancyDay: $currentPregnancyDay)")
+            Log.d("DiaryDetailScreen", "데이터 로딩 대기 중 (조건 미충족)")
         }
     }
 
@@ -262,8 +279,8 @@ fun DiaryDetailScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
 
-            // 일자 네비게이션 (데이터 로딩 완료 후 표시)
-            if (currentPregnancyDay > 1) {
+            // 일자 네비게이션 (actualDayNumber가 유효할 때 표시)
+            if (actualDayNumber >= 1 && viewingWeek > 0) {
                 DayNavigationHeader(
                     currentDay = actualDayNumber,
                     currentDayInWeek = currentDayInWeek,
@@ -297,7 +314,7 @@ fun DiaryDetailScreen(
                 title = "출산일기",
                 diary = currentDiary.birthDiary,
                 borderColor = Color(0xFFF49699),
-                canAddOrEdit = userGender?.lowercase() == "female" || userGender == null, // 여성만 출산일기 작성/수정 가능 (로딩 중에는 모두 표시)
+                canAddOrEdit = userGender?.lowercase() == "female", // 여성만 출산일기 작성/수정 가능
                 onAddClick = {
                     // 출산일기 작성 화면으로 이동
                     navController.navigate(
@@ -334,7 +351,7 @@ fun DiaryDetailScreen(
                 title = "관찰일기",
                 diary = currentDiary.observationDiary,
                 borderColor = Color(0xFF88A9F8),
-                canAddOrEdit = userGender?.lowercase() == "male" || userGender == null, // 남성만 관찰일기 작성/수정 가능 (로딩 중에는 모두 표시)
+                canAddOrEdit = userGender?.lowercase() == "male", // 남성만 관찰일기 작성/수정 가능
                 onAddClick = {
                     // 관찰일기 작성 화면으로 이동
                     navController.navigate(

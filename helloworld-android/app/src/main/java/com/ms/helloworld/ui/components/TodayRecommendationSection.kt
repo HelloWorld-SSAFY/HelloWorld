@@ -1,5 +1,6 @@
 package com.ms.helloworld.ui.components
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -18,15 +19,18 @@ import kotlin.math.sin
 
 data class RecommendationItem(
     val title: String,
-    val backgroundColor: Color
+    val backgroundColor: Color,
+    val onClick: (() -> Unit)? = null
 )
 
 @Composable
-fun TodayRecommendationSection() {
+fun TodayRecommendationSection(
+    onWeeklyRecommendationClick: (() -> Unit)? = null
+) {
     val recommendations = listOf(
-        RecommendationItem("음식", Color(0xFFB8E6B8)),
-        RecommendationItem("현황", Color(0xFFE6B8E6)),
-        RecommendationItem("할 일", Color(0xFFB8E6E6)),
+        RecommendationItem("음식", Color(0xFFB8E6B8), onClick = onWeeklyRecommendationClick),
+        RecommendationItem("현황", Color(0xFFE6B8E6), onClick = onWeeklyRecommendationClick),
+        RecommendationItem("할 일", Color(0xFFB8E6E6), onClick = onWeeklyRecommendationClick)
     )
 
     Column {
@@ -52,15 +56,22 @@ fun RecommendationCard(
     // title에 따라 아이콘 결정
     val iconRes = when (item.title) {
         "음식" -> R.drawable.ic_food
-        "현황" -> R.drawable.ic_food // 또는 적절한 현황 아이콘
-        "할 일" -> R.drawable.ic_food // 또는 적절한 할 일 아이콘
+        "현황" -> R.drawable.ic_food // 현황 아이콘 (추후 변경 가능)
+        "할 일" -> R.drawable.ic_food // 할 일 아이콘 (추후 변경 가능)
         else -> R.drawable.ic_food // 기본 아이콘
     }
 
     Card(
         modifier = modifier
             .width(120.dp)
-            .height(120.dp),
+            .height(120.dp)
+            .then(
+                if (item.onClick != null) {
+                    Modifier.clickable { item.onClick.invoke() }
+                } else {
+                    Modifier
+                }
+            ),
         colors = CardDefaults.cardColors(containerColor = item.backgroundColor),
         shape = RoundedCornerShape(12.dp)
     ) {

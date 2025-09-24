@@ -32,14 +32,39 @@ fun HealthRegisterScreen(
     navController: NavHostController,
     viewModel: HealthViewModel = hiltViewModel()
 ) {
+    // 이전 화면(HealthStatusScreen)과 같은 ViewModel 인스턴스를 사용하기 위해
+    // 이전 backStackEntry의 ViewModel을 가져옴
+    val parentEntry = remember(navController) {
+        navController.getBackStackEntry("health_status")
+    }
+    val sharedViewModel: HealthViewModel = hiltViewModel(parentEntry)
     val backgroundColor = Color(0xFFF5F5F5)
-    val state by viewModel.state.collectAsState()
+    val state by sharedViewModel.state.collectAsState()
 
-    // 입력 상태들
-    var weight by remember { mutableStateOf("") }
-    var systolicBP by remember { mutableStateOf("") }
-    var diastolicBP by remember { mutableStateOf("") }
-    var bloodSugar by remember { mutableStateOf("") }
+    // ViewModel에서 수정용 데이터 읽기
+    val editingData = state.editingData
+    val isEditMode = state.isEditMode
+
+    // 수정용 데이터가 있으면 혈압을 파싱
+    val (initialSystolic, initialDiastolic) = editingData?.let { data ->
+        sharedViewModel.parseBloodPressure(data.bloodPressure) ?: (0 to 0)
+    } ?: (0 to 0)
+
+    Log.d("HealthRegisterScreen", "ViewModel에서 데이터 읽기:")
+    Log.d("HealthRegisterScreen", "isEditMode: $isEditMode")
+    Log.d("HealthRegisterScreen", "editingData: $editingData")
+    if (editingData != null) {
+        Log.d("HealthRegisterScreen", "weight: ${editingData.weight}")
+        Log.d("HealthRegisterScreen", "bloodPressure: ${editingData.bloodPressure}")
+        Log.d("HealthRegisterScreen", "bloodSugar: ${editingData.bloodSugar}")
+        Log.d("HealthRegisterScreen", "parsed BP: $initialSystolic/$initialDiastolic")
+    }
+
+    // 입력 상태들 - ViewModel 데이터로 초기화
+    var weight by remember { mutableStateOf(editingData?.weight?.toString() ?: "") }
+    var systolicBP by remember { mutableStateOf(if (initialSystolic > 0) initialSystolic.toString() else "") }
+    var diastolicBP by remember { mutableStateOf(if (initialDiastolic > 0) initialDiastolic.toString() else "") }
+    var bloodSugar by remember { mutableStateOf(if ((editingData?.bloodSugar ?: 0) > 0) editingData?.bloodSugar.toString() else "") }
 
     Column(
         modifier = Modifier.fillMaxSize()
@@ -100,20 +125,38 @@ fun HealthRegisterScreen(
 
             Spacer(modifier = Modifier.weight(1f))
 
-            // 등록 버튼
-            RegisterButton(
+            // 등록/수정 버튼
+            HealthRegisterButton(
+                text = if (isEditMode) "수정" else "등록",
                 onClick = {
-                    // 데이터 저장 로직
-                    saveHealthData(
-                        viewModel = viewModel,
-                        weight = weight,
-                        systolicBP = systolicBP,
-                        diastolicBP = diastolicBP,
-                        bloodSugar = bloodSugar,
-                        onSuccess = {
-                            navController.popBackStack()
-                        }
-                    )
+                    if (isEditMode && editingData != null) {
+                        // 수정 모드
+                        updateHealthData(
+                            viewModel = sharedViewModel,
+                            maternalId = editingData.maternalId,
+                            weight = weight,
+                            systolicBP = systolicBP,
+                            diastolicBP = diastolicBP,
+                            bloodSugar = bloodSugar,
+                            onSuccess = {
+                                sharedViewModel.clearEditingData()
+                                navController.popBackStack()
+                            }
+                        )
+                    } else {
+                        // 등록 모드
+                        saveHealthData(
+                            viewModel = sharedViewModel,
+                            weight = weight,
+                            systolicBP = systolicBP,
+                            diastolicBP = diastolicBP,
+                            bloodSugar = bloodSugar,
+                            onSuccess = {
+                                sharedViewModel.clearEditingData()
+                                navController.popBackStack()
+                            }
+                        )
+                    }
                 },
                 enabled = isFormValid(weight, systolicBP, diastolicBP, bloodSugar) && !state.isLoading
             )
@@ -251,7 +294,8 @@ fun BloodPressureInputSection(
 }
 
 @Composable
-fun RegisterButton(
+fun HealthRegisterButton(
+    text: String = "등록",
     onClick: () -> Unit,
     enabled: Boolean
 ) {
@@ -268,7 +312,7 @@ fun RegisterButton(
         )
     ) {
         Text(
-            text = "등록",
+            text = text,
             fontSize = 16.sp,
             fontWeight = FontWeight.Medium,
             color = if (enabled) Color.White else Color.Gray
@@ -342,6 +386,55 @@ fun saveHealthData(
 
     } catch (e: Exception) {
         Log.e(TAG, "건강 데이터 저장 실패: ${e.message}", e)
+    }
+}
+
+fun updateHealthData(
+    viewModel: HealthViewModel,
+    maternalId: Long,
+    weight: String,
+    systolicBP: String,
+    diastolicBP: String,
+    bloodSugar: String,
+    onSuccess: () -> Unit = {}
+) {
+    Log.d(TAG, "건강 데이터 수정 시작 - ID: $maternalId")
+
+    try {
+        // 입력값 변환 (빈 값은 null로 처리)
+        val weightValue = if (weight.isNotBlank()) {
+            BigDecimal(weight)
+        } else {
+            null
+        }
+
+        val bloodPressureValue = if (systolicBP.isNotBlank() && diastolicBP.isNotBlank()) {
+            "${systolicBP}/${diastolicBP}"
+        } else {
+            null
+        }
+
+        val bloodSugarValue = if (bloodSugar.isNotBlank()) {
+            bloodSugar.toInt()
+        } else {
+            null
+        }
+
+        Log.d(TAG, "변환된 수정 데이터: 체중=$weightValue, 혈압=$bloodPressureValue, 혈당=$bloodSugarValue")
+
+        // ViewModel을 통해 서버에 데이터 수정
+        viewModel.updateHealthRecord(
+            maternalId = maternalId,
+            weight = weightValue,
+            bloodPressure = bloodPressureValue,
+            bloodSugar = bloodSugarValue
+        )
+
+        Log.d(TAG, "건강 데이터 수정 요청 완료")
+        onSuccess()
+
+    } catch (e: Exception) {
+        Log.e(TAG, "건강 데이터 수정 실패: ${e.message}", e)
     }
 }
 
