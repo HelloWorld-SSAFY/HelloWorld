@@ -47,8 +47,7 @@ def _get_access_token(sess: requests.Session, override: Optional[str] = None) ->
         timeout=10,
     )
     resp.raise_for_status()
-    obj = resp.json()
-    return obj.get("access_token") or obj["access_token"]
+    return resp.json()["access_token"]
 
 def _parse_resp(resp: requests.Response) -> Any:
     try:
@@ -65,12 +64,7 @@ def call_main(
     timeout: int = 15,
 ) -> Tuple[int, Any]:
     """
-    메인 서버에 요청 후 (status_code, body)를 반환.
-    - path: '/v1/steps/summary?date=YYYY-MM-DD' 처럼 절대 경로 형태 권장
-    - method: GET/POST/PUT/DELETE
-    - json_body: GET 외 메서드에서 전송할 JSON
-    - couple_id: 있으면 X-Couple-Id 헤더로 전달
-    - access_token: 있으면 그대로 사용, 없으면 MAIN_ACCESS_TOKEN 또는 OAuth2로 발급
+    메인 서버에 요청 후 (status_code, body) 반환.
     """
     base = _ensure_base()
     if not path.startswith("/"):
@@ -105,8 +99,7 @@ def call_main(
 
     return resp.status_code, _parse_resp(resp)
 
-# (옵션) 편의 함수: 특정 엔드포인트용 래퍼가 필요하면 여기서 추가
+# (옵션) 특정 엔드포인트용 래퍼 예시
 def get_daily_buckets(date_str: str, couple_id: Optional[str] = None, access_token: Optional[str] = None):
-    """예시: /health/api/wearable/daily-buckets?date=YYYY-MM-DD"""
-    path = f"/health/api/wearable/daily-buckets?date={date_str}"
-    return call_main(path, method="GET", couple_id=couple_id, access_token=access_token)
+    return call_main(f"/health/api/wearable/daily-buckets?date={date_str}",
+                     method="GET", couple_id=couple_id, access_token=access_token)
