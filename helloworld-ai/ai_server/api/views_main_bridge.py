@@ -1,5 +1,5 @@
 # api/views_main_bridge.py
-from datetime import date
+from datetime import date, datetime
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import serializers
@@ -28,6 +28,7 @@ class MainEchoQuery(serializers.Serializer):
     )
     method = serializers.ChoiceField(choices=["GET", "POST", "PUT", "DELETE"], required=False, default="GET")
     body = serializers.JSONField(required=False)
+
 
 class MainEchoView(APIView):
     @extend_schema(
@@ -64,7 +65,7 @@ class MainEchoView(APIView):
             couple_id=couple_id,
             access_token=access_token,
         )
-        # 성공이면 그대로 상태코드, 실패면 본문에 상태코드 포함해 200으로 감싸서 반환(디버그 편의)
+        # 성공이면 코드 그대로, 실패면 본문에 상태코드를 담아 200으로 감싸서 반환(디버그 편의)
         return Response({"status": code, "data": data}, status=code if 200 <= code < 300 else 200)
 
 
@@ -78,6 +79,7 @@ class PullStepsBaselineIn(serializers.Serializer):
     date = serializers.DateField(required=False, help_text="YYYY-MM-DD (KST). 기본: 오늘")
     # 메인 경로를 바꾸고 싶다면 옵션으로 허용(기본: /v1/steps/summary)
     path = serializers.CharField(required=False, default="/v1/steps/summary")
+
 
 class PullStepsBaselineView(APIView):
     @extend_schema(
@@ -104,7 +106,8 @@ class PullStepsBaselineView(APIView):
             return missing
 
         # 날짜 결정: 기본 KST 오늘
-        d_kst = d.get("date") or date.today()  # 이미 naive date면 KST 기준 오늘로 충분
+        d_kst = d.get("date") or datetime.now(KST).date()
+
         # 메인 경로
         path = (d.get("path") or "/v1/steps/summary").strip()
         if not path.startswith("/"):
