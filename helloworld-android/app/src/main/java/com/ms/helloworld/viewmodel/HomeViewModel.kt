@@ -228,7 +228,16 @@ class HomeViewModel @Inject constructor(
     }
 
     fun refreshProfile() {
-        refreshMomProfileSilently()
+        viewModelScope.launch {
+            try {
+                // 사용자 정보와 커플 정보를 모두 다시 로드
+                loadUserGender() // 이 안에서 loadCoupleInfo()도 호출됨
+                loadMomProfile()
+            } catch (e: Exception) {
+                println("HomeViewModel - refreshProfile 실패: ${e.message}")
+                e.printStackTrace()
+            }
+        }
     }
 
     fun forceRefreshProfile() {

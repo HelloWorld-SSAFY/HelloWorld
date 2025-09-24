@@ -161,7 +161,13 @@ fun HomeScreen(
             )
             Spacer(modifier = Modifier.height(16.dp))
 
-            TodayRecommendationSection()
+            TodayRecommendationSection(
+                onWeeklyRecommendationClick = {
+                    // 현재 임신 주차를 가져와서 WeeklyRecommendationScreen으로 이동
+                    val currentWeek = ((currentPregnancyDay - 1) / 7) + 1
+                    navController.navigate("weekly_recommendation/$currentWeek")
+                }
+            )
         }
 
         Spacer(modifier = Modifier.height(16.dp))

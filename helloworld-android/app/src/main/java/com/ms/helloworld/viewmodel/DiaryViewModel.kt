@@ -54,6 +54,11 @@ class DiaryViewModel @Inject constructor(
         println("📝 DiaryViewModel - LMP 날짜 업데이트: lmpDate=$lmpDate")
     }
 
+    fun clearDiaries() {
+        _state.value = _state.value.copy(diaries = emptyList())
+        println("🧹 DiaryViewModel - 일기 데이터 초기화")
+    }
+
     fun setUserInfo(userId: Long?, userGender: String?) {
         currentUserId = userId
         currentUserGender = userGender

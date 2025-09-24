@@ -33,6 +33,7 @@ import com.ms.helloworld.ui.screen.HealthRegisterScreen
 import com.ms.helloworld.ui.screen.DiaryBoardScreen
 import com.ms.helloworld.ui.screen.NotificationScreen
 import com.ms.helloworld.ui.screen.SplashScreen
+import com.ms.helloworld.ui.screen.WeeklyRecommendationScreen
 
 @Composable
 fun MainNavigation(
@@ -195,6 +196,22 @@ fun MainNavigation(
 
             composable(Screen.WearableRecommendedScreen.route){
                 WearableRecommendedScreen(navController)
+            }
+
+            composable(
+                route = "weekly_recommendation/{week}",
+                arguments = listOf(navArgument("week") {
+                    type = NavType.IntType
+                    defaultValue = 1
+                })
+            ) { backStackEntry ->
+                val week = backStackEntry.arguments?.getInt("week") ?: 1
+                WeeklyRecommendationScreen(
+                    initialWeek = week,
+                    onBackClick = {
+                        navController.popBackStack()
+                    }
+                )
             }
         }
     }

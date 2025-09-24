@@ -1,5 +1,6 @@
 package com.ms.helloworld.ui.components
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,15 +18,18 @@ import com.ms.helloworld.ui.theme.MainColor
 
 data class RecommendationItem(
     val title: String,
-    val backgroundColor: Color
+    val backgroundColor: Color,
+    val onClick: (() -> Unit)? = null
 )
 
 @Composable
-fun TodayRecommendationSection() {
+fun TodayRecommendationSection(
+    onWeeklyRecommendationClick: (() -> Unit)? = null
+) {
     val recommendations = listOf(
-        RecommendationItem("음식", Color(0xFFFFFFFF)),
-        RecommendationItem("할 일", Color(0xFFFFFFFF)),
-        RecommendationItem("현황", Color(0xFFFFFFFF)),
+        RecommendationItem("음식", Color(0xFFB8E6B8), onClick = onWeeklyRecommendationClick),
+        RecommendationItem("현황", Color(0xFFE6B8E6), onClick = onWeeklyRecommendationClick),
+        RecommendationItem("할 일", Color(0xFFB8E6E6), onClick = onWeeklyRecommendationClick)
     )
 
     Row(
@@ -53,7 +57,15 @@ fun RecommendationCard(
 
     Card(
         modifier = modifier
-            .height(120.dp),
+            .width(120.dp)
+            .height(120.dp)
+            .then(
+                if (item.onClick != null) {
+                    Modifier.clickable { item.onClick.invoke() }
+                } else {
+                    Modifier
+                }
+            ),
         colors = CardDefaults.cardColors(containerColor = item.backgroundColor),
         shape = RoundedCornerShape(12.dp),
         border = BorderStroke(
