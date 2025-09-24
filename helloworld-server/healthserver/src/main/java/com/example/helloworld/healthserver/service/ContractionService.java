@@ -6,10 +6,14 @@ import com.example.helloworld.healthserver.dto.response.CsListResponse;
 import com.example.helloworld.healthserver.entity.ContractionSession;
 import com.example.helloworld.healthserver.persistence.ContractionSessionRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.time.Instant;
 
@@ -20,6 +24,9 @@ import static org.springframework.http.HttpStatus.NOT_FOUND;
 public class ContractionService {
 
     private final ContractionSessionRepository repo;
+
+    @Value("${app.zone:Asia/Seoul}")
+    private String appZone;
 
     @Transactional
     public CsCreateResponse create(Long coupleId, CsCreateRequest req) {
@@ -46,21 +53,31 @@ public class ContractionService {
     }
 
     @Transactional(readOnly = true)
-    public CsListResponse list(Long coupleId, Instant from, Instant to) {
-        List<ContractionSession> list = (from != null && to != null)
-                ? repo.findByCoupleIdAndStartTimeBetweenOrderByStartTimeDesc(coupleId, from, to)
-                : repo.findByCoupleIdOrderByStartTimeDesc(coupleId);
+    public CsListResponse list(Long coupleId, LocalDate from, LocalDate to) {
+        ZoneId zone = ZoneId.of(appZone);
+
+        // 기본 구간(미지정 시 전기간)
+        LocalDate startDate = (from != null) ? from : LocalDate.of(1970, 1, 1);
+        LocalDate endDate   = (to   != null) ? to   : LocalDate.of(9999, 12, 31);
+
+        // [start, end) 형태: 시작일 00:00 ~ 종료일 다음날 00:00
+        Instant start = startDate.atStartOfDay(zone).toInstant();
+        Instant end   = endDate.plusDays(1).atStartOfDay(zone).toInstant();
+
+        List<ContractionSession> list =
+                repo.findByCoupleIdAndStartTimeBetweenOrderByStartTimeDesc(coupleId, start, end);
 
         var items = list.stream().map(s ->
                 new CsListResponse.CSItem(
                         s.getId(),
-                        s.getStartTime(),
+                        s.getStartTime(),   // Instant라면 그대로 반환(클라 포맷은 컨트롤러/DTO에서)
                         s.getEndTime(),
                         s.getDurationSec(),
                         s.getIntervalMin(),
                         s.isAlertSent()
                 )
         ).toList();
+
         return new CsListResponse(items);
     }
 
