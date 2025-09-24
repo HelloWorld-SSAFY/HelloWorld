@@ -7,7 +7,7 @@ from drf_spectacular.utils import extend_schema
 
 from services.anomaly import KST
 from services.main_client import call_main
-from services.stats_ingest import upsert_daily_buckets_payload
+from services.stats_ingest import replace_all_daily_buckets  # ✅ 전체 교체 저장
 
 # 공용 유틸/스웨거 파라미터
 from api.views import (
@@ -105,7 +105,7 @@ class MainEchoView(APIView):
         return Response({"status": code, "data": data}, status=code if 200 <= code < 300 else 200)
 
 # ---------------------------------------------------------------------------
-# 2) 메인 daily-buckets(stats) → 로컬 DB 업서트
+# 2) 메인 daily-buckets(stats) → 로컬 DB 전체 교체 저장
 # ---------------------------------------------------------------------------
 class PullStepsBaselineIn(serializers.Serializer):
     date = serializers.DateField(required=False, help_text="YYYY-MM-DD (KST). 기본: 오늘")
@@ -120,7 +120,7 @@ class PullStepsBaselineView(APIView):
         request=PullStepsBaselineIn,
         responses={200: None},
         tags=["steps"],
-        summary="메인 서버 daily-buckets(stats) 가져와 저장(upsert)",
+        summary="메인 서버 daily-buckets(stats) 가져와 DB를 '전체 교체' 저장",
         operation_id="postStepsBaselinePull",
     )
     def post(self, request):
@@ -160,10 +160,12 @@ class PullStepsBaselineView(APIView):
         if not isinstance(data, dict) or "stats" not in data:
             return Response({"ok": False, "error": "BAD_MAIN_RESPONSE", "source": data}, status=200)
 
-        saved = upsert_daily_buckets_payload(data)
+        # ✅ 전체 비우고 이번 데이터로 교체 저장
+        inserted = replace_all_daily_buckets(data)
         return Response({
             "ok": True,
+            "mode": "replace_all",
             "date": d_kst.isoformat(),
-            "saved_rows": saved,
+            "inserted_rows": inserted,
             "source_status": code,
         })
