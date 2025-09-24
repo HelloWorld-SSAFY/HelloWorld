@@ -6,6 +6,6 @@ import jakarta.validation.constraints.Size;
 import java.time.Instant;
 
 public record FmCreateRequest(
-        @Schema(description = "기록 시각(UTC). 비우면 서버 now()", example = "2025-09-02T15:00:00Z")
+        @Schema(description = "기록 시각(UTC). 비우면 서버 now()")
         Instant recorded_at
 ) {}
