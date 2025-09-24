@@ -1,6 +1,7 @@
 package com.ms.helloworld.ui.screen
 
 import android.annotation.SuppressLint
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -48,7 +49,8 @@ fun DiaryRegisterScreen(
     navController: NavHostController,
     diaryType: String, // "birth" 또는 "observation"
     day: Int,
-    isEdit: Boolean = false
+    isEdit: Boolean = false,
+    diaryId: Long? = null
 ) {
     val backgroundColor = Color(0xFFF5F5F5)
     val currentDiaryType = if (diaryType == "birth") DiaryType.BIRTH else DiaryType.OBSERVATION
@@ -87,15 +89,48 @@ fun DiaryRegisterScreen(
         val actualDate = lmpDate.plusDays((day - 1).toLong())
         val result = actualDate.toString() // yyyy-MM-dd 형식
 
-        println("📅 targetDate 계산 (네겔레 법칙):")
-        println("  - day: $day")
-        println("  - lmpDateString: $lmpDateString")
-        println("  - lmpDate: $lmpDate")
-        println("  - plusDays: ${day - 1}")
-        println("  - actualDate: $actualDate")
-        println("  - result: $result")
+        Log.d("DiaryRegisterScreen", "targetDate 계산: day=$day, lmp=$lmpDateString, result=$result")
 
         result
+    }
+
+    // 편집할 일기 데이터 가져오기
+    val editingDiary = diaryState.editingDiary
+
+    // diaryId가 있으면 해당 일기를 editingDiary로 설정
+    LaunchedEffect(diaryId, isEdit) {
+        Log.d("DiaryRegisterScreen", "첫 번째 LaunchedEffect 실행:")
+        Log.d("DiaryRegisterScreen", "  - isEdit: $isEdit")
+        Log.d("DiaryRegisterScreen", "  - diaryId: $diaryId")
+        Log.d("DiaryRegisterScreen", "  - diaryId != null: ${diaryId != null}")
+        Log.d("DiaryRegisterScreen", "  - diaryId != -1L: ${diaryId != -1L}")
+        Log.d("DiaryRegisterScreen", "  - editingDiary == null: ${editingDiary == null}")
+
+        if (isEdit && diaryId != null && diaryId != -1L && editingDiary == null) {
+            Log.d("DiaryRegisterScreen", "diaryId로 편집할 일기 찾는 중: diaryId=$diaryId")
+            // 먼저 일기 데이터를 로드
+            diaryViewModel.loadDiariesByDay(day, getLmpDate())
+        }
+    }
+
+    // 일기 데이터가 로드된 후 diaryId로 편집할 일기 찾기
+    LaunchedEffect(diaryState.diaries, diaryId, isEdit) {
+        Log.d("DiaryRegisterScreen", "두 번째 LaunchedEffect 실행:")
+        Log.d("DiaryRegisterScreen", "  - isEdit: $isEdit")
+        Log.d("DiaryRegisterScreen", "  - diaryId: $diaryId")
+        Log.d("DiaryRegisterScreen", "  - diaryState.diaries.size: ${diaryState.diaries.size}")
+        Log.d("DiaryRegisterScreen", "  - editingDiary == null: ${editingDiary == null}")
+
+        if (isEdit && diaryId != null && diaryId != -1L && editingDiary == null && diaryState.diaries.isNotEmpty()) {
+            Log.d("DiaryRegisterScreen", "로드된 일기에서 diaryId=$diaryId 찾는 중 (총 ${diaryState.diaries.size}개)")
+            val targetDiary = diaryState.diaries.find { it.diaryId == diaryId }
+            if (targetDiary != null) {
+                Log.d("DiaryRegisterScreen", "편집할 일기 발견: ${targetDiary.diaryTitle}")
+                diaryViewModel.setEditingDiary(targetDiary)
+            } else {
+                Log.w("DiaryRegisterScreen", "diaryId=${diaryId}에 해당하는 일기를 찾을 수 없습니다. 로드된 일기: ${diaryState.diaries.map { it.diaryId }}")
+            }
+        }
     }
 
     // 입력 상태들
@@ -107,14 +142,52 @@ fun DiaryRegisterScreen(
     // 로딩 상태 관리
     var isSubmitting by remember { mutableStateOf(false) }
 
+    // 편집 모드에서 데이터 로딩 시 입력 필드 업데이트
+    LaunchedEffect(editingDiary, isEdit) {
+        Log.d("DiaryRegisterScreen", "LaunchedEffect 실행: isEdit=$isEdit, editingDiary=$editingDiary")
+        if (isEdit && editingDiary != null) {
+            val newTitle = editingDiary.diaryTitle ?: ""
+            val newContent = editingDiary.diaryContent ?: ""
+            Log.d("DiaryRegisterScreen", "편집 데이터 로딩 시도: ID=${editingDiary.diaryId}, 제목='$newTitle', 내용 길이=${newContent.length}")
+
+            diaryTitle = newTitle
+            diaryContent = newContent
+
+            Log.d("DiaryRegisterScreen", "편집 데이터 로딩 완료: 제목='$diaryTitle', 내용 길이=${diaryContent.length}")
+        } else if (!isEdit) {
+            // 새로 작성하는 경우 초기화
+            diaryTitle = ""
+            diaryContent = ""
+            Log.d("DiaryRegisterScreen", "새 일기 작성 모드로 초기화")
+        } else if (isEdit && editingDiary == null) {
+            Log.w("DiaryRegisterScreen", "편집 모드인데 editingDiary가 null입니다!")
+        }
+    }
+
     // 등록/수정 완료 후 화면 이동
     LaunchedEffect(diaryState.isLoading) {
         if (!diaryState.isLoading && isSubmitting) {
             if (diaryState.errorMessage == null) {
-                println("✅ DiaryRegisterScreen - 일기 등록/수정 성공, 화면 이동")
+                Log.d("DiaryRegisterScreen", "일기 등록/수정 성공, 화면 이동")
+
+                // 편집 모드였다면 편집 데이터 클리어
+                if (isEdit) {
+                    diaryViewModel.clearEditingDiary()
+                }
+
                 navController.popBackStack()
             }
             isSubmitting = false
+        }
+    }
+
+    // 화면을 벗어날 때 편집 데이터 클리어
+    DisposableEffect(Unit) {
+        onDispose {
+            if (isEdit) {
+                diaryViewModel.clearEditingDiary()
+                Log.d("DiaryRegisterScreen", "화면 종료 시 편집 데이터 클리어")
+            }
         }
     }
 
@@ -123,7 +196,7 @@ fun DiaryRegisterScreen(
         val actualCoupleId = coupleId
         val actualMenstrualDate = menstrualDate
         if (actualCoupleId != null && actualMenstrualDate != null) {
-            println("📝 DiaryRegisterScreen - DiaryViewModel에 실제 데이터 전달: coupleId=$actualCoupleId, menstrualDate=$actualMenstrualDate")
+            Log.d("DiaryRegisterScreen", "DiaryViewModel에 실제 데이터 전달: coupleId=$actualCoupleId, menstrualDate=$actualMenstrualDate")
         }
     }
 
@@ -241,14 +314,24 @@ fun DiaryRegisterScreen(
                 onClick = {
                     if (!isSubmitting) {
                         isSubmitting = true
-                        println("📝 DiaryRegisterScreen - 일기 등록 시작")
-                        println("📝 제목: $diaryTitle")
-                        println("📝 내용: $diaryContent")
-                        println("📝 날짜: $targetDateForApi")
+                        Log.d("DiaryRegisterScreen", "일기 등록 시작")
+                        Log.d("DiaryRegisterScreen", "제목: $diaryTitle")
+                        Log.d("DiaryRegisterScreen", "내용: $diaryContent")
+                        Log.d("DiaryRegisterScreen", "날짜: $targetDateForApi")
 
-                        if (isEdit) {
-                            // TODO: 수정 로직 (diaryId 필요)
-                            println("📝 일기 수정 기능은 추후 구현")
+                        if (isEdit && editingDiary != null) {
+                            // 일기 수정
+                            Log.d("DiaryRegisterScreen", "일기 수정 시작: ID=${editingDiary.diaryId}")
+                            Log.d("DiaryRegisterScreen", "수정할 일기 정보: 제목='${editingDiary.diaryTitle}', 작성자ID=${editingDiary.authorId}")
+                            diaryViewModel.updateDiary(
+                                diaryId = editingDiary.diaryId,
+                                title = diaryTitle,
+                                content = diaryContent,
+                                targetDate = targetDateForApi
+                            )
+                        } else if (isEdit && editingDiary == null) {
+                            Log.e("DiaryRegisterScreen", "편집 모드인데 editingDiary가 null입니다. 수정을 진행할 수 없습니다.")
+                            isSubmitting = false
                         } else {
                             // 사용자 성별에 따라 authorRole 결정
                             val authorRole = when (userGender?.lowercase()) {
@@ -257,21 +340,16 @@ fun DiaryRegisterScreen(
                                 else -> if (diaryType == "birth") "FEMALE" else "MALE" // fallback
                             }
 
-                            println("📝 DiaryRegisterScreen - authorRole: $authorRole (gender: $userGender)")
-                            println("📝 DiaryRegisterScreen - userId: $userId")
-                            println("📝 DiaryRegisterScreen - coupleId: $coupleId")
-                            println("📝 DiaryRegisterScreen - day: $day")
-                            println("📝 DiaryRegisterScreen - targetDateForApi: $targetDateForApi")
-                            println("📝 DiaryRegisterScreen - lmpDate: ${getLmpDate()}")
-                            println("📝 DiaryRegisterScreen - menstrualDate raw: $menstrualDate")
-                            println("📝 DiaryRegisterScreen - 계산 검증:")
-                            println("   생리일 + day = ${getLmpDate()} + $day = $targetDateForApi")
-                            println("📝 디버깅: HomeViewModel 상태 확인")
-                            println("   - userGender: $userGender")
-                            println("   - userId: $userId (expected: not null)")
-                            println("   - coupleId: $coupleId (expected: not 1)")
-                            println("   - menstrualDate: $menstrualDate (expected: 2025-05-15)")
-                            println("   - momProfile: $momProfile")
+                            Log.d("DiaryRegisterScreen", "authorRole: $authorRole (gender: $userGender)")
+                            Log.d("DiaryRegisterScreen", "userId: $userId")
+                            Log.d("DiaryRegisterScreen", "coupleId: $coupleId")
+                            Log.d("DiaryRegisterScreen", "day: $day")
+                            Log.d("DiaryRegisterScreen", "targetDateForApi: $targetDateForApi")
+                            Log.d("DiaryRegisterScreen", "lmpDate: ${getLmpDate()}")
+                            Log.d("DiaryRegisterScreen", "menstrualDate raw: $menstrualDate")
+                            Log.d("DiaryRegisterScreen", "계산 검증: 생리일 + day = ${getLmpDate()} + $day = $targetDateForApi")
+                            Log.d("DiaryRegisterScreen", "디버깅 - userGender: $userGender, userId: $userId, coupleId: $coupleId")
+                            Log.d("DiaryRegisterScreen", "디버깅 - menstrualDate: $menstrualDate, momProfile: $momProfile")
 
                             diaryViewModel.createDiary(
                                 title = diaryTitle,
@@ -435,13 +513,15 @@ fun WriteBirthDiaryScreen(
 @Composable
 fun EditBirthDiaryScreen(
     navController: NavHostController,
-    day: Int
+    day: Int,
+    diaryId: Long? = null
 ) {
     DiaryRegisterScreen(
         navController = navController,
         diaryType = "birth",
         day = day,
-        isEdit = true
+        isEdit = true,
+        diaryId = diaryId
     )
 }
 
@@ -461,13 +541,15 @@ fun WriteObservationDiaryScreen(
 @Composable
 fun EditObservationDiaryScreen(
     navController: NavHostController,
-    day: Int
+    day: Int,
+    diaryId: Long? = null
 ) {
     DiaryRegisterScreen(
         navController = navController,
         diaryType = "observation",
         day = day,
-        isEdit = true
+        isEdit = true,
+        diaryId = diaryId
     )
 }
 
@@ -479,7 +561,8 @@ fun DiaryRegisterScreenPreview() {
         navController = null as NavHostController,
         diaryType = "birth",
         day = 1,
-        isEdit = false
+        isEdit = false,
+        diaryId = null
     )
 }
 
@@ -491,6 +574,7 @@ fun ObservationDiaryRegisterScreenPreview() {
         navController = null as NavHostController,
         diaryType = "observation",
         day = 1,
-        isEdit = false
+        isEdit = false,
+        diaryId = null
     )
 }

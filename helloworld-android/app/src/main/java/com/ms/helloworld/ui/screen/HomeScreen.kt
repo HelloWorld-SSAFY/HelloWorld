@@ -178,10 +178,20 @@ fun HomeScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             TodayRecommendationSection(
-                onWeeklyRecommendationClick = {
-                    // 현재 임신 주차를 가져와서 WeeklyRecommendationScreen으로 이동
+                onDietClick = {
+                    // 현재 임신 주차를 가져와서 WeeklyDietScreen으로 이동
                     val currentWeek = ((currentPregnancyDay - 1) / 7) + 1
-                    navController.navigate("weekly_recommendation/$currentWeek")
+                    navController.navigate("weekly_diet/$currentWeek")
+                },
+                onWorkoutClick = {
+                    // 현재 임신 주차를 가져와서 WeeklyWorkoutScreen으로 이동
+                    val currentWeek = ((currentPregnancyDay - 1) / 7) + 1
+                    navController.navigate("weekly_workout/$currentWeek")
+                },
+                onInfoClick = {
+                    // 현재 임신 주차를 가져와서 WeeklyInfoScreen으로 이동
+                    val currentWeek = ((currentPregnancyDay - 1) / 7) + 1
+                    navController.navigate("weekly_info/$currentWeek")
                 }
             )
         }

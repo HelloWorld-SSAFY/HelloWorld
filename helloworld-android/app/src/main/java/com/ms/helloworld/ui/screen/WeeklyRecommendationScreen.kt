@@ -40,6 +40,9 @@ import com.ms.helloworld.viewmodel.WeeklyViewModel
 fun WeeklyRecommendationScreen(
     initialWeek: Int = 1,
     onBackClick: () -> Unit,
+    onDietClick: (Int) -> Unit,
+    onWorkoutClick: (Int) -> Unit,
+    onInfoClick: (Int) -> Unit,
     viewModel: WeeklyViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -79,13 +82,19 @@ fun WeeklyRecommendationScreen(
 
                 // 음식 추천
                 if (state.diets.isNotEmpty()) {
-                    FoodRecommendationSection(diets = state.diets)
+                    FoodRecommendationSection(
+                        diets = state.diets,
+                        onClick = { onDietClick(state.currentWeek) }
+                    )
                     Spacer(modifier = Modifier.height(24.dp))
                 }
 
                 // 운동 추천들
                 state.workouts.forEach { workout ->
-                    WorkoutRecommendationCard(workout = workout)
+                    WorkoutRecommendationCard(
+                        workout = workout,
+                        onClick = { onWorkoutClick(state.currentWeek) }
+                    )
                     Spacer(modifier = Modifier.height(16.dp))
                 }
 
@@ -94,7 +103,8 @@ fun WeeklyRecommendationScreen(
                     InfoCard(
                         title = "${state.currentWeek}주차 정보",
                         description = info,
-                        icon = "📖"
+                        icon = "📖",
+                        onClick = { onInfoClick(state.currentWeek) }
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                 }
@@ -175,21 +185,47 @@ private fun WeeklyHeader(
 }
 
 @Composable
-private fun FoodRecommendationSection(diets: List<DietDay>) {
-    Column {
-        Text(
-            text = "음식 추천",
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color(0xFF333333),
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
-
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+private fun FoodRecommendationSection(
+    diets: List<DietDay>,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp)
         ) {
-            items(diets.take(4)) { diet ->
-                FoodRecommendationCard(diet = diet)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "음식 추천",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF333333)
+                )
+                Text(
+                    text = "더보기 >",
+                    fontSize = 14.sp,
+                    color = Color(0xFFF49699)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(diets.take(4)) { diet ->
+                    FoodRecommendationCard(diet = diet)
+                }
             }
         }
     }
@@ -233,14 +269,18 @@ private fun FoodRecommendationCard(diet: DietDay) {
 }
 
 @Composable
-private fun WorkoutRecommendationCard(workout: WorkoutItem) {
+private fun WorkoutRecommendationCard(
+    workout: WorkoutItem,
+    onClick: () -> Unit
+) {
     when (workout.type) {
         WorkoutType.TEXT -> {
             workout.text?.let { text ->
                 InfoCard(
                     title = "스트레칭 추천",
                     description = text,
-                    icon = "🧘‍♀️"
+                    icon = "🧘‍♀️",
+                    onClick = onClick
                 )
             }
         }
@@ -249,7 +289,8 @@ private fun WorkoutRecommendationCard(workout: WorkoutItem) {
                 InfoCard(
                     title = "운동 영상",
                     description = title,
-                    icon = "📹"
+                    icon = "📹",
+                    onClick = onClick
                 )
             }
         }
@@ -260,10 +301,19 @@ private fun WorkoutRecommendationCard(workout: WorkoutItem) {
 private fun InfoCard(
     title: String,
     description: String,
-    icon: String
+    icon: String,
+    onClick: (() -> Unit)? = null
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .let { modifier ->
+                if (onClick != null) {
+                    modifier.clickable { onClick() }
+                } else {
+                    modifier
+                }
+            },
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         shape = RoundedCornerShape(12.dp)
@@ -272,19 +322,33 @@ private fun InfoCard(
             modifier = Modifier.padding(20.dp)
         ) {
             Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = icon,
-                    fontSize = 20.sp,
-                    modifier = Modifier.padding(end = 8.dp)
-                )
-                Text(
-                    text = title,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF333333)
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = icon,
+                        fontSize = 20.sp,
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                    Text(
+                        text = title,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF333333)
+                    )
+                }
+
+                if (onClick != null) {
+                    Text(
+                        text = "더보기 >",
+                        fontSize = 14.sp,
+                        color = Color(0xFFF49699)
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -293,7 +357,8 @@ private fun InfoCard(
                 text = description,
                 fontSize = 14.sp,
                 color = Color(0xFF666666),
-                lineHeight = 20.sp
+                lineHeight = 20.sp,
+                maxLines = if (onClick != null) 2 else Int.MAX_VALUE
             )
         }
     }

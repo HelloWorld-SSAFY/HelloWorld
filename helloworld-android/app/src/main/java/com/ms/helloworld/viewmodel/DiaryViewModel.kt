@@ -23,7 +23,8 @@ data class DiaryState(
     val errorMessage: String? = null,
     val diaries: List<DiaryResponse> = emptyList(),
     val currentWeek: Int = 1,
-    val weeklyDiaryStatus: List<WeeklyDiaryStatus> = emptyList()
+    val weeklyDiaryStatus: List<WeeklyDiaryStatus> = emptyList(),
+    val editingDiary: DiaryResponse? = null // 수정할 일기 데이터
 )
 
 data class WeeklyDiaryStatus(
@@ -150,6 +151,7 @@ class DiaryViewModel @Inject constructor(
                 _state.value = _state.value.copy(isLoading = true, errorMessage = null)
 
                 val currentDate = LocalDate.now().toString()
+                val currentDateTime = java.time.LocalDateTime.now().toString()
 
                 val request = DiaryCreateRequest(
                     entryDate = currentDate,
@@ -159,7 +161,9 @@ class DiaryViewModel @Inject constructor(
                     coupleId = 0L, // 서버에서 토큰으로 처리하므로 의미없는 값
                     authorId = authorId,
                     authorRole = authorRole,
-                    targetDate = targetDate
+                    targetDate = targetDate,
+                    createdAt = currentDateTime,
+                    updatedAt = currentDateTime
                 )
 
                 println("📦 DiaryCreateRequest 생성:")
@@ -233,7 +237,8 @@ class DiaryViewModel @Inject constructor(
                 val request = DiaryUpdateRequest(
                     diaryTitle = title,
                     diaryContent = content,
-                    targetDate = targetDate
+                    targetDate = targetDate,
+                    updatedAt = java.time.LocalDateTime.now().toString()
                 )
 
                 val result = diaryRepository.updateDiary(diaryId, request)
@@ -319,6 +324,18 @@ class DiaryViewModel @Inject constructor(
 
     fun clearError() {
         _state.value = _state.value.copy(errorMessage = null)
+    }
+
+    // 수정할 일기 설정
+    fun setEditingDiary(diary: DiaryResponse) {
+        _state.value = _state.value.copy(editingDiary = diary)
+        println("📝 DiaryViewModel - 편집할 일기 설정: ID=${diary.diaryId}, 제목='${diary.diaryTitle}'")
+    }
+
+    // 수정할 일기 클리어
+    fun clearEditingDiary() {
+        _state.value = _state.value.copy(editingDiary = null)
+        println("🧹 DiaryViewModel - 편집 일기 클리어")
     }
 
     // TODO: 나중에 필요시 전체 일기 조회 기능 추가

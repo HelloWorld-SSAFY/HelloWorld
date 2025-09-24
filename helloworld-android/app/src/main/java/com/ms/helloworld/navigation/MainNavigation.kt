@@ -34,6 +34,9 @@ import com.ms.helloworld.ui.screen.DiaryBoardScreen
 import com.ms.helloworld.ui.screen.NotificationScreen
 import com.ms.helloworld.ui.screen.SplashScreen
 import com.ms.helloworld.ui.screen.WeeklyRecommendationScreen
+import com.ms.helloworld.ui.screen.WeeklyDietScreen
+import com.ms.helloworld.ui.screen.WeeklyWorkoutScreen
+import com.ms.helloworld.ui.screen.WeeklyInfoScreen
 
 @Composable
 fun MainNavigation(
@@ -113,22 +116,35 @@ fun MainNavigation(
             }
 
             composable(
-                route = "diary_register/{diaryType}/{day}/{isEdit}",
+                route = "diary_register/{diaryType}/{day}/{isEdit}?diaryId={diaryId}",
                 arguments = listOf(
                     navArgument("diaryType") { type = NavType.StringType },
                     navArgument("day") { type = NavType.IntType },
-                    navArgument("isEdit") { type = NavType.BoolType }
+                    navArgument("isEdit") { type = NavType.BoolType },
+                    navArgument("diaryId") {
+                        type = NavType.LongType
+                        defaultValue = -1L
+                    }
                 )
             ) { backStackEntry ->
                 val diaryType = backStackEntry.arguments?.getString("diaryType") ?: "birth"
                 val day = backStackEntry.arguments?.getInt("day") ?: 1
                 val isEdit = backStackEntry.arguments?.getBoolean("isEdit") ?: false
+                val diaryId = backStackEntry.arguments?.getLong("diaryId") ?: -1L
+
+                android.util.Log.d("MainNavigation", "네비게이션 파라미터 확인:")
+                android.util.Log.d("MainNavigation", "  - diaryType: $diaryType")
+                android.util.Log.d("MainNavigation", "  - day: $day")
+                android.util.Log.d("MainNavigation", "  - isEdit: $isEdit")
+                android.util.Log.d("MainNavigation", "  - raw diaryId: $diaryId")
+                android.util.Log.d("MainNavigation", "  - final diaryId: ${if (diaryId != -1L) diaryId else null}")
 
                 DiaryRegisterScreen(
                     navController = navController,
                     diaryType = diaryType,
                     day = day,
-                    isEdit = isEdit
+                    isEdit = isEdit,
+                    diaryId = if (diaryId != -1L) diaryId else null
                 )
             }
 
@@ -207,6 +223,63 @@ fun MainNavigation(
             ) { backStackEntry ->
                 val week = backStackEntry.arguments?.getInt("week") ?: 1
                 WeeklyRecommendationScreen(
+                    initialWeek = week,
+                    onBackClick = {
+                        navController.popBackStack()
+                    },
+                    onDietClick = { currentWeek ->
+                        navController.navigate("weekly_diet/$currentWeek")
+                    },
+                    onWorkoutClick = { currentWeek ->
+                        navController.navigate("weekly_workout/$currentWeek")
+                    },
+                    onInfoClick = { currentWeek ->
+                        navController.navigate("weekly_info/$currentWeek")
+                    }
+                )
+            }
+
+            composable(
+                route = "weekly_diet/{week}",
+                arguments = listOf(navArgument("week") {
+                    type = NavType.IntType
+                    defaultValue = 1
+                })
+            ) { backStackEntry ->
+                val week = backStackEntry.arguments?.getInt("week") ?: 1
+                WeeklyDietScreen(
+                    initialWeek = week,
+                    onBackClick = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+
+            composable(
+                route = "weekly_workout/{week}",
+                arguments = listOf(navArgument("week") {
+                    type = NavType.IntType
+                    defaultValue = 1
+                })
+            ) { backStackEntry ->
+                val week = backStackEntry.arguments?.getInt("week") ?: 1
+                WeeklyWorkoutScreen(
+                    initialWeek = week,
+                    onBackClick = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+
+            composable(
+                route = "weekly_info/{week}",
+                arguments = listOf(navArgument("week") {
+                    type = NavType.IntType
+                    defaultValue = 1
+                })
+            ) { backStackEntry ->
+                val week = backStackEntry.arguments?.getInt("week") ?: 1
+                WeeklyInfoScreen(
                     initialWeek = week,
                     onBackClick = {
                         navController.popBackStack()
