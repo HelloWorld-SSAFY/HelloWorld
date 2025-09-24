@@ -15,6 +15,8 @@ public interface HealthDataRepository extends JpaRepository<HealthData, Long> {
 
     List<HealthData> findByCoupleIdOrderByDateDesc(Long coupleId);
 
+    HealthData findFirstByCoupleIdOrderByDateDesc(Long coupleId);
+
     List<HealthData> findByCoupleIdAndDateBetweenOrderByDateDesc(
             Long coupleId, Instant from, Instant to);
 
