@@ -124,4 +124,5 @@ object NetworkModule {
     fun provideWeeklyApi(retrofit: Retrofit): WeeklyApi {
         return retrofit.create(WeeklyApi::class.java)
     }
+
 }

@@ -21,12 +21,16 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.style.TextAlign
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import com.ms.helloworld.R
 import com.ms.helloworld.dto.response.StressLevel
 import com.ms.helloworld.navigation.Screen
 import com.ms.helloworld.ui.components.CustomTopAppBar
 import com.ms.helloworld.ui.theme.MainColor
+import com.ms.helloworld.viewmodel.WearableViewModel
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 
 @SuppressLint("NewApi")
 @Composable
@@ -35,8 +39,40 @@ fun WearableRecommendedScreen(
     stressLevel: StressLevel = StressLevel.STABLE,
     heartRate: Int = 75,      // 현재 심박수 (분당)
     stressScore: Int = 65,    // 스트레스 점수 (0-100)
-    steps: Int = 6500         // 오늘 걸음수
+    steps: Int = 6500,         // 오늘 걸음수
+    wearableViewModel: WearableViewModel = hiltViewModel()
+
 ) {
+    val contractions by wearableViewModel.contractions.collectAsState()
+    val fetalMovements by wearableViewModel.fetalMovements.collectAsState()
+    val isLoadingContractions by wearableViewModel.isLoading.collectAsState()
+    val isLoadingFetal by wearableViewModel.isLoadingFetal.collectAsState()
+
+    // 오늘 날짜로 진통 기록 로드
+    LaunchedEffect(Unit) {
+        val today = LocalDate.now()
+        val todayString = today.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+
+        // 이번 주 범위 계산 (일요일 ~ 토요일)
+        val dayOfWeek = today.dayOfWeek.value % 7 // 월=1, 일=0
+        val startOfWeek = today.minusDays(dayOfWeek.toLong())
+        val endOfWeek = startOfWeek.plusDays(6)
+        val weekStartString = startOfWeek.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+        val weekEndString = endOfWeek.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+
+        // 오늘의 진통 기록 로드
+        wearableViewModel.loadContractions(from = todayString, to = todayString)
+
+        // 이번 주 태동 기록 로드
+        wearableViewModel.loadFetalMovements(from = weekStartString, to = weekEndString)
+    }
+
+    // 계산된 값들
+    val todayContractionsCount = contractions.size
+    val weeklyFetalAverage = if (fetalMovements.isEmpty()) 0.0 else {
+        fetalMovements.sumOf { it.totalCount }.toDouble() / fetalMovements.size
+    }
+
     Column(
         modifier = Modifier.fillMaxSize()
     ) {
@@ -75,10 +111,16 @@ fun WearableRecommendedScreen(
             OutdoorRecommendationSection()
 
             // 태동/진통 기록 섹션
-            RecordSection(navController)
-            
+            RecordSection(
+                navController,
+                todayContractionsCount = todayContractionsCount,
+                weeklyFetalAverage = weeklyFetalAverage,
+                isLoadingContractions = isLoadingContractions,
+                isLoadingFetal = isLoadingFetal
+            )
+
             // 하단 여백 추가하여 바텀 네비게이션 영역까지 스크롤 가능하도록
-            Spacer(modifier = Modifier.height(80.dp))
+            Spacer(modifier = Modifier.height(20.dp))
         }
     }
 }
@@ -442,7 +484,13 @@ fun OutdoorRecommendationSection() {
 }
 
 @Composable
-fun RecordSection(navController: NavHostController?) {
+fun RecordSection(
+    navController: NavHostController?,
+    todayContractionsCount: Int,
+    weeklyFetalAverage: Double,
+    isLoadingContractions: Boolean,
+    isLoadingFetal: Boolean
+) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -511,13 +559,22 @@ fun RecordSection(navController: NavHostController?) {
                         modifier = Modifier.height(36.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = "8.1",
-                            fontSize = 28.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF6BB6FF)
-                        )
+                        if (isLoadingFetal) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                color = Color(0xFF6BB6FF),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Text(
+                                text = String.format("%.1f", weeklyFetalAverage),
+                                fontSize = 28.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF6BB6FF)
+                            )
+                        }
                     }
+
 
                     Spacer(modifier = Modifier.height(4.dp))
 
@@ -550,12 +607,25 @@ fun RecordSection(navController: NavHostController?) {
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    Text(
-                        text = "12회",
-                        fontSize = 28.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFFFF6B9D)
-                    )
+                    Box(
+                        modifier = Modifier.fillMaxHeight(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (isLoadingContractions) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                color = Color(0xFFFF6B9D),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Text(
+                                text = "${todayContractionsCount}회",
+                                fontSize = 28.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFFF6B9D)
+                            )
+                        }
+                    }
 
                     Spacer(modifier = Modifier.height(4.dp))
 
