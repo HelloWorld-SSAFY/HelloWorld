@@ -73,19 +73,36 @@ class TokenMessageListenerService : WearableListenerService() {
     private suspend fun sendTokenToWatch(accessToken: String, refreshToken: String) {
         try {
             Log.d(TAG, "워치로 토큰 전송 시작...")
-            val dataClient = Wearable.getDataClient(this)
+            val messageClient = Wearable.getMessageClient(this)
+            val nodeClient = Wearable.getNodeClient(this)
 
-            val putDataMapRequest = PutDataMapRequest.create(TOKEN_PATH).apply {
-                dataMap.putString(ACCESS_TOKEN_KEY, accessToken)
-                dataMap.putString(REFRESH_TOKEN_KEY, refreshToken)
-                dataMap.putLong(TIMESTAMP_KEY, System.currentTimeMillis())
+            // 연결된 워치 찾기
+            val nodes = nodeClient.connectedNodes.await()
+            if (nodes.isEmpty()) {
+                Log.w(TAG, "연결된 워치가 없습니다")
+                return
             }
 
-            val putDataRequest = putDataMapRequest.asPutDataRequest()
-            putDataRequest.setUrgent()
+            // 토큰 데이터 구성
+            val tokenData = mapOf(
+                "access_token" to accessToken,
+                "refresh_token" to refreshToken,
+                "timestamp" to System.currentTimeMillis()
+            )
 
-            val result = dataClient.putDataItem(putDataRequest).await()
-            Log.d(TAG, "워치로 토큰 전송 완료 - URI: ${result.uri}")
+            val jsonData = com.google.gson.Gson().toJson(tokenData)
+            val dataBytes = jsonData.toByteArray()
+
+            // 모든 연결된 워치에 토큰 전송
+            nodes.forEach { node ->
+                messageClient.sendMessage(
+                    node.id,
+                    "/token_response", // 워치에서 받을 경로
+                    dataBytes
+                ).await()
+
+                Log.d(TAG, "워치(${node.displayName})로 토큰 전송 완료")
+            }
 
         } catch (e: Exception) {
             Log.e(TAG, "워치 토큰 전송 실패", e)

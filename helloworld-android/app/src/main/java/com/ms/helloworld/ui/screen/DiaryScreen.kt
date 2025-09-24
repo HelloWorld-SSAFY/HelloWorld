@@ -73,13 +73,9 @@ fun DiaryScreen(
 
     // 스크린이 시작될 때 HomeViewModel 데이터 로딩
     LaunchedEffect(Unit) {
-
-        // 데이터가 초기 상태이면 강제 새로고침
-        if (homeState.nickname == "로딩중") {
-            homeViewModel.forceRefreshProfile()
-        } else {
-            homeViewModel.refreshProfile()
-        }
+        homeViewModel.forceRefreshProfile()
+        homeViewModel.refreshProfile()
+        homeViewModel.refreshCalendarEvents()
     }
 
     // 실제 임신 정보 사용 (currentPregnancyDay를 우선 사용)

@@ -393,7 +393,7 @@ class MomProfileRepository @Inject constructor(
                 Log.e(TAG, "토큰 무효 - 기본 사용자 정보 조회 실패: ${e.message}")
                 if (e is retrofit2.HttpException && (e.code() == 401 || e.code() == 403)) {
                     Log.d(TAG, "토큰 만료로 추정 - 토큰 삭제 후 로그인 필요")
-                    tokenManager.clearTokens()
+//                    tokenManager.clearTokens()
                 }
                 return OnboardingCheckResult(OnboardingStatus.NOT_STARTED)
             }

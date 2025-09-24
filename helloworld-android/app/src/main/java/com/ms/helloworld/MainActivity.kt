@@ -34,8 +34,21 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 import android.Manifest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Column
+import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
 import androidx.health.connect.client.HealthConnectClient
+import com.ms.helloworld.repository.StepsRepository
 import com.ms.helloworld.util.StepsWorkScheduler
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 
 private const val TAG = "싸피_MainActivity"
 @AndroidEntryPoint
@@ -288,7 +301,6 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         emitDeepLinkIntent(intent) // 포그라운드 클릭 시 여기로 옴
     }
-
 
     private fun emitDeepLinkIntent(intent: Intent) {
         Log.d("DeepLink", "emit intent: action=${intent.action}, extras=${intent.extras}")

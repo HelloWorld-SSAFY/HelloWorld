@@ -171,7 +171,6 @@ class SplashViewModel @Inject constructor(
                         token = storedToken,
                         platform = com.ms.helloworld.dto.request.Platforms.ANDROID
                     )
-                    Log.d(TAG, "FCM 토큰 등록 완료")
                 } else {
                     Log.d(TAG, "저장된 FCM 토큰 없음, 현재 토큰 가져와서 등록")
                     registerCurrentFcmToken()
@@ -245,7 +244,7 @@ class SplashViewModel @Inject constructor(
     private suspend fun clearTokensAndGoLogin(): UiState {
         Log.d(TAG, "토큰 삭제 후 로그인으로 이동")
         try {
-            tokenManager.clearTokens()
+//            tokenManager.clearTokens()
         } catch (e: Exception) {
             Log.e(TAG, "토큰 삭제 중 오류: ${e.message}")
         }

@@ -24,6 +24,18 @@ fun SplashScreen(
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
 
+    // 애니메이션을 한 번만 초기화하고 uiState 변화와 독립적으로 관리
+    val composition by rememberLottieComposition(LottieCompositionSpec.RawRes(R.raw.splashlottie))
+
+    // 애니메이션은 처음 한 번만 시작하고 계속 실행
+    val progress by animateLottieCompositionAsState(
+        composition = composition,
+        isPlaying = true,
+        iterations = LottieConstants.IterateForever,
+        speed = 0.2f,
+        cancellationBehavior = LottieCancellationBehavior.OnIterationFinish
+    )
+
     // 스플래시 시작 시 자동 로그인 체크
     LaunchedEffect(Unit) {
         viewModel.autoLogin(context)
@@ -34,51 +46,42 @@ fun SplashScreen(
         when (uiState) {
             is SplashViewModel.UiState.GoHome -> {
                 navController.navigate(Screen.HomeScreen.route) {
-                    popUpTo(Screen.SplashScreen.route) { inclusive = true }
+                    popUpTo(Screen.SplashScreen.route) { inclusive = true } // 전체 백스택 클리어
+                    launchSingleTop = true
                 }
             }
+
             is SplashViewModel.UiState.GoOnboarding -> {
                 navController.navigate(Screen.OnboardingScreens.route) {
-                    popUpTo(Screen.SplashScreen.route) { inclusive = true }
+                    popUpTo(Screen.SplashScreen.route) { inclusive = true } // 전체 백스택 클리어
+                    launchSingleTop = true
                 }
             }
+
             is SplashViewModel.UiState.GoLogin -> {
                 navController.navigate(Screen.LoginScreen.route) {
-                    popUpTo(Screen.SplashScreen.route) { inclusive = true }
+                    popUpTo(Screen.SplashScreen.route) { inclusive = true } // 전체 백스택 클리어
+                    launchSingleTop = true
                 }
             }
+
             is SplashViewModel.UiState.Loading -> {
                 // 로딩 중에는 아무것도 하지 않음 (스플래시 화면 유지)
             }
         }
     }
 
-    // 스플래시 UI
+    // 스플래시 화면 - uiState와 관계없이 항상 표시
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0XFFF3EDDE)),
         contentAlignment = Alignment.Center
     ) {
-        // Lottie 애니메이션 사용
-        val composition by rememberLottieComposition(LottieCompositionSpec.RawRes(R.raw.splashlottie))
-
-        var isPlaying by remember { mutableStateOf(true) }
-
-        val progress by animateLottieCompositionAsState(
-            composition = composition,
-            isPlaying = isPlaying,
-            iterations = LottieConstants.IterateForever,
-            speed = 0.2f,
-            cancellationBehavior = LottieCancellationBehavior.OnIterationFinish
-        )
-
         LottieAnimation(
             composition = composition,
             progress = { progress },
-            modifier = Modifier
-                .size(400.dp)
-
+            modifier = Modifier.size(400.dp)
         )
     }
 }

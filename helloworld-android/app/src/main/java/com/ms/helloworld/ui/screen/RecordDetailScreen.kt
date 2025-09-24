@@ -19,6 +19,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -54,12 +55,10 @@ data class ContractionEvent(
 )
 
 @SuppressLint("NewApi")
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RecordDetailScreen(
     navController: NavHostController
 ) {
-    val backgroundColor = Color(0xFFF5F5F5)
 
     // 상태 관리
     var selectedTab by remember { mutableStateOf(0) }
@@ -74,7 +73,7 @@ fun RecordDetailScreen(
                 dailyData = listOf(
                     Pair("월", 8f),
                     Pair("화", 6f),
-                    Pair("수", 10f),
+                    Pair("수", 2f),
                     Pair("목", 9f),
                     Pair("금", 3f),
                     Pair("토", 7f),
@@ -150,76 +149,82 @@ fun RecordDetailScreen(
         refreshData(selectedTab)
     }
 
-        Column(
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+    ) {
+        CustomTopAppBar(
+            title = "임신 통계",
+            navController = navController
+        )
+        // 커스텀 탭 버튼들
+        Row(
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
+                .background(Color.White)
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            CustomTopAppBar(
-                title = "임신 통계",
-                navController = navController
-            )
-            // 커스텀 탭 버튼들
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color.White)
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                tabs.forEachIndexed { index, title ->
-                    Button(
-                        onClick = {
-                            selectedTab = index
-                            coroutineScope.launch {
-                                pagerState.animateScrollToPage(index)
-                            }
-                        },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (selectedTab == index) Color(0xFFFF6B9D) else Color.Transparent,
-                            contentColor = if (selectedTab == index) Color.White else Color.Gray
-                        ),
-                        shape = RoundedCornerShape(8.dp),
-                        elevation = ButtonDefaults.buttonElevation(
-                            defaultElevation = if (selectedTab == index) 2.dp else 0.dp
-                        )
-                    ) {
-                        Text(
-                            text = title,
-                            fontSize = 14.sp,
-                            fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Normal
-                        )
-                    }
-                }
-            }
-
-            // 로딩 표시 또는 콘텐츠
-            if (isLoading) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
+            tabs.forEachIndexed { index, title ->
+                Button(
+                    onClick = {
+                        selectedTab = index
+                        coroutineScope.launch {
+                            pagerState.animateScrollToPage(index)
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (selectedTab == index) {
+                            // 태동 기록(0번)일 때는 파란색, 진통 기록(1번)일 때는 분홍색
+                            if (index == 0) Color(0xFF6BB6FF) else Color(0xFFFF6B9D)
+                        } else Color.Transparent,
+                        contentColor = if (selectedTab == index) Color.White else Color.Gray
+                    ),
+                    shape = RoundedCornerShape(8.dp),
+                    border = if (selectedTab != index) {
+                        androidx.compose.foundation.BorderStroke(1.dp, Color.Gray.copy(alpha = 0.6f))
+                    } else null,
+                    elevation = ButtonDefaults.buttonElevation(
+                        defaultElevation = if (selectedTab == index) 2.dp else 0.dp
+                    )
                 ) {
-                    CircularProgressIndicator(color = MainColor)
-                }
-            } else {
-                // HorizontalPager로 스와이프 가능한 탭 내용
-                HorizontalPager(
-                    state = pagerState,
-                    modifier = Modifier.fillMaxSize()
-                ) { page ->
-                    when (page) {
-                        0 -> FetalMovementContent(
-                            data = fetalMovementData,
-                            onRefresh = { refreshData(0) }
-                        )
-
-                        1 -> ContractionContent(
-                            data = contractionData,
-                            onRefresh = { refreshData(1) }
-                        )
-                    }
+                    Text(
+                        text = title,
+                        fontSize = 14.sp,
+                        fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Normal
+                    )
                 }
             }
+        }
+
+        // 로딩 표시 또는 콘텐츠
+        if (isLoading) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(color = MainColor)
+            }
+        } else {
+            // HorizontalPager로 스와이프 가능한 탭 내용
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize()
+            ) { page ->
+                when (page) {
+                    0 -> FetalMovementContent(
+                        data = fetalMovementData,
+                        onRefresh = { refreshData(0) }
+                    )
+
+                    1 -> ContractionContent(
+                        data = contractionData,
+                        onRefresh = { refreshData(1) }
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -236,36 +241,6 @@ fun FetalMovementContent(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // 새로고침 버튼
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { onRefresh() },
-            shape = RoundedCornerShape(8.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E8))
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    Icons.Default.Refresh,
-                    contentDescription = "새로고침",
-                    modifier = Modifier.size(16.dp),
-                    tint = Color(0xFF4CAF50)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "데이터 새로고침",
-                    fontSize = 12.sp,
-                    color = Color(0xFF4CAF50),
-                    fontWeight = FontWeight.Medium
-                )
-            }
-        }
 
         // 일별 태동 횟수 카드 (크기 확대)
         Card(
@@ -335,7 +310,7 @@ fun ContractionContent(
 ) {
     // 선택된 점 상태를 ContractionContent 레벨로 이동
     var selectedPoint by remember { mutableStateOf<ContractionEvent?>(null) }
-    
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -348,36 +323,6 @@ fun ContractionContent(
             ) { selectedPoint = null }, // 전체 화면 클릭으로 카드 닫기
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // 새로고침 버튼
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { onRefresh() },
-            shape = RoundedCornerShape(8.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFFFFE8F0))
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    Icons.Default.Refresh,
-                    contentDescription = "새로고침",
-                    modifier = Modifier.size(16.dp),
-                    tint = Color(0xFFFF6B9D)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "데이터 새로고침",
-                    fontSize = 12.sp,
-                    color = Color(0xFFFF6B9D),
-                    fontWeight = FontWeight.Medium
-                )
-            }
-        }
 
         // 오늘 일정 카드
         Card(
@@ -389,12 +334,23 @@ fun ContractionContent(
             Column(
                 modifier = Modifier.padding(16.dp)
             ) {
-                Text(
-                    text = "주의",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Warning,
+                        contentDescription = "주의",
+                        modifier = Modifier.size(16.dp),
+                        tint = Color.White
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "주의",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(4.dp))
 
@@ -419,14 +375,14 @@ fun ContractionContent(
             ) {
                 Text(
                     text = "진통 간격 측정",
-                    fontSize = 16.sp,
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.Black
                 )
 
                 Text(
                     text = "최근 1시간의 진통 간격을 표시합니다",
-                    fontSize = 12.sp,
+                    fontSize = 14.sp,
                     color = Color.Gray,
                     modifier = Modifier.padding(top = 4.dp)
                 )
@@ -435,7 +391,7 @@ fun ContractionContent(
 
                 // 진통 타임라인
                 ContractionTimeline(
-                    averageInterval = data.averageInterval, 
+                    averageInterval = data.averageInterval,
                     events = data.timelineData,
                     selectedPoint = selectedPoint,
                     onPointSelected = { selectedPoint = it }
@@ -460,15 +416,17 @@ fun StatCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
                 text = value,
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
                 color = valueColor
             )
+            Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = label,
                 fontSize = 12.sp,
@@ -535,7 +493,7 @@ fun FetalMovementBarChart(data: List<Pair<String, Float>>) {
 
 @Composable
 fun ContractionTimeline(
-    averageInterval: Int, 
+    averageInterval: Int,
     events: List<ContractionEvent>,
     selectedPoint: ContractionEvent?,
     onPointSelected: (ContractionEvent?) -> Unit
@@ -572,7 +530,7 @@ fun ContractionTimeline(
         ) {
             Text(
                 text = "최근 평균 간격",
-                fontSize = 12.sp,
+                fontSize = 14.sp,
                 color = Color.Gray
             )
             Text(
@@ -593,7 +551,7 @@ fun ContractionTimeline(
         ) {
             Text(
                 text = "오늘 전체 횟수",
-                fontSize = 12.sp,
+                fontSize = 14.sp,
                 color = Color.Gray,
             )
             Text(
@@ -762,16 +720,16 @@ fun ContractionScatterChart(
                             modifier = Modifier
                                 .offset(x = midX, y = midY - 10.dp)
                                 .background(
-                                    Color.White.copy(alpha = 0.8f),
+                                    MainColor.copy(alpha = 0.2f),
                                     RoundedCornerShape(4.dp)
                                 )
                                 .padding(horizontal = 4.dp, vertical = 2.dp)
                         ) {
                             Text(
                                 text = "${intervalMinutes}분",
-                                fontSize = 9.sp,
+                                fontSize = 10.sp,
                                 fontWeight = FontWeight.Medium,
-                                color = Color(0xFFFF6B9D)
+                                color = Color.Black
                             )
                         }
                     }
@@ -813,23 +771,26 @@ fun ContractionScatterChart(
             // 지속시간 라벨 - y축 밑에 세로로 배치
             Text(
                 text = "지속 시간 (초)",
-                fontSize = 13.sp,
-                color = Color.Black,
+                fontSize = 10.sp,
+                color = Color(0xFFFF1744),
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .offset(x = 5.dp, y = 15.dp)
+                    .align(Alignment.CenterStart)
+                    .offset(x = -35.dp)
+                    .offset(y = 50.dp)
+                    .rotate(-90f)
             )
-            
+
             // 간격시간 라벨 - x축 밑에 배치
             Text(
                 text = "간격 시간 (분)",
-                fontSize = 13.sp,
-                color = Color.Black,
+                fontSize = 10.sp,
+                color = Color(0xFFFF1744),
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .offset(y = 15.dp)
+                    .offset(y = 0.dp)
+                    .offset(x = -105.dp)
             )
         }
 

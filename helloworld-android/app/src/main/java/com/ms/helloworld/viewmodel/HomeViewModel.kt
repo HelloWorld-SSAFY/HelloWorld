@@ -4,9 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ms.helloworld.dto.response.CalendarEventResponse
 import com.ms.helloworld.dto.response.MomProfile
-import com.ms.helloworld.dto.response.MemberProfile
 import com.ms.helloworld.repository.CalendarRepository
 import com.ms.helloworld.repository.MomProfileRepository
+import com.ms.helloworld.repository.StepsRepository
+import com.ms.helloworld.util.LocationManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,16 +20,18 @@ import javax.inject.Inject
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val momProfileRepository: MomProfileRepository,
-    private val calendarRepository: CalendarRepository
+    private val calendarRepository: CalendarRepository,
+    val stepsRepository: StepsRepository,
+    val locationManager: LocationManager
 ) : ViewModel() {
 
     private val viewModelId = System.currentTimeMillis().toString().takeLast(4)
-    
-    private val _momProfile = MutableStateFlow(
+
+    private val _momProfile = MutableStateFlow<MomProfile>(
         MomProfile(
             nickname = "로딩중",
             pregnancyWeek = 1,
-            dueDate = LocalDate.now()
+            dueDate = LocalDate.now(),
         )
     )
     val momProfile: StateFlow<MomProfile> = _momProfile.asStateFlow()

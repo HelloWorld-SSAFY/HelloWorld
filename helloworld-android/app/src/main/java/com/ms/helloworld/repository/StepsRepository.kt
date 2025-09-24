@@ -1,5 +1,6 @@
 package com.ms.helloworld.repository
 
+import android.util.Log
 import com.ms.helloworld.dto.request.StepsRequest
 import com.ms.helloworld.network.api.HealthApi
 import com.ms.helloworld.util.HealthConnectManager
@@ -16,6 +17,7 @@ class StepsRepository @Inject constructor(
         return try {
             // 걸음수 데이터 읽기
             val stepRecords = healthConnectManager.readStepCounts()
+            Log.d("StepsRepository", "Fetched step records: $stepRecords")
             val totalSteps = stepRecords.sumOf { it.count.toInt() }
 
             val request = StepsRequest(

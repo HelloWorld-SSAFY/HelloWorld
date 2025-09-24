@@ -9,12 +9,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import com.ms.helloworld.ui.components.CustomTopAppBar
+import com.ms.helloworld.ui.theme.MainColor
 
 data class NotificationItem(
     val id: String,
@@ -122,13 +124,13 @@ fun NotificationItem(
             if (!notification.isRead) {
                 Box(
                     modifier = Modifier
-                        .size(8.dp)
+                        .size(14.dp)
                         .padding(top = 4.dp)
                 ) {
                     androidx.compose.foundation.Canvas(
                         modifier = Modifier.fillMaxSize()
                     ) {
-                        drawCircle(color = androidx.compose.ui.graphics.Color.Red)
+                        drawCircle(color = MainColor)
                     }
                 }
             }
@@ -141,7 +143,7 @@ fun NotificationItem(
             fontSize = 14.sp,
             fontWeight = FontWeight.Normal,
             color = Color.Gray,
-            maxLines = 2,
+            maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
 
@@ -151,7 +153,9 @@ fun NotificationItem(
             text = notification.timestamp,
             fontSize = 12.sp,
             fontWeight = FontWeight.Normal,
-            color = Color.LightGray
+            textAlign = TextAlign.End,
+            color = Color.LightGray,
+            modifier = Modifier.fillMaxWidth()
         )
     }
 }

@@ -1,17 +1,26 @@
 package com.ms.wearos.viewmodel
 
+import android.app.Application
 import android.content.Context
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.android.gms.wearable.Wearable
+import com.google.gson.Gson
 import com.ms.wearos.dto.request.FetalMovementRequest
 import com.ms.wearos.dto.request.HealthDataRequest
 import com.ms.wearos.dto.request.LaborDataRequest
+import com.ms.wearos.dto.response.AiResponse
+import com.ms.wearos.dto.response.EmergencyAction
+import com.ms.wearos.dto.response.RecommendationCategory
+import com.ms.wearos.dto.response.SafeTemplate
 import com.ms.wearos.repository.AuthRepository
 import com.ms.wearos.repository.WearApiRepository
 import com.ms.wearos.util.WearTokenManager
+import dagger.hilt.android.internal.Contexts.getApplication
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -25,13 +34,34 @@ data class WearMainUiState(
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
     val successMessage: String? = null,
-    val tokenAge: Long? = null
+    val tokenAge: Long? = null,
+    // AI 응답 관련 상태 추가
+    val healthStatus: String = "대기 중",
+    val riskLevel: String = "low",
+    val recommendations: List<RecommendationCategory> = emptyList(),
+    val sessionId: String? = null,
+    val cooldownMinutes: Int? = null,
+    val isInCooldown: Boolean = false,
+    val cooldownSecsLeft: Int = 0,
+    val cooldownEndsAt: String? = null,
+    val isEmergency: Boolean = false,
+    val emergencyAction: EmergencyAction? = null,
+    val safeTemplates: List<SafeTemplate> = emptyList()
+)
+
+// WearOS 모듈 - 데이터 전송용 DTO
+data class WearHealthData(
+    val timestamp: String,
+    val heartRate: Int,
+    val stressIndex: Int,
+    val aiResponse: AiResponse
 )
 
 private const val TAG = "싸피_WearMainViewModel"
 
 @HiltViewModel
 class WearMainViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val wearRepository: WearApiRepository,
     private val authRepository: AuthRepository,
     private val tokenManager: WearTokenManager,
@@ -91,7 +121,7 @@ class WearMainViewModel @Inject constructor(
                 if (nodes.isEmpty()) {
                     Log.w(TAG, "연결된 폰이 없습니다")
                     _uiState.value = _uiState.value.copy(
-                        errorMessage = "폰과 연결되지 않았습니다"
+                        errorMessage = "핸드폰과 연결되지 않았습니다"
                     )
                     return@launch
                 }
@@ -129,7 +159,7 @@ class WearMainViewModel @Inject constructor(
                 requestTokenFromPhone(context)
 
                 // 토큰 요청 후 잠시 대기
-                kotlinx.coroutines.delay(2000)
+                delay(2000)
 
                 // 다시 토큰 상태 확인
                 val tokenReceived = tokenManager.isTokenValid()
@@ -186,17 +216,23 @@ class WearMainViewModel @Inject constructor(
     fun sendHealthData(date: String, heartRate: Int, stress: Int) {
         viewModelScope.launch {
             try {
-                val userInfo = authRepository.getUserInfo()
-                val coupleId = userInfo?.couple?.couple_id!!
 
                 val healthData = HealthDataRequest(date, heartRate, stress)
-
                 Log.d("WearMainViewModel", "건강 데이터 전송 시도: $healthData")
 
-                val response = wearRepository.sendHealthData(coupleId, healthData)
+                val response = wearRepository.sendHealthData(healthData)
 
-                if (response.isSuccessful) {
-                    Log.d("WearMainViewModel", "건강 데이터 전송 성공: 심박수=${healthData.heartrate}, 스트레스=$healthData.stress")
+                if (response.isSuccessful && response.body() != null) {
+                    val aiResponse = response.body()!!
+                    Log.d("WearMainViewModel", "건강 데이터 전송 성공: 심박수=${healthData.heartrate}, 스트레스=${healthData.stress}")
+                    Log.d("WearMainViewModel", "AI 응답: mode=${aiResponse.mode}, risk_level=${aiResponse.riskLevel}")
+
+                    // AI 응답에 따른 처리
+                    handleAiResponse(aiResponse)
+
+                    // 안드로이드 앱으로 데이터 전송
+                    sendAiResponseToAndroid(aiResponse, healthData)
+
                 } else {
                     Log.e("WearMainViewModel", "건강 데이터 전송 실패: ${response.code()}")
                     _uiState.value = _uiState.value.copy(
@@ -212,26 +248,135 @@ class WearMainViewModel @Inject constructor(
         }
     }
 
+    /**
+     * AI 응답에 따른 상황별 처리
+     */
+    private fun handleAiResponse(aiResponse: AiResponse) {
+        when {
+            aiResponse.isNormal() -> {
+                Log.d(TAG, "정상 상태: ${aiResponse.riskLevel}")
+                _uiState.value = _uiState.value.copy(
+                    healthStatus = "정상",
+                    riskLevel = aiResponse.riskLevel ?: "low",
+                    errorMessage = null
+                )
+            }
+
+            aiResponse.isRestrict() -> {
+                Log.d(TAG, "제한 모드: 추천 활동 제공")
+                aiResponse.recommendation?.let { recommendation ->
+                    Log.d(TAG, "세션 ID: ${recommendation.sessionId}")
+                    recommendation.categories.forEach { category ->
+                        Log.d(TAG, "추천: ${category.category} (순위: ${category.rank})")
+                    }
+
+                    _uiState.value = _uiState.value.copy(
+                        healthStatus = "주의 필요",
+                        riskLevel = aiResponse.riskLevel ?: "high",
+                        recommendations = recommendation.categories,
+                        sessionId = recommendation.sessionId,
+                        cooldownMinutes = aiResponse.cooldownMin,
+                        errorMessage = null
+                    )
+                }
+            }
+
+            aiResponse.isCooldown() -> {
+                Log.d(TAG, "쿨다운 모드")
+                aiResponse.cooldown?.let { cooldown ->
+                    Log.d(TAG, "쿨다운 남은 시간: ${cooldown.secsLeft}초")
+                    _uiState.value = _uiState.value.copy(
+                        healthStatus = "쿨다운 중",
+                        riskLevel = aiResponse.riskLevel ?: "high",
+                        isInCooldown = true,
+                        cooldownSecsLeft = cooldown.secsLeft,
+                        cooldownEndsAt = cooldown.endsAt,
+                        errorMessage = null
+                    )
+                }
+            }
+
+            aiResponse.isEmergency() -> {
+                Log.e(TAG, "응급 상황 발생!")
+                aiResponse.action?.let { action ->
+                    Log.e(TAG, "응급 액션: ${action.type}")
+                }
+
+                _uiState.value = _uiState.value.copy(
+                    healthStatus = "응급 상황",
+                    riskLevel = aiResponse.riskLevel ?: "critical",
+                    isEmergency = true,
+                    emergencyAction = aiResponse.action,
+                    safeTemplates = aiResponse.safeTemplates ?: emptyList(),
+                    errorMessage = null
+                )
+
+            }
+
+            else -> {
+                Log.w(TAG, "알 수 없는 모드: ${aiResponse.mode}")
+            }
+        }
+    }
+
+
+    /**
+     * 안드로이드 앱으로 AI 응답 데이터 전송
+     */
+    private fun sendAiResponseToAndroid(aiResponse: AiResponse, originalHealthData: HealthDataRequest) {
+        viewModelScope.launch {
+            try {
+                val messageClient = Wearable.getMessageClient(context)
+                val nodeClient = Wearable.getNodeClient(context)
+
+                // 연결된 안드로이드 디바이스 찾기
+                val nodes = nodeClient.connectedNodes.await()
+                if (nodes.isEmpty()) {
+                    Log.w(TAG, "연결된 안드로이드 디바이스 없음")
+                    return@launch
+                }
+
+                // 전송할 데이터 구성
+                val wearHealthData = WearHealthData(
+                    timestamp = originalHealthData.date,
+                    heartRate = originalHealthData.heartrate,
+                    stressIndex = originalHealthData.stress,
+                    aiResponse = aiResponse
+                )
+
+                // JSON으로 변환
+                val gson = Gson()
+                val jsonData = gson.toJson(wearHealthData)
+                val dataBytes = jsonData.toByteArray()
+
+                // 모든 연결된 노드에 데이터 전송
+                nodes.forEach { node ->
+                    messageClient.sendMessage(
+                        node.id,
+                        "/wear_health_data", // 메시지 경로
+                        dataBytes
+                    ).await()
+
+                    Log.d(TAG, "안드로이드 앱으로 AI 응답 전송 완료: ${node.displayName}")
+                    Log.d(TAG, "전송 데이터: mode=${aiResponse.mode}, risk=${aiResponse.riskLevel}")
+                }
+
+            } catch (e: Exception) {
+                Log.e(TAG, "안드로이드 앱으로 데이터 전송 실패", e)
+            }
+        }
+    }
+
     fun sendFetalMovementData(recordedAt: String) {
         viewModelScope.launch {
             try {
                 _uiState.value = _uiState.value.copy(isLoading = true)
 
-                // 커플 ID 조회
-                val coupleId = getCoupleIdIfValid()
-                if (coupleId == null) {
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        errorMessage = "커플 연동이 필요합니다"
-                    )
-                    return@launch
-                }
-
                 // FetalMovementRequest 객체 생성
                 val fetalMovementRequest = FetalMovementRequest(recordedAt = recordedAt)
 
                 // 태동 기록 전송
-                val response = wearRepository.sendFetalMovement(coupleId, fetalMovementRequest)
+                val response = wearRepository.sendFetalMovement(fetalMovementRequest)
 
                 if (response.isSuccessful) {
                     _uiState.value = _uiState.value.copy(
@@ -262,26 +407,16 @@ class WearMainViewModel @Inject constructor(
             try {
                 _uiState.value = _uiState.value.copy(isLoading = true)
 
-                // 커플 ID 조회
-                val coupleId = getCoupleIdIfValid()
-                if (coupleId == null) {
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        errorMessage = "커플 연동이 필요합니다"
-                    )
-                    return@launch
-                }
-
                 // LaborDataRequest 객체 생성
                 val laborDataRequest = LaborDataRequest(
                     startTime = startTime,
                     endTime = endTime
                 )
 
-                Log.d(TAG, "진통 기록 전송 시도: coupleId=$coupleId, startTime=$startTime, endTime=$endTime")
+                Log.d(TAG, "진통 기록 전송 시도: startTime=$startTime, endTime=$endTime")
 
                 // 진통 기록 전송
-                val response = wearRepository.sendLaborData(coupleId, laborDataRequest)
+                val response = wearRepository.sendLaborData(laborDataRequest)
 
                 if (response.isSuccessful) {
                     _uiState.value = _uiState.value.copy(
