@@ -47,14 +47,26 @@ public interface AiServerClient {
             @JsonProperty("lng") Double lng
     ) {}
 
-    // ✔ 최소 응답 필드
     public record StepsCheckResponse(
             boolean ok,
             boolean anomaly,
-            String mode
+            String mode,
+            String trigger,
+            List<String> reasons,
+            @JsonProperty("recommendation") StepsRecommendation recommendation
     ) {}
 
+    public record StepsRecommendation(
+            @JsonProperty("session_id") String sessionId,
+            List<StepsCategory> categories
+    ) {}
 
+    public record StepsCategory(
+            String category,
+            Integer rank,
+            String reason
+    ) {}
+    
     record Metrics(
             @JsonProperty("hr") Integer heartrate,
             @JsonProperty("stress") Double stress
