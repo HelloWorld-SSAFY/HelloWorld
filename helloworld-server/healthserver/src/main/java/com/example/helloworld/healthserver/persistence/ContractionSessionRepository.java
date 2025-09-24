@@ -12,9 +12,10 @@ public interface ContractionSessionRepository extends JpaRepository<ContractionS
 
     Optional<ContractionSession> findTopByCoupleIdOrderByEndTimeDesc(Long coupleId);
 
+    List<ContractionSession> findByCoupleIdAndStartTimeBetweenOrderByStartTimeDesc(
+            Long coupleId, Instant start, Instant end);
+
     List<ContractionSession> findByCoupleIdOrderByStartTimeDesc(Long coupleId);
 
-    List<ContractionSession> findByCoupleIdAndStartTimeBetweenOrderByStartTimeDesc(
-            Long coupleId, Instant from, Instant to);
 
    }
