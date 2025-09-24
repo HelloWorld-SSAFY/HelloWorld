@@ -71,6 +71,20 @@ public final class StepsDtos {
 
             @JsonProperty("mode")
             @Schema(description = "이상 징후 모드", example = "normal/restrict/emergency")
-            String mode
-    ) {}
+            String mode,
+
+            @JsonProperty("trigger")  String trigger,
+            @JsonProperty("reasons")  List<String> reasons,
+            @JsonProperty("recommendation") StepsRecommendation recommendation
+    ) {
+        public record StepsRecommendation(
+                @JsonProperty("session_id") String sessionId,
+                List<StepsCategory> categories
+        ) {}
+        public record StepsCategory(
+                String category,
+                Integer rank,
+                String reason
+        ) {}
+    }
 }
