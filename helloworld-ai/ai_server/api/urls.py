@@ -81,8 +81,8 @@ urlpatterns = [
 
     # ---- debug ----
     # 전체 경로는 /v1/debug/... (최상위에서 path("v1/", include("api.urls")) 기준)
-    path("debug/headers",     debug_headers,   name="debug-headers"),
-    path("debug/echo-headers", echo_headers,   name="echo-headers"),
-    path("debug/whoami",      whoami,          name="whoami"),
-    path("debug/app-token",   app_token_probe, name="app-token-probe"),
+    path("debug/headers",      debug_headers,   name="debug-headers"),
+    path("debug/echo-headers", echo_headers,    name="echo-headers"),
+    path("debug/whoami",       whoami,          name="whoami"),
+    path("debug/app-token",    app_token_probe, name="app-token-probe"),
 ]
