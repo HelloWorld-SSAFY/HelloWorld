@@ -53,7 +53,7 @@ class AnomalyConfig:
     restrict_window_sec: int = 30  # ← 요구사항: 30초 지속이면 restrict
 
     # 연속성 판단을 위한 최대 간격(초) — 이보다 큰 갭이 생기면 지속 타이머 리셋
-    max_gap_sec: int = 30
+    max_gap_sec: int = 45
 
     supported_metrics: Tuple[str, ...] = ("hr", "stress")
 
