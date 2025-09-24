@@ -11,7 +11,7 @@ from services.anomaly import to_kst, bucket_index_4h
 from api.models import UserTodStatsDaily
 
 # 공용 스웨거 헤더/토큰 검사 유틸
-from api.views import _assert_app_token, APP_TOKEN_PARAM
+from api.views import _assert_app_token, APP_TOKEN_PARAM, ACCESS_TOKEN_PARAM
 
 BUCKET_KEYS = ["v_0_4", "v_4_8", "v_8_12", "v_12_16", "v_16_20", "v_20_24"]
 _re_user = re.compile(r"^[cC]?0*(\d+)$")
@@ -35,32 +35,49 @@ class BaselineProbeQuery(serializers.Serializer):
 class BaselineProbeView(APIView):
     """
     KST 기준 4시간 버킷의 기준선(μ,σ)을 raw DB에서 확인하는 GET 디버그 엔드포인트.
-    - X-App-Token 헤더 필수
+    - 헤더: X-App-Token (필수), Authorization (게이트웨이 통과용)
     - 쿼리: user_ref(필수), ts(옵션), metric(hr|stress)
     """
     authentication_classes = []          # 전역 인증 우회
-    permission_classes = [AllowAny]      # 토큰은 앱 토큰만 검사
+    permission_classes = [AllowAny]      # 앱 토큰만 자체 검사
 
     @extend_schema(
         tags=["debug"],
         summary="(GET) 버킷 기준선(μ,σ) 프로브",
-        description="쿼리스트링으로 user_ref, ts(옵션), metric(hr|stress) 전달. 헤더에 X-App-Token 필요.",
-        parameters=[APP_TOKEN_PARAM],
+        description="쿼리스트링으로 user_ref, ts(옵션), metric(hr|stress) 전달. 헤더에 X-App-Token 및 Authorization 필요.",
+        # ✅ Swagger에 헤더와 쿼리 모두 노출
+        parameters=[APP_TOKEN_PARAM, ACCESS_TOKEN_PARAM, BaselineProbeQuery],
         request=None,
         responses={200: None},
         operation_id="getDebugBaseline",
     )
     def get(self, request):
-        # 앱 토큰 검사
+        # 0) 앱 토큰 검사 (우리 서버 레벨)
         bad = _assert_app_token(request)
         if bad:
             return bad
 
+        # 0-1) 게이트웨이 통과용 헤더가 실제로 왔는지(선택) 친절 메시지
+        auth = (
+            request.headers.get("Authorization")
+            or request.headers.get("Access-Token")
+            or request.META.get("HTTP_AUTHORIZATION")
+            or request.META.get("HTTP_ACCESS_TOKEN")
+        )
+        if not auth:
+            # 게이트웨이가 먼저 401을 줄 수 있지만, 로컬/개발 환경에서 힌트 제공
+            return Response(
+                {"error": "ACCESS_TOKEN_REQUIRED",
+                 "hint": "헤더 Authorization: Bearer <token> (또는 Access-Token) 를 넣어주세요."},
+                status=400,
+            )
+
+        # 1) 쿼리 파싱
         ser = BaselineProbeQuery(data=request.query_params)
         ser.is_valid(raise_exception=True)
         d = ser.validated_data
 
-        # 시각 → KST 버킷 결정
+        # 2) 시각 → KST 버킷 결정
         ts = d.get("ts") or datetime.now(timezone.utc)
         if ts.tzinfo is None:
             ts = ts.replace(tzinfo=timezone.utc)
@@ -71,7 +88,7 @@ class BaselineProbeView(APIView):
         ref = _norm_user_ref(d["user_ref"])
         metric = d["metric"]
 
-        # 동일 날짜(as_of) raw 값 조회
+        # 3) 동일 날짜(as_of) raw 값 조회
         rows = list(
             UserTodStatsDaily.objects
             .filter(user_ref=ref, as_of=kst.date(), metric=metric)
@@ -81,14 +98,14 @@ class BaselineProbeView(APIView):
         sd = next((r.get(bucket_key) for r in rows if r["stat"] == "stddev"), None)
 
         return Response({
-            "user_ref": ref,                 # 정규화된 값
-            "as_of": kst.date().isoformat(), # 해당 날짜(KST)
-            "kst_ts": kst.isoformat(),       # 참고용
-            "bucket_idx": bucket_idx,        # 0..5
-            "bucket_key": bucket_key,        # v_0_4 등
+            "user_ref": ref,
+            "as_of": kst.date().isoformat(),
+            "kst_ts": kst.isoformat(),
+            "bucket_idx": bucket_idx,
+            "bucket_key": bucket_key,
             "metric": metric,
             "mu": mu,
             "sd": sd,
-            "rows": rows,                    # mean/stddev 전 버킷 원자료 (디버깅용)
-            "hint": "mu/sd가 null이면 이 버킷은 Z기반 감지가 불가합니다. 다른 버킷/날짜를 사용하거나 Provider fallback 로그를 확인하세요."
+            "rows": rows,
+            "hint": "mu/sd가 null이면 이 버킷에서는 Z 기반 감지가 불가합니다. 다른 버킷/날짜를 사용하거나 Provider fallback 로그를 확인하세요."
         })
