@@ -15,12 +15,6 @@ spring:
     properties:
       hibernate.jdbc.time_zone:UTC
 
-ai:
-  server:
-    base-url: http://aiserver-svc:8000
-  telemetry-path: /api/telemetry
-  app-token: ${APP_TOKEN}
-
 
 userserver:
   base-url: http://userserver-svc:8080
