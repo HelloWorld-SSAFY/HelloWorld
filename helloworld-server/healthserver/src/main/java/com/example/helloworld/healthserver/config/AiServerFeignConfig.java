@@ -21,7 +21,7 @@ public class AiServerFeignConfig {
     @Bean
     public RequestInterceptor aiHeadersAndLoggingInterceptor(
             // ⚠ yml의 키와 반드시 일치시켜 주세요: ai.server.app-token
-            @Value("${ai.server.app-token:}") String appToken,
+            @Value("${ai.app-token:}") String appToken,
             @Value("${ai.server.log-requests:true}") boolean enableLog
     ) {
         return template -> {
