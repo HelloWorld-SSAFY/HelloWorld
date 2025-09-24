@@ -10,5 +10,7 @@ data class DiaryCreateRequest(
     @SerializedName("coupleId") val coupleId: Long,
     @SerializedName("authorId") val authorId: Long,
     @SerializedName("authorRole") val authorRole: String,
-    @SerializedName("targetDate") val targetDate: String
+    @SerializedName("targetDate") val targetDate: String,
+    @SerializedName("createdAt") val createdAt: String,
+    @SerializedName("updatedAt") val updatedAt: String
 )

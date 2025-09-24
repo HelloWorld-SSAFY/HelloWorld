@@ -24,12 +24,14 @@ data class RecommendationItem(
 
 @Composable
 fun TodayRecommendationSection(
-    onWeeklyRecommendationClick: (() -> Unit)? = null
+    onDietClick: (() -> Unit)? = null,
+    onWorkoutClick: (() -> Unit)? = null,
+    onInfoClick: (() -> Unit)? = null
 ) {
     val recommendations = listOf(
-        RecommendationItem("음식", Color.White, onClick = onWeeklyRecommendationClick),
-        RecommendationItem("할 일", Color.White, onClick = onWeeklyRecommendationClick),
-        RecommendationItem("현황", Color.White, onClick = onWeeklyRecommendationClick)
+        RecommendationItem("음식", Color.White, onClick = onDietClick),
+        RecommendationItem("할 일", Color.White, onClick = onWorkoutClick),
+        RecommendationItem("현황", Color.White, onClick = onInfoClick)
     )
 
     Row(
