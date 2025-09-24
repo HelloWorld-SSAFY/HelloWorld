@@ -42,53 +42,32 @@ public class UserInfoAuthenticationFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
 
-        if (isBypassPath(request)) {
-            chain.doFilter(request, response);
-            return;
-        }
-
-        String userIdStr   = request.getHeader("X-Internal-User-Id");
-        String coupleIdStr = request.getHeader("X-Internal-Couple-Id");
+        // 이 필터의 역할: 내부 헤더가 있으면 인증 정보를 SecurityContext에 채워넣는다.
+        // 요청을 막거나 허용하는 결정은 SecurityConfig에서 처리하도록 위임한다.
+        final String userIdStr   = request.getHeader("X-Internal-User-Id");
+        final String coupleIdStr = request.getHeader("X-Internal-Couple-Id");
 
         if (StringUtils.hasText(userIdStr)) {
             try {
                 Long userId   = Long.parseLong(userIdStr);
                 Long coupleId = StringUtils.hasText(coupleIdStr) ? Long.parseLong(coupleIdStr) : null;
 
-                log.info("Creating UserPrincipal - userId: {}, coupleId: {}", userId, coupleId);
-
-                // 1. 먼저 권한 목록을 생성합니다.
-                var authorities = Collections.singletonList(
-                        new SimpleGrantedAuthority("ROLE_INTERNAL_USER")
-                );
-
-                // 2. 권한을 포함하여 UserPrincipal 객체를 생성합니다.
+                var authorities = Collections.singletonList(new SimpleGrantedAuthority("ROLE_INTERNAL_USER"));
                 UserPrincipal principal = new UserPrincipal(userId, coupleId, authorities);
-
-                // 3. 생성된 principal을 사용하여 인증 토큰을 만듭니다.
-                // 이 생성자는 principal.getAuthorities()를 호출하여 권한을 자동으로 설정합니다.
                 var auth = new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities());
-
                 SecurityContextHolder.getContext().setAuthentication(auth);
 
-                // 🔹 로그 자리수 맞추기(예전 포맷은 role 자리에 path가 찍혔음)
-                log.info("HEALTH_AUDIT userId={}, coupleId={}, path={}, method={}",
-                        userId, coupleId, request.getRequestURI(), request.getMethod());
+                log.info("HEALTH_AUDIT: Authenticated via internal header. userId={}, coupleId={}, path={}",
+                        userId, coupleId, request.getRequestURI());
 
             } catch (NumberFormatException e) {
-                log.error("Invalid X-Internal-* headers: userId='{}', coupleId='{}'", userIdStr, coupleIdStr, e);
+                log.warn("Invalid number format in internal headers. userId='{}', coupleId='{}'", userIdStr, coupleIdStr);
+                // 컨텍스트를 비우고 체인을 계속 진행. 이후 인가 단계에서 접근이 거부될 것임.
                 SecurityContextHolder.clearContext();
-                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                response.getWriter().write("{\"error\":\"Invalid authentication headers\"}");
-                return;
             }
-        } else {
-            log.warn("Missing X-Internal-* headers: path={}", request.getRequestURI());
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            response.getWriter().write("{\"error\":\"Authentication required\"}");
-            return;
         }
 
+        // 항상 필터 체인을 계속 진행시킨다.
         chain.doFilter(request, response);
     }
 

@@ -6,7 +6,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
@@ -21,37 +20,29 @@ public class SecurityConfig {
     private final UserInfoAuthenticationFilter userInfoAuthenticationFilter;
 
     @Bean
-    public WebSecurityCustomizer webSecurityCustomizer() {
-        // 이 설정은 Spring Security 필터 체인을 완전히 우회시킵니다.
-        // Swagger UI, API 문서 같은 정적 리소스에 적용하기 가장 좋은 방법입니다.
-        return (web) -> web.ignoring().requestMatchers(
-                "/swagger-ui/**",
-                "/v3/api-docs/**" // Swagger API 문서 경로도 함께 무시합니다.
-        );
-    }
-
-    @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
+                // 기본 설정: CSRF 비활성화, 세션 STATELESS 설정 등
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
+
+                // 인가(Authorization) 규칙 설정 (가장 구체적인 경로 -> 넓은 경로 순서)
                 .authorizeHttpRequests(auth -> auth
-                        //  ▼▼▼ [수정] actuator 하위 모든 경로를 인증 없이 허용합니다. (헬스 체크용) ▼▼▼
-                                     .requestMatchers("/actuator/**").permitAll()
-                        //                        // /api/** 경로는 INTERNAL_USER 역할이 필요합니다.
-                                           .requestMatchers("/api/**").hasRole("INTERNAL_USER")
-                .anyRequest().authenticated()
+                        // 1. Swagger, Actuator 경로는 인증 없이 모두 허용
+                        .requestMatchers(
+                                "/swagger-ui/**",
+                                "/v3/api-docs/**",
+                                "/actuator/**"
+                        ).permitAll()
+                        // 2. /api/** 경로는 'INTERNAL_USER' 역할이 반드시 필요
+                        .requestMatchers("/api/**").hasRole("INTERNAL_USER")
+                        // 3. 그 외 명시되지 않은 모든 요청은 인증만 되면 허용
+                        .anyRequest().authenticated()
                 )
-                .exceptionHandling(exceptions -> exceptions
-                        .accessDeniedHandler((request, response, accessDeniedException) -> {
-                            log.error("Access denied: {}", accessDeniedException.getMessage());
-                            response.setStatus(403);
-                            response.setContentType("application/json");
-                            response.getWriter().write("{\"error\":\"Forbidden\"}");
-                        })
-                )
+
+                // 우리가 만든 커스텀 필터를 Spring Security 필터 체인에 추가
                 .addFilterBefore(userInfoAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

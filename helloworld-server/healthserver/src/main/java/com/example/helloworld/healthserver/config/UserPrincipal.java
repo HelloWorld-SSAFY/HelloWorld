@@ -21,8 +21,9 @@ public class UserPrincipal implements UserDetails {
         this.authorities = (authorities != null) ? authorities : Collections.emptyList();
     }
 
-    public Long getCoupleId() {
-        return this.coupleId;  // <- 이 메서드가 null 반환하는지 확인
+    @Override
+    public Collection<? extends GrantedAuthority> getAuthorities() {
+        return this.authorities;
     }
 
     // UserDetails 인터페이스의 나머지 메소드 구현 (생략)
