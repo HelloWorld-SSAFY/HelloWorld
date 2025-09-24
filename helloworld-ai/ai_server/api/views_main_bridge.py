@@ -14,7 +14,7 @@ from api.views import (
     _assert_app_token,
     APP_TOKEN_PARAM,
     COUPLE_ID_PARAM,
-    ACCESS_TOKEN_PARAM,  # Swagger 문서에 Authorization/Access-Token 안내용
+    ACCESS_TOKEN_PARAM,  # 문서화용(헤더)
 )
 
 # ------------------------- 내부 유틸 -------------------------
@@ -27,14 +27,28 @@ def _strip_bearer(v):
         return v.split(" ", 1)[1].strip()
     return v
 
-def _token_from_request(request):
-    # Authorization / Access-Token 모두 허용
+def _token_from_request(request, body_token: str | None = None):
+    """
+    우선순위: Authorization/X-Access-Token 헤더 → query(access_token|token) → body(access_token|token|body_token)
+    """
     raw = (
         request.headers.get("Authorization")
+        or request.headers.get("X-Access-Token")
         or request.headers.get("Access-Token")
         or request.META.get("HTTP_AUTHORIZATION")
+        or request.META.get("HTTP_X_ACCESS_TOKEN")
         or request.META.get("HTTP_ACCESS_TOKEN")
     )
+    if not raw:
+        # querystring
+        raw = request.query_params.get("access_token") or request.query_params.get("token")
+    if not raw:
+        # body(JSON)
+        try:
+            data = request.data or {}
+        except Exception:
+            data = {}
+        raw = data.get("access_token") or data.get("token") or body_token
     return _strip_bearer(raw)
 
 # ---------------------------------------------------------------------------
@@ -46,6 +60,9 @@ class MainEchoQuery(serializers.Serializer):
     )
     method = serializers.ChoiceField(choices=["GET", "POST", "PUT", "DELETE"], required=False, default="GET")
     body = serializers.JSONField(required=False)
+    # 헤더가 막히는 환경 대비 바디로도 토큰 허용(선택)
+    access_token = serializers.CharField(required=False, write_only=True,
+                                         help_text="헤더가 전달되지 않으면 여기 넣어도 됩니다. (Bearer 없이 순수 토큰)")
 
 class MainEchoView(APIView):
     @extend_schema(
@@ -66,11 +83,11 @@ class MainEchoView(APIView):
         d = ser.validated_data
 
         couple_id = request.headers.get("X-Couple-Id") or request.META.get("HTTP_X_COUPLE_ID")
-        token = _token_from_request(request)
+        token = _token_from_request(request, body_token=d.get("access_token"))
         if not token:
             return Response(
                 {"ok": False, "error": "ACCESS_TOKEN_REQUIRED",
-                 "hint": "Swagger 헤더 Authorization: Bearer <token> 로 입력하세요."},
+                 "hint": "Authorization: Bearer <token> 헤더 또는 body.access_token 으로 전달하세요."},
                 status=400,
             )
 
@@ -83,7 +100,7 @@ class MainEchoView(APIView):
             method=d.get("method") or "GET",
             json_body=d.get("body"),
             couple_id=couple_id,
-            access_token=token,  # ← 반드시 헤더 토큰
+            access_token=token,
         )
         return Response({"status": code, "data": data}, status=code if 200 <= code < 300 else 200)
 
@@ -93,6 +110,9 @@ class MainEchoView(APIView):
 class PullStepsBaselineIn(serializers.Serializer):
     date = serializers.DateField(required=False, help_text="YYYY-MM-DD (KST). 기본: 오늘")
     path = serializers.CharField(required=False, default="/health/api/wearable/daily-buckets")
+    # 헤더가 막히는 환경 대비 바디 토큰 허용(선택)
+    access_token = serializers.CharField(required=False, write_only=True,
+                                         help_text="헤더가 전달되지 않으면 여기 넣어도 됩니다. (Bearer 없이 순수 토큰)")
 
 class PullStepsBaselineView(APIView):
     @extend_schema(
@@ -113,11 +133,11 @@ class PullStepsBaselineView(APIView):
         d = ser.validated_data
 
         couple_id = request.headers.get("X-Couple-Id") or request.META.get("HTTP_X_COUPLE_ID")
-        token = _token_from_request(request)
+        token = _token_from_request(request, body_token=d.get("access_token"))
         if not token:
             return Response(
                 {"ok": False, "error": "ACCESS_TOKEN_REQUIRED",
-                 "hint": "Swagger 헤더 Authorization: Bearer <token> 로 입력하세요."},
+                 "hint": "Authorization: Bearer <token> 헤더 또는 body.access_token 으로 전달하세요."},
                 status=400,
             )
 
@@ -131,7 +151,7 @@ class PullStepsBaselineView(APIView):
             path_with_qs,
             method="GET",
             couple_id=couple_id,
-            access_token=token,  # ← 반드시 헤더 토큰
+            access_token=token,
         )
 
         if not (200 <= code < 300):
