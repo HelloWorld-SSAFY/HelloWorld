@@ -41,9 +41,14 @@ android {
         compose = true
         buildConfig = true
     }
-    hilt{
-        enableAggregatingTask = false
-    }
+//    hilt{
+//        enableAggregatingTask = false
+//    }
+}
+
+kapt {
+    correctErrorTypes = true
+    showProcessorStats = true
 }
 
 dependencies {
@@ -86,6 +91,8 @@ dependencies {
     // Hilt
     implementation("com.google.dagger:hilt-android:2.48.1")
     implementation(libs.volley)
+    implementation(libs.androidx.junit.ktx)
+    testImplementation(libs.testng)
     kapt("com.google.dagger:hilt-android-compiler:2.48.1")
 
     // WorkManager
@@ -134,5 +141,22 @@ dependencies {
 
     // Coil - Image Loading
     implementation("io.coil-kt:coil-compose:2.5.0")
+
+    // ✅ 단위 테스트(JUnit4) — 이미 있음
+    testImplementation("junit:junit:4.13.2")
+
+    // ⚠️ TestNG 혼용은 당분간 비활성화 권장 (꼬임 방지)
+    // // testImplementation(libs.testng)
+
+    // ✅ 계측 테스트(androidTest) 기본 셋
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    // (안전하게) junit도 명시
+    androidTestImplementation("junit:junit:4.13.2")
+
+    // ✅ Hilt를 앱에서 사용 중이므로, androidTest 변형에도 Hilt 테스트/컴파일러 추가
+    androidTestImplementation("com.google.dagger:hilt-android-testing:2.48.1")
+    kaptAndroidTest("com.google.dagger:hilt-android-compiler:2.48.1")
 
 }

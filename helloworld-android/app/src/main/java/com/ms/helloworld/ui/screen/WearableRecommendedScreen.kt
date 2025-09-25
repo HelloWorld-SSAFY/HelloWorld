@@ -27,7 +27,6 @@ import com.ms.helloworld.R
 import com.ms.helloworld.dto.response.StressLevel
 import com.ms.helloworld.navigation.Screen
 import com.ms.helloworld.ui.components.CustomTopAppBar
-import com.ms.helloworld.ui.theme.MainColor
 import com.ms.helloworld.viewmodel.WearableViewModel
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter

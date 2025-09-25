@@ -8,6 +8,8 @@ import com.ms.wearos.dto.request.HeartRateRequest
 import com.ms.wearos.dto.request.LaborDataRequest
 import com.ms.wearos.dto.response.AiResponse
 import com.ms.wearos.network.api.WearApiService
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import retrofit2.Retrofit
 import retrofit2.Response
 import javax.inject.Inject
@@ -25,7 +27,7 @@ class WearApiRepository @Inject constructor(
     // 건강 데이터 전송 (심박수 + 스트레스 지수)
     suspend fun sendHealthData(healthDataRequest: HealthDataRequest): Response<AiResponse> {
         return try {
-            Log.d(TAG, "건강 데이터 전송: 심박수=${healthDataRequest.heartrate}, 스트레스=${healthDataRequest.stress}, 날짜=$healthDataRequest.date")
+            Log.d(TAG, "건강 데이터 전송: 심박수=${healthDataRequest.heartrate}, 스트레스=${healthDataRequest.stress}, 날짜=${healthDataRequest.date}")
 
             apiService.sendHealthData(healthDataRequest)
         } catch (e: Exception) {
@@ -38,8 +40,11 @@ class WearApiRepository @Inject constructor(
     suspend fun sendFetalMovement(fetalMovementRequest: FetalMovementRequest): Response<Any> {
         return try {
             Log.d(TAG, "태동 기록 전송: 기록시간=${fetalMovementRequest.recordedAt}")
+            // 호출할 때
+            val mediaType = "application/json; charset=utf-8".toMediaType()
+            val emptyJsonBody = "{}".toRequestBody(mediaType)
 
-            apiService.sendFetalMovement(fetalMovementRequest)
+            apiService.sendFetalMovement(emptyJsonBody)
         } catch (e: Exception) {
             Log.e(TAG, "태동 기록 API 오류", e)
             throw e

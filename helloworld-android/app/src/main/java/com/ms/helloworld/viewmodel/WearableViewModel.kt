@@ -1,5 +1,6 @@
 package com.ms.helloworld.viewmodel
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ms.helloworld.dto.response.ContractionSession
@@ -12,6 +13,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+private const val TAG = "싸피_WearableViewModel"
 @HiltViewModel
 class WearableViewModel @Inject constructor(
     private val wearRepository: WearRepository
@@ -20,15 +22,23 @@ class WearableViewModel @Inject constructor(
     private val _contractions = MutableStateFlow<List<ContractionSession>>(emptyList())
     val contractions: StateFlow<List<ContractionSession>> = _contractions.asStateFlow()
 
-    // 태동 기록 상태 추가
+    // 이번주 태동 기록 상태
     private val _fetalMovements = MutableStateFlow<List<FetalMovementRecord>>(emptyList())
     val fetalMovements: StateFlow<List<FetalMovementRecord>> = _fetalMovements.asStateFlow()
+
+    // 지난주 태동 기록 상태 추가
+    private val _previousWeekFetalMovements = MutableStateFlow<List<FetalMovementRecord>>(emptyList())
+    val previousWeekFetalMovements: StateFlow<List<FetalMovementRecord>> = _previousWeekFetalMovements.asStateFlow()
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
     private val _isLoadingFetal = MutableStateFlow(false)
     val isLoadingFetal: StateFlow<Boolean> = _isLoadingFetal.asStateFlow()
+
+    // 지난주 태동 로딩 상태 추가
+    private val _isLoadingPreviousWeekFetal = MutableStateFlow(false)
+    val isLoadingPreviousWeekFetal: StateFlow<Boolean> = _isLoadingPreviousWeekFetal.asStateFlow()
 
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
@@ -50,8 +60,9 @@ class WearableViewModel @Inject constructor(
         }
     }
 
-    // 태동 기록 로드 메소드 추가
+    // 이번주 태동 기록 로드 메소드
     fun loadFetalMovements(from: String? = null, to: String? = null) {
+
         viewModelScope.launch {
             _isLoadingFetal.value = true
             _error.value = null
@@ -61,10 +72,32 @@ class WearableViewModel @Inject constructor(
                     _fetalMovements.value = response.records
                 }
                 .onFailure { throwable ->
+                    Log.e(TAG, "이번주 태동 데이터 로드 실패", throwable)
                     _error.value = throwable.message ?: "태동 기록을 불러오는데 실패했습니다."
+                    Log.e(TAG, "에러 메시지 설정: ${_error.value}")
                 }
 
             _isLoadingFetal.value = false
+            Log.d(TAG, "태동 로딩 상태를 false로 설정")
+            Log.d(TAG, "=== loadFetalMovements 종료 (이번주) ===")
+        }
+    }
+
+    // 지난주 태동 기록 로드 메소드 추가
+    fun loadPreviousWeekFetalMovements(from: String? = null, to: String? = null) {
+        viewModelScope.launch {
+            _isLoadingPreviousWeekFetal.value = true
+            _error.value = null
+
+            wearRepository.getFetalMovement(from, to)
+                .onSuccess { response ->
+                    _previousWeekFetalMovements.value = response.records
+                }
+                .onFailure { throwable ->
+                    _error.value = throwable.message ?: "지난주 태동 기록을 불러오는데 실패했습니다."
+                }
+
+            _isLoadingPreviousWeekFetal.value = false
         }
     }
 

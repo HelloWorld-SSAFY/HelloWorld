@@ -4,6 +4,7 @@ import com.ms.wearos.dto.request.FetalMovementRequest
 import com.ms.wearos.dto.request.HealthDataRequest
 import com.ms.wearos.dto.request.LaborDataRequest
 import com.ms.wearos.dto.response.AiResponse
+import okhttp3.RequestBody
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.POST
@@ -20,7 +21,7 @@ interface WearApiService {
     // 태동 데이터 전송
     @POST("/health/api/fetal-movement")
     suspend fun sendFetalMovement(
-        @Body request: FetalMovementRequest
+        @Body body: RequestBody
     ): Response<Any>
 
     // 진통 세션 전송

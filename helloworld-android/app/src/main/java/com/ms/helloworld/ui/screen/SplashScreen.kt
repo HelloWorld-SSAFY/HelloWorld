@@ -33,6 +33,7 @@ fun SplashScreen(
         isPlaying = true,
         iterations = LottieConstants.IterateForever,
         speed = 0.2f,
+        clipSpec = LottieClipSpec.Frame(min = 0, max = 10),
         cancellationBehavior = LottieCancellationBehavior.OnIterationFinish
     )
 
