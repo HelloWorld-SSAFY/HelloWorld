@@ -3,7 +3,9 @@ package com.example.helloworld.healthserver.controller;
 import com.example.helloworld.healthserver.client.AiServerClient;
 import com.example.helloworld.healthserver.config.UserPrincipal;
 import com.example.helloworld.healthserver.dto.HealthDtos;
+import com.example.helloworld.healthserver.dto.response.HealthLatestResponse;
 import com.example.helloworld.healthserver.service.HealthDataService;
+import com.example.helloworld.healthserver.service.HealthLatestService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -27,6 +29,7 @@ import java.time.LocalDate;
 public class WearableHealthController {
 
     private final HealthDataService healthService;
+    private final HealthLatestService lasthealthService;
 
     // 2. Add a helper method to validate the authenticated principal
     private void requirePrincipal(UserPrincipal principal) {
@@ -78,5 +81,13 @@ public class WearableHealthController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date
     ) {
         return ResponseEntity.ok(healthService.getGlobalDailyStats(date));
+    }
+
+
+    @Operation(summary = "걸음수 & 심박/스트레스 최신 1건 조회")
+    @GetMapping("/latest")
+    public ResponseEntity<HealthLatestResponse> getLatest(@AuthenticationPrincipal UserPrincipal principal) {
+        var resp = lasthealthService.getLatest(principal.getCoupleId());
+        return ResponseEntity.ok(resp);
     }
 }

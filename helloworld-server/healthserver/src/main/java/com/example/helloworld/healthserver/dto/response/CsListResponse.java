@@ -8,8 +8,8 @@ public record CsListResponse(
 ) {
     public record CSItem(
             Long id,
-            Instant start_time,
-            Instant end_time,
+            Instant start_time,      // 진통 시작 시간 (정확한 시각 필요)
+            Instant end_time,        // 진통 종료 시간 (정확한 시각 필요)
             Integer duration_sec,
             Integer interval_min,
             boolean alert_sent

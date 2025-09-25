@@ -25,7 +25,18 @@ public class FetalMovementService {
 
     @Transactional
     public FmCreateResponse create(Long coupleId, FmCreateRequest req) {
-        Instant at = (req.recorded_at() != null) ? req.recorded_at() : Instant.now();
+        ZoneId zone = ZoneId.of(appZone);
+
+        Instant at;
+        if (req.recorded_at() != null) {
+            // 클라이언트가 보낸 시간 사용
+            at = req.recorded_at();
+        } else {
+            // 서울 기준 현재 시간 생성
+            LocalDateTime nowInSeoul = LocalDateTime.now(zone);
+            at = nowInSeoul.atZone(zone).toInstant();
+        }
+
         FetalMovement fm = FetalMovement.builder()
                 .coupleId(coupleId)
                 .recordedAt(at)
@@ -47,18 +58,18 @@ public class FetalMovementService {
                 .stream()
                 .collect(Collectors.groupingBy(
                         e -> e.getRecordedAt().atZone(zone).toLocalDate(),
-                        Collectors.counting()
+                        Collectors.toList() // counting() 대신 toList()로 변경
                 ))
                 .entrySet().stream()
-                .sorted(Map.Entry.<LocalDate, Long>comparingByKey().reversed())
+                .sorted(Map.Entry.<LocalDate, List<FetalMovement>>comparingByKey().reversed())
                 .map(e -> {
-                    // 일자 00:00 (app zone)을 UTC Instant로
-                    Instant dayStartUtc = e.getKey().atStartOfDay(zone).toInstant();
-                    return new FmListResponse.FmListItem(dayStartUtc, e.getValue().intValue());
+                    // 날짜 자체를 반환 (LocalDate)
+                    LocalDate recordedDate = e.getKey();
+
+                    return new FmListResponse.FmListItem(recordedDate, e.getValue().size());
                 })
                 .toList();
 
         return new FmListResponse(items);
     }
 }
-

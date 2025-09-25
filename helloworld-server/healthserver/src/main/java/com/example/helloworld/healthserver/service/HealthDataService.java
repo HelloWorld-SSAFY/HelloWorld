@@ -62,18 +62,23 @@ public class HealthDataService {
         try {
             resp = aiServerClient.checkTelemetry(user.getCoupleId(), telemetryRequest);
         } catch (feign.FeignException.Unauthorized e) {
-            log.error("AI server 401 Unauthorized (check app token): {}", e.contentUTF8());
+            log.debug("AI server 401 Unauthorized (check app token): {}", e.contentUTF8());
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "AI server unauthorized");
         } catch (feign.FeignException e) {
-            log.error("AI server error status={}, body={}", e.status(), e.contentUTF8());
+            log.debug("AI server error status={}, body={}", e.status(), e.contentUTF8());
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "AI server error");
         }
 
         // 4) 이상 징후면 FCM
         if (resp != null && resp.mode() != null
                 && ANOMALY_MODES.contains(resp.mode().toUpperCase())) {
+            log.debug("AI server reported anomaly mode '{}'. Triggering FCM notification.", resp.mode());
             fcmService.sendEmergencyNotification(user.getUserId(), req.heartrate());
+        } else {
+            String mode = (resp != null && resp.mode() != null) ? resp.mode() : "normal or null";
+            log.debug("AI server reported mode '{}'. No FCM notification is needed.", mode);
         }
+
 
         return resp;
     }

@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.time.Instant;
@@ -32,8 +33,8 @@ public class ContractionService {
     public CsCreateResponse create(Long coupleId, CsCreateRequest req) {
         ContractionSession cs = ContractionSession.builder()
                 .coupleId(coupleId)
-                .startTime(req.start_time())
-                .endTime(req.end_time())
+                .startTime(req.start_time())  // 클라이언트가 보낸 정확한 시간 사용
+                .endTime(req.end_time())      // 클라이언트가 보낸 정확한 시간 사용
                 .build();
 
         // 파생 필드 계산
@@ -70,8 +71,8 @@ public class ContractionService {
         var items = list.stream().map(s ->
                 new CsListResponse.CSItem(
                         s.getId(),
-                        s.getStartTime(),   // Instant라면 그대로 반환(클라 포맷은 컨트롤러/DTO에서)
-                        s.getEndTime(),
+                        s.getStartTime(),   // 정확한 시각 그대로 반환
+                        s.getEndTime(),     // 정확한 시각 그대로 반환
                         s.getDurationSec(),
                         s.getIntervalMin(),
                         s.isAlertSent()
