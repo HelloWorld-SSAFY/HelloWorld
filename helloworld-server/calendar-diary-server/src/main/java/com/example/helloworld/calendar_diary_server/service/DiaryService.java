@@ -74,12 +74,21 @@ public class DiaryService {
 
         List<DiaryResponse> items = diaryRepository
                 .findByCoupleIdAndTargetDateOrderByTargetDateAscDiaryIdAsc(coupleId, date)
-                .stream().map(DiaryResponse::from).toList();
+                .stream()
+                .map(d -> {
+                    // 대표 이미지 key (첫 장)
+                    String coverKey = diaryPhotoRepository
+                            .findFirstByDiary_DiaryIdOrderByDiaryPhotoIdAsc(d.getDiaryId())
+                            .map(p -> p.getImageKey())
+                            .orElse(null);
+                    String coverUrl = presignGet(coverKey); // key→10분짜리 URL (null 안전)
+                    return DiaryResponse.from(d, coverUrl);
+                })
+                .toList();
 
-        return new DayResult(
-                coupleId, day, week, date, items.size(), items
-        );
+        return new DayResult(coupleId, day, week, date, items.size(), items);
     }
+
 
     private void validateWeek(int week) {
         if (week < 1 || week > 40) throw new IllegalArgumentException("week must be 1..40");
