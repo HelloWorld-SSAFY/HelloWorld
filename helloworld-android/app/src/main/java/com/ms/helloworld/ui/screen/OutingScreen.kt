@@ -28,15 +28,15 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.ms.helloworld.R
-import com.ms.helloworld.dto.response.YogaDelivery
+import com.ms.helloworld.dto.response.OutingDelivery
 import com.ms.helloworld.ui.components.CustomTopAppBar
 import com.ms.helloworld.ui.theme.MainColor
-import com.ms.helloworld.viewmodel.YogaViewModel
+import com.ms.helloworld.viewmodel.OutingViewModel
 
 @Composable
-fun YogaScreen(
+fun OutingScreen(
     navController: NavHostController,
-    viewModel: YogaViewModel = hiltViewModel()
+    viewModel: OutingViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val uriHandler = LocalUriHandler.current
@@ -56,7 +56,7 @@ fun YogaScreen(
                     )
             ) {
                 CustomTopAppBar(
-                    title = "오늘의 요가",
+                    title = "오늘의 장소",
                     navController = navController
                 )
                 LoadingContent()
@@ -77,7 +77,7 @@ fun YogaScreen(
                     )
             ) {
                 CustomTopAppBar(
-                    title = "오늘의 요가",
+                    title = "오늘의 외출",
                     navController = navController
                 )
                 ErrorContent(
@@ -101,16 +101,17 @@ fun YogaScreen(
                     )
             ) {
                 CustomTopAppBar(
-                    title = "오늘의 요가",
+                    title = "오늘의 장소",
                     navController = navController
                 )
-                if (uiState.yogas.isEmpty()) {
+
+                if (uiState.outings.isEmpty()) {
                     EmptyContent()
                 } else {
-                    FullScreenYogaContent(
+                    FullScreenOutingContent(
                         navController = navController,
-                        yogas = uiState.yogas,
-                        onYogaClick = { yoga -> uriHandler.openUri(yoga.url) }
+                        outings = uiState.outings,
+                        onOutingClick = { outing -> uriHandler.openUri(outing.url) }
                     )
                 }
             }
@@ -133,44 +134,9 @@ private fun LoadingContent() {
                 strokeWidth = 3.dp
             )
             Text(
-                text = "요가 콘텐츠를 불러오는 중...",
+                text = "외출 콘텐츠를 불러오는 중...",
                 color = Color.Black.copy(alpha = 0.7f),
                 fontSize = 16.sp
-            )
-        }
-    }
-}
-
-@Composable
-private fun EmptyContent() {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.padding(32.dp)
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_yoga),
-                contentDescription = "요가",
-                tint = Color.Unspecified,
-                modifier = Modifier.size(50.dp)
-            )
-            Text(
-                text = "아직 추천할 요가가 없어요",
-                color = Color.Black.copy(alpha = 0.8f),
-                fontSize = 18.sp,
-                fontWeight = FontWeight.SemiBold,
-                textAlign = TextAlign.Center
-            )
-            Text(
-                text = "조금 더 기다려주시면\n맞춤 요가를 추천해드릴게요",
-                color = Color.Black.copy(alpha = 0.6f),
-                fontSize = 14.sp,
-                textAlign = TextAlign.Center,
-                lineHeight = 20.sp
             )
         }
     }
@@ -221,27 +187,62 @@ private fun ErrorContent(
 }
 
 @Composable
-private fun FullScreenYogaContent(
-    navController: NavHostController,
-    yogas: List<YogaDelivery>,
-    onYogaClick: (YogaDelivery) -> Unit
-) {
-    LazyColumn(
+private fun EmptyContent() {
+    Box(
         modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(0.dp)
+        contentAlignment = Alignment.Center
     ) {
-        items(yogas.size) { index ->
-            FullScreenYogaCard(
-                yoga = yogas[index],
-                onClick = { onYogaClick(yogas[index]) },
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.padding(32.dp)
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_outdoor),
+                contentDescription = "나들이",
+                tint = Color.Unspecified,
+                modifier = Modifier.size(50.dp)
+            )
+            Text(
+                text = "아직 추천할 나들이 장소가 없어요",
+                color = Color.Black.copy(alpha = 0.8f),
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center
+            )
+            Text(
+                text = "조금 더 기다려주시면\n맞춤 장소를 추천해드릴게요",
+                color = Color.Black.copy(alpha = 0.6f),
+                fontSize = 14.sp,
+                textAlign = TextAlign.Center,
+                lineHeight = 20.sp
             )
         }
     }
 }
 
 @Composable
-private fun FullScreenYogaCard(
-    yoga: YogaDelivery,
+private fun FullScreenOutingContent(
+    navController: NavHostController,
+    outings: List<OutingDelivery>,
+    onOutingClick: (OutingDelivery) -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(0.dp)
+    ) {
+        items(outings.size) { index ->
+            FullScreenOutingCard(
+                outing = outings[index],
+                onClick = { onOutingClick(outings[index]) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun FullScreenOutingCard(
+    outing: OutingDelivery,
     onClick: () -> Unit,
 ) {
     Box(
@@ -254,8 +255,8 @@ private fun FullScreenYogaCard(
     ) {
         // 배경 이미지
         AsyncImage(
-            model = yoga.thumbnail,
-            contentDescription = yoga.title,
+            model = outing.thumbnail,
+            contentDescription = outing.title,
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.FillBounds
         )
@@ -293,7 +294,7 @@ private fun FullScreenYogaCard(
             ) {
                 // 제목
                 Text(
-                    text = yoga.title,
+                    text = outing.title,
                     color = Color.White,
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
@@ -318,7 +319,7 @@ private fun FullScreenYogaCard(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = yoga.provider.take(1).uppercase(),
+                            text = outing.provider.take(1).uppercase(),
                             color = Color.White,
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold
@@ -327,7 +328,7 @@ private fun FullScreenYogaCard(
 
                     Column {
                         Text(
-                            text = yoga.provider,
+                            text = outing.provider,
                             color = Color.White.copy(alpha = 0.9f),
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Medium
@@ -337,20 +338,26 @@ private fun FullScreenYogaCard(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(
-                                text = "추천도 ${(yoga.score * 100).toInt()}%",
+                                text = "추천도 ${(outing.score * 100).toInt()}%",
                                 color = Color.White.copy(alpha = 0.7f),
                                 fontSize = 12.sp
                             )
 
-                            // 요가 시간 표시 (duration_sec이 있는 경우)
-                            yoga.duration_sec?.let { duration ->
+                            // 소요 시간 표시 (duration_sec이 있는 경우)
+                            outing.duration_sec?.let { duration ->
                                 Text(
                                     text = "•",
                                     color = Color.White.copy(alpha = 0.5f),
                                     fontSize = 12.sp
                                 )
+                                val hours = duration / 3600
+                                val minutes = (duration % 3600) / 60
+                                val timeText = when {
+                                    hours > 0 -> "${hours}시간 ${minutes}분"
+                                    else -> "${minutes}분"
+                                }
                                 Text(
-                                    text = "${duration / 60}분",
+                                    text = timeText,
                                     color = Color.White.copy(alpha = 0.7f),
                                     fontSize = 12.sp
                                 )
