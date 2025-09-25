@@ -23,7 +23,7 @@ public interface UserServerClient {
 
 
     // ✨ 사용자의 FCM 토큰 목록을 조회하는 API (user-server에 구현 필요)
-    @GetMapping("/api/internal/users/{userId}/fcm-tokens")
+    @GetMapping("/api/fcm/{userId}/fcm-tokens")
     FcmTokenResponse getFcmTokens(@PathVariable("userId") Long userId);
 
 
