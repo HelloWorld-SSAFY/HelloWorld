@@ -77,12 +77,49 @@ fun MeditationScreen(
                     title = "오늘의 명상",
                     navController = navController
                 )
-                FullScreenMeditationContent(
-                    navController = navController,
-                    meditations = uiState.meditations,
-                    onMeditationClick = { meditation -> uriHandler.openUri(meditation.url) }
-                )
+                if (uiState.meditations.isEmpty()) {
+                    EmptyContent()
+                } else {
+                    FullScreenMeditationContent(
+                        navController = navController,
+                        meditations = uiState.meditations,
+                        onMeditationClick = { meditation -> uriHandler.openUri(meditation.url) }
+                    )
+                }
             }
+        }
+    }
+}
+
+@Composable
+private fun EmptyContent() {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.padding(32.dp)
+        ) {
+            Text(
+                text = "🧘‍♀️",
+                fontSize = 48.sp
+            )
+            Text(
+                text = "아직 추천할 명상이 없어요",
+                color = Color.Black.copy(alpha = 0.8f),
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center
+            )
+            Text(
+                text = "조금 더 기다려주시면\n맞춤 명상을 추천해드릴게요",
+                color = Color.Black.copy(alpha = 0.6f),
+                fontSize = 14.sp,
+                textAlign = TextAlign.Center,
+                lineHeight = 20.sp
+            )
         }
     }
 }

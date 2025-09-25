@@ -102,11 +102,15 @@ fun YogaScreen(
                     title = "오늘의 요가",
                     navController = navController
                 )
-                FullScreenYogaContent(
-                    navController = navController,
-                    yogas = uiState.yogas,
-                    onYogaClick = { yoga -> uriHandler.openUri(yoga.url) }
-                )
+                if (uiState.yogas.isEmpty()) {
+                    EmptyContent()
+                } else {
+                    FullScreenYogaContent(
+                        navController = navController,
+                        yogas = uiState.yogas,
+                        onYogaClick = { yoga -> uriHandler.openUri(yoga.url) }
+                    )
+                }
             }
         }
     }
@@ -130,6 +134,39 @@ private fun LoadingContent() {
                 text = "요가 콘텐츠를 불러오는 중...",
                 color = Color.Black.copy(alpha = 0.7f),
                 fontSize = 16.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun EmptyContent() {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.padding(32.dp)
+        ) {
+            Text(
+                text = "🧘‍♀️",
+                fontSize = 48.sp
+            )
+            Text(
+                text = "아직 추천할 요가가 없어요",
+                color = Color.Black.copy(alpha = 0.8f),
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center
+            )
+            Text(
+                text = "조금 더 기다려주시면\n맞춤 요가를 추천해드릴게요",
+                color = Color.Black.copy(alpha = 0.6f),
+                fontSize = 14.sp,
+                textAlign = TextAlign.Center,
+                lineHeight = 20.sp
             )
         }
     }
