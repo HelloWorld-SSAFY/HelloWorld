@@ -20,7 +20,7 @@ public class CaricatureController {
     private final CaricatureService caricatureService;
 
     @Operation(summary = "캐리커처 생성", description = "초음파 사진(diaryPhotoId)로 캐리커처를 생성하고 S3에 저장한 뒤 presigned URL을 돌려줍니다.")
-    @PostMapping("/from-photo/{diaryPhotoId}")
+    @PostMapping("/{diaryPhotoId}/caricature")
     public ResponseEntity<CaricatureDto> create(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable Long diaryPhotoId
