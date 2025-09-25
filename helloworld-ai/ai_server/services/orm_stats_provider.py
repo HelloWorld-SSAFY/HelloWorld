@@ -21,11 +21,15 @@ def normalize_user_ref(v) -> str:
 class OrmStatsProvider:
     """
     (user_ref, metric, bucket_idx) -> (mean, stddev)
-    - as_of(날짜)는 **무시**하고, 항상 '가장 최근(as_of 최대값)' 자료에서 찾음
-    - 못 찾으면 같은 날짜의 **이웃 버킷(±1, ±2 …)** 으로 폴백
-    - 그래도 없으면 그보다 예전 날짜들로 동일 로직 반복
-    - stddev<=0 이면 무효
-    - 경량 캐시 지원
+
+    - as_of(날짜) **무시**: 항상 '가장 최근(as_of 최대값)' 자료에서 우선 조회
+    - 못 찾으면 같은 날짜의 **이웃 버킷(±1..neighbor_max_dist)** 폴백
+    - 그래도 없으면 더 과거 날짜들에 대해 동일 로직 반복
+    - stddev<=0 또는 NULL 이면 무효로 간주
+    - 경량 캐시 지원 (TTL 초과 시 자동 무효화)
+
+    디버깅을 위해 `get_bucket_stats_meta` 제공:
+      → (mu, sd)와 함께 어떤 날짜/버킷을 소스로 사용했는지 메타 정보 반환
     """
 
     def __init__(
@@ -147,7 +151,7 @@ class OrmStatsProvider:
         """
         as_of는 **무시**. 항상 '가장 최근' 기준으로 버킷 매칭.
         우선순위:
-          A) 최신 날짜의 해당 버킷 → B) 최신 날짜의 이웃 버킷 → 
+          A) 최신 날짜의 해당 버킷 → B) 최신 날짜의 이웃 버킷 →
           C) 더 과거 날짜의 해당 버킷 → D) 과거 날짜의 이웃 버킷
         """
         if not (0 <= bucket_idx < len(BUCKET_FIELDS)):
@@ -163,6 +167,7 @@ class OrmStatsProvider:
             return cached
 
         dates = self._candidate_dates(ref=ref, metric=metric, field=field)
+
         # A) 최신 날짜의 해당 버킷
         for d in dates[:1]:
             pair = self._fetch_for_date(ref=ref, d=d, metric=metric, field=field)
@@ -217,4 +222,79 @@ class OrmStatsProvider:
 
         # 못 찾음
         self._cache_set(cache_key, None)
+        return None
+
+    # ───────────────────── 메타 포함 디버그 API ─────────────────────
+    def get_bucket_stats_meta(
+        self, user_ref: str, as_of: date, metric: str, bucket_idx: int
+    ) -> Optional[tuple[tuple[float, float], dict]]:
+        """
+        get_bucket_stats 와 동일하지만, 어떤 날짜/버킷을 소스로 썼는지 meta 반환.
+        meta 예:
+          {
+            "source_date": "2025-09-24",
+            "source_bucket_idx": 1,
+            "source_bucket_key": "v_4_8",
+            "reason": "latest|neighbor_latest|older|neighbor_older"
+          }
+        캐시는 건너뛰고 실제 조회 경로를 그대로 노출한다(디버깅용).
+        """
+        if not (0 <= bucket_idx < len(BUCKET_FIELDS)):
+            return None
+
+        ref = normalize_user_ref(user_ref)
+        field = BUCKET_FIELDS[bucket_idx]
+        dates = self._candidate_dates(ref=ref, metric=metric, field=field)
+
+        # A) 최신 날짜 + 해당 버킷
+        for d in dates[:1]:
+            pair = self._fetch_for_date(ref=ref, d=d, metric=metric, field=field)
+            if pair is not None:
+                return pair, {
+                    "source_date": d.isoformat(),
+                    "source_bucket_idx": bucket_idx,
+                    "source_bucket_key": field,
+                    "reason": "latest",
+                }
+
+        # B) 최신 날짜 + 이웃 버킷
+        if self.fallback_neighbor and self.neighbor_max_dist > 0 and dates:
+            d0 = dates[0]
+            for dist in range(1, self.neighbor_max_dist + 1):
+                for i in (bucket_idx - dist, bucket_idx + dist):
+                    if 0 <= i < len(BUCKET_FIELDS):
+                        f = BUCKET_FIELDS[i]
+                        pair = self._fetch_for_date(ref=ref, d=d0, metric=metric, field=f)
+                        if pair is not None:
+                            return pair, {
+                                "source_date": d0.isoformat(),
+                                "source_bucket_idx": i,
+                                "source_bucket_key": f,
+                                "reason": "neighbor_latest",
+                            }
+
+        # C/D) 과거 날짜들
+        for d in dates[1:]:
+            pair = self._fetch_for_date(ref=ref, d=d, metric=metric, field=field)
+            if pair is not None:
+                return pair, {
+                    "source_date": d.isoformat(),
+                    "source_bucket_idx": bucket_idx,
+                    "source_bucket_key": field,
+                    "reason": "older",
+                }
+            if self.fallback_neighbor and self.neighbor_max_dist > 0:
+                for dist in range(1, self.neighbor_max_dist + 1):
+                    for i in (bucket_idx - dist, bucket_idx + dist):
+                        if 0 <= i < len(BUCKET_FIELDS):
+                            f = BUCKET_FIELDS[i]
+                            pair = self._fetch_for_date(ref=ref, d=d, metric=metric, field=f)
+                            if pair is not None:
+                                return pair, {
+                                    "source_date": d.isoformat(),
+                                    "source_bucket_idx": i,
+                                    "source_bucket_key": f,
+                                    "reason": "neighbor_older",
+                                }
+
         return None
