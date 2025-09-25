@@ -108,12 +108,12 @@ public class DiaryController {
     /** 6.3 일기 작성 */
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<Map<String, Object>> create(
-            // ✅ 문자열로 받아 어떤 Content-Type이 와도 안전
+            // 문자열로 받아 어떤 Content-Type이 와도 안전
             @RequestParam(value = "req", required = false) String reqJson,
             @RequestParam(value = "payload", required = false) String payloadJson, // 둘 중 하나만 써도 됨(호환)
-            // ✅ 파일은 @RequestPart
+            // 파일은 @RequestPart
             @RequestPart(value = "files", required = false) List<MultipartFile> files,
-            // ✅ 불리언 배열도 문자열/쿼리/폼필드로 들어오므로 @RequestParam이 안전
+            // 불리언 배열도 문자열/쿼리/폼필드로 들어오므로 @RequestParam이 안전
             @RequestParam(value = "ultrasounds", required = false) List<Boolean> ultrasounds,
             @AuthenticationPrincipal UserPrincipal principal
     ) throws IOException {
@@ -123,6 +123,7 @@ public class DiaryController {
             return ResponseEntity.badRequest().body(Map.of("error", "missing req/payload json"));
         }
 
+        
         CreateDiaryRequest req = objectMapper.readValue(json, CreateDiaryRequest.class);
         Long coupleId = getCoupleIdFromPrincipal(principal);
 
