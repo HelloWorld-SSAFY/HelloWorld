@@ -253,15 +253,36 @@ public class DiaryService {
 
 
 
+    // DiaryService.java
     private String presignGet(String key) {
         if (key == null || key.isBlank()) return null;
+        String mime = mimeFromKey(key); // 확장자로 추정
+
         var get = GetObjectRequest.builder()
                 .bucket(s3cfg.getBucket())
                 .key(key)
+                .responseContentType(mime)           // ← 응답 헤더 강제
+                .responseContentDisposition("inline")// ← 다운로드 말고 화면 표시
                 .build();
+
         return presigner.presignGetObject(b -> b
                 .signatureDuration(Duration.ofMinutes(10))
                 .getObjectRequest(get)
         ).url().toString();
     }
+
+    private static String mimeFromKey(String key) {
+        String ext = key.contains(".") ? key.substring(key.lastIndexOf('.') + 1) : "";
+        return switch (ext.toLowerCase()) {
+            case "jpg", "jpeg" -> "image/jpeg";
+            case "png" -> "image/png";
+            case "gif" -> "image/gif";
+            case "webp" -> "image/webp";
+            case "bmp" -> "image/bmp";
+            case "svg" -> "image/svg+xml";
+            case "heic", "heif" -> "image/heic"; // 일부 웹뷰 미표시 가능
+            default -> "application/octet-stream";
+        };
+    }
+
 }
