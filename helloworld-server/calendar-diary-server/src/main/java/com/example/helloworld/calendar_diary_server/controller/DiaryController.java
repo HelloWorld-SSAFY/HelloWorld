@@ -110,6 +110,7 @@ public class DiaryController {
     )
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<Map<String, Object>> create(
+            @RequestPart("req")
             @Parameter(
                     description = "CreateDiaryRequest JSON",
                     content = @Content(
