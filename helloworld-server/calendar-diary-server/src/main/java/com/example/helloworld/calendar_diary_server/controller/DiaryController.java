@@ -123,7 +123,7 @@ public class DiaryController {
             return ResponseEntity.badRequest().body(Map.of("error", "missing req/payload json"));
         }
 
-        
+
         CreateDiaryRequest req = objectMapper.readValue(json, CreateDiaryRequest.class);
         Long coupleId = getCoupleIdFromPrincipal(principal);
 

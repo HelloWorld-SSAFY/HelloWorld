@@ -20,6 +20,7 @@ public class S3Config {
     private Map<String,String> path;
 }
 
+
 @Configuration
 class AwsClientsConfig {
     @Bean
