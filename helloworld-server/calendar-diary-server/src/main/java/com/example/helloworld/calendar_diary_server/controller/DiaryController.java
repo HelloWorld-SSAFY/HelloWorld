@@ -9,6 +9,7 @@ import com.example.helloworld.calendar_diary_server.service.DiaryService;
 import com.example.helloworld.calendar_diary_server.service.S3StorageService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -109,7 +110,13 @@ public class DiaryController {
     )
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<Map<String, Object>> create(
-            @RequestPart("payload") @Valid CreateDiaryRequest req,
+            @Parameter(
+                    description = "CreateDiaryRequest JSON",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = CreateDiaryRequest.class)
+                    )
+            ) @Valid CreateDiaryRequest req,
             @RequestPart(value = "files", required = false) List<MultipartFile> files,            // 여러 장
             @RequestPart(value = "ultrasounds", required = false) List<Boolean> ultrasounds,      // 각 파일과 인덱스 매칭
             @AuthenticationPrincipal UserPrincipal userPrincipal
