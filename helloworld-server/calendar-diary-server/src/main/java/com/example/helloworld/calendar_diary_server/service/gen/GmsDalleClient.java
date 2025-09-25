@@ -33,7 +33,7 @@ public class GmsDalleClient implements GmsImageGenClient {
                 .baseUrl(baseUrl)
                 .defaultHeader("Authorization", "Bearer " + apiKey)
                 .defaultHeader("Accept", "application/json")
-                .defaultHeader("Host", "api.openai.com")
+//                .defaultHeader("Host", "api.openai.com")
                 .build();
     }
 
