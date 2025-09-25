@@ -213,35 +213,232 @@ class WearMainViewModel @Inject constructor(
     /**
      * 심박수와 스트레스 지수를 함께 서버로 전송
      */
+//    fun sendHealthData(date: String, heartRate: Int, stress: Int) {
+//        viewModelScope.launch {
+//            try {
+//
+//                val healthData = HealthDataRequest(date,stress, heartRate)
+//                Log.d("WearMainViewModel", "건강 데이터 전송 시도: $healthData")
+//
+//                val response = wearRepository.sendHealthData(healthData)
+//
+//                if (response.isSuccessful && response.body() != null) {
+//                    val aiResponse = response.body()!!
+//                    Log.d("WearMainViewModel", "건강 데이터 전송 성공: 심박수=${healthData.heartrate}, 스트레스=${healthData.stress}")
+//                    Log.d("WearMainViewModel", "AI 응답: mode=${aiResponse.mode}, risk_level=${aiResponse.riskLevel}")
+//
+//                    // AI 응답에 따른 처리
+//                    handleAiResponse(aiResponse)
+//
+//                    // 안드로이드 앱으로 데이터 전송
+//                    sendAiResponseToAndroid(aiResponse, healthData)
+//
+//                } else {
+//                    Log.e("WearMainViewModel", "건강 데이터 전송 실패: ${response.code()}")
+//                    _uiState.value = _uiState.value.copy(
+//                        errorMessage = "건강 데이터 전송 실패: ${response.code()}"
+//                    )
+//                }
+//            } catch (e: Exception) {
+//                Log.e("WearMainViewModel", "건강 데이터 전송 중 오류 발생", e)
+//                _uiState.value = _uiState.value.copy(
+//                    errorMessage = "건강 데이터 전송 오류: ${e.message}"
+//                )
+//            }
+//        }
+//    }
+
+    /**
+     * 심박수와 스트레스 지수를 함께 서버로 전송
+     */
     fun sendHealthData(date: String, heartRate: Int, stress: Int) {
         viewModelScope.launch {
             try {
+                Log.d(TAG, "=== 건강 데이터 전송 시작 ===")
 
-                val healthData = HealthDataRequest(date, heartRate, stress)
-                Log.d("WearMainViewModel", "건강 데이터 전송 시도: $healthData")
+                val healthData = HealthDataRequest(date, stress, heartRate)
+                Log.d(TAG, "전송할 데이터: date=$date, heartRate=$heartRate, stress=$stress")
+                Log.d(TAG, "HealthDataRequest 객체: $healthData")
+
+                _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
+                Log.d(TAG, "로딩 상태 시작")
 
                 val response = wearRepository.sendHealthData(healthData)
 
-                if (response.isSuccessful && response.body() != null) {
-                    val aiResponse = response.body()!!
-                    Log.d("WearMainViewModel", "건강 데이터 전송 성공: 심박수=${healthData.heartrate}, 스트레스=${healthData.stress}")
-                    Log.d("WearMainViewModel", "AI 응답: mode=${aiResponse.mode}, risk_level=${aiResponse.riskLevel}")
+                Log.d(TAG, "=== API 응답 수신 ===")
+                Log.d(TAG, "응답 코드: ${response.code()}")
+                Log.d(TAG, "응답 성공 여부: ${response.isSuccessful}")
+                Log.d(TAG, "응답 메시지: ${response.message()}")
+                Log.d(TAG, "응답 헤더: ${response.headers()}")
 
-                    // AI 응답에 따른 처리
-                    handleAiResponse(aiResponse)
+                // Raw Response Body 로그 (JSON 파싱 전)
+                try {
+                    val rawBody = response.raw().body?.string()
+                    Log.d(TAG, "Raw 응답 바디: $rawBody")
+                } catch (e: Exception) {
+                    Log.w(TAG, "Raw 바디 읽기 실패: ${e.message}")
+                }
 
-                    // 안드로이드 앱으로 데이터 전송
-                    sendAiResponseToAndroid(aiResponse, healthData)
+                if (response.errorBody() != null) {
+                    val errorString = response.errorBody()?.string()
+                    Log.e(TAG, "에러 바디: $errorString")
+                }
 
+                if (response.isSuccessful) {
+                    val aiResponse = response.body()
+
+                    Log.d(TAG, "=== AI 응답 상세 분석 ===")
+                    if (aiResponse != null) {
+                        Log.d(TAG, "AI 응답 전체: $aiResponse")
+                        Log.d(TAG, "응답 파싱 성공")
+
+                        // 기본 필드 로그 (모든 모드에서 공통)
+                        Log.d(TAG, "=== 기본 필드 ===")
+                        Log.d(TAG, "ok: ${aiResponse.ok}")
+                        Log.d(TAG, "anomaly: ${aiResponse.anomaly}")
+                        Log.d(TAG, "riskLevel: ${aiResponse.riskLevel}")
+                        Log.d(TAG, "mode: ${aiResponse.mode}")
+
+                        // 모드별 필요한 필드만 로그 출력
+                        when (aiResponse.mode) {
+                            "normal" -> {
+                                Log.d(TAG, "=== Normal 모드 필드 ===")
+                                // normal 모드에서는 추가 필드가 거의 없음
+                            }
+
+                            "restrict" -> {
+                                Log.d(TAG, "=== Restrict 모드 필드 ===")
+                                Log.d(TAG, "reasons: ${aiResponse.reasons}")
+                                Log.d(TAG, "newSession: ${aiResponse.newSession}")
+                                Log.d(TAG, "cooldownMin: ${aiResponse.cooldownMin}")
+
+                                aiResponse.recommendation?.let { rec ->
+                                    Log.d(TAG, "--- Recommendation ---")
+                                    Log.d(TAG, "sessionId: ${rec.sessionId}")
+                                    Log.d(TAG, "categories 개수: ${rec.categories.size}")
+                                    rec.categories.forEachIndexed { index, category ->
+                                        Log.d(TAG, "  Category[$index]: ${category.category}, rank=${category.rank}, reason=${category.reason}")
+                                    }
+                                } ?: Log.w(TAG, "⚠️ restrict 모드인데 recommendation이 null")
+                            }
+
+                            "cooldown" -> {
+                                Log.d(TAG, "=== Cooldown 모드 필드 ===")
+                                Log.d(TAG, "source: ${aiResponse.source}")
+
+                                aiResponse.cooldown?.let { cooldown ->
+                                    Log.d(TAG, "--- Cooldown Info ---")
+                                    Log.d(TAG, "active: ${cooldown.active}")
+                                    Log.d(TAG, "endsAt: ${cooldown.endsAt}")
+                                    Log.d(TAG, "secsLeft: ${cooldown.secsLeft}")
+                                } ?: Log.w(TAG, "⚠️ cooldown 모드인데 cooldown 정보가 null")
+                            }
+
+                            "emergency" -> {
+                                Log.d(TAG, "=== Emergency 모드 필드 ===")
+
+                                aiResponse.action?.let { action ->
+                                    Log.d(TAG, "--- Emergency Action ---")
+                                    Log.d(TAG, "type: ${action.type}")
+                                    Log.d(TAG, "cooldownMin: ${action.cooldownMin}")
+                                } ?: Log.w(TAG, "⚠️ emergency 모드인데 action이 null")
+
+                                aiResponse.safeTemplates?.let { templates ->
+                                    Log.d(TAG, "--- Safe Templates ---")
+                                    Log.d(TAG, "templates 개수: ${templates.size}")
+                                    templates.forEachIndexed { index, template ->
+                                        Log.d(TAG, "  Template[$index]: category=${template.category}, title=${template.title}")
+                                    }
+                                } ?: Log.d(TAG, "safeTemplates: null (emergency에서는 있을 수도 없을 수도)")
+                            }
+
+                            else -> {
+                                Log.w(TAG, "⚠️ 알 수 없는 모드에 대한 전체 필드 덤프:")
+                                Log.w(TAG, "reasons: ${aiResponse.reasons}")
+                                Log.w(TAG, "recommendation: ${aiResponse.recommendation}")
+                                Log.w(TAG, "newSession: ${aiResponse.newSession}")
+                                Log.w(TAG, "cooldownMin: ${aiResponse.cooldownMin}")
+                                Log.w(TAG, "source: ${aiResponse.source}")
+                                Log.w(TAG, "cooldown: ${aiResponse.cooldown}")
+                                Log.w(TAG, "action: ${aiResponse.action}")
+                                Log.w(TAG, "safeTemplates: ${aiResponse.safeTemplates}")
+                            }
+                        }
+
+                        // 편의 메서드 결과 로그
+                        Log.d(TAG, "=== 편의 메서드 결과 ===")
+                        Log.d(TAG, "isNormal(): ${aiResponse.isNormal()}")
+                        Log.d(TAG, "isRestrict(): ${aiResponse.isRestrict()}")
+                        Log.d(TAG, "isCooldown(): ${aiResponse.isCooldown()}")
+                        Log.d(TAG, "isEmergency(): ${aiResponse.isEmergency()}")
+                        Log.d(TAG, "hasAnomaly(): ${aiResponse.hasAnomaly()}")
+                        Log.d(TAG, "isHighRisk(): ${aiResponse.isHighRisk()}")
+                        Log.d(TAG, "isCriticalRisk(): ${aiResponse.isCriticalRisk()}")
+
+                        // 데이터 무결성 검증
+                        Log.d(TAG, "=== 데이터 무결성 검증 ===")
+                        validateAiResponseData(aiResponse)
+
+                        // AI 응답 처리
+                        Log.d(TAG, "AI 응답 처리 시작...")
+                        handleAiResponse(aiResponse)
+
+                        // 안드로이드 앱으로 데이터 전송
+                        Log.d(TAG, "안드로이드 앱으로 데이터 전송 시작...")
+                        sendAiResponseToAndroid(aiResponse, healthData)
+
+                    } else {
+                        Log.e(TAG, "응답 바디가 null입니다")
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            errorMessage = "서버 응답이 비어있습니다"
+                        )
+                    }
                 } else {
-                    Log.e("WearMainViewModel", "건강 데이터 전송 실패: ${response.code()}")
+                    val errorBody = response.errorBody()?.string()
+                    Log.e(TAG, "건강 데이터 전송 실패")
+                    Log.e(TAG, "응답 코드: ${response.code()}")
+                    Log.e(TAG, "에러 메시지: ${response.message()}")
+                    Log.e(TAG, "에러 바디: $errorBody")
+
                     _uiState.value = _uiState.value.copy(
-                        errorMessage = "건강 데이터 전송 실패: ${response.code()}"
+                        isLoading = false,
+                        errorMessage = "건강 데이터 전송 실패 (${response.code()}): ${response.message()}"
                     )
                 }
+
             } catch (e: Exception) {
-                Log.e("WearMainViewModel", "건강 데이터 전송 중 오류 발생", e)
+                Log.e(TAG, "=== 건강 데이터 전송 중 예외 발생 ===")
+                Log.e(TAG, "예외 타입: ${e.javaClass.simpleName}")
+                Log.e(TAG, "예외 메시지: ${e.message}")
+                Log.e(TAG, "예외 원인: ${e.cause}")
+
+                // 네트워크 관련 예외 상세 로그
+                when (e) {
+                    is java.net.SocketTimeoutException -> {
+                        Log.e(TAG, "소켓 타임아웃 - 네트워크 연결 확인 필요")
+                    }
+                    is java.net.ConnectException -> {
+                        Log.e(TAG, "연결 실패 - 서버 상태 확인 필요")
+                    }
+                    is java.net.UnknownHostException -> {
+                        Log.e(TAG, "호스트를 찾을 수 없음 - DNS 또는 인터넷 연결 확인")
+                    }
+                    is retrofit2.HttpException -> {
+                        Log.e(TAG, "HTTP 예외 - 응답 코드: ${e.code()}")
+                    }
+                    is com.google.gson.JsonSyntaxException -> {
+                        Log.e(TAG, "JSON 파싱 예외 - 응답 형식이 예상과 다름")
+                    }
+                    else -> {
+                        Log.e(TAG, "기타 예외")
+                    }
+                }
+
+                Log.e(TAG, "스택 트레이스:", e)
+
                 _uiState.value = _uiState.value.copy(
+                    isLoading = false,
                     errorMessage = "건강 데이터 전송 오류: ${e.message}"
                 )
             }
@@ -252,72 +449,301 @@ class WearMainViewModel @Inject constructor(
      * AI 응답에 따른 상황별 처리
      */
     private fun handleAiResponse(aiResponse: AiResponse) {
+        Log.d(TAG, "=== handleAiResponse 시작 ===")
+        Log.d(TAG, "처리할 모드: ${aiResponse.mode}")
+
         when {
             aiResponse.isNormal() -> {
-                Log.d(TAG, "정상 상태: ${aiResponse.riskLevel}")
+                Log.d(TAG, ">>> 정상 상태 처리 시작 <<<")
+                Log.d(TAG, "riskLevel: ${aiResponse.riskLevel}")
+                Log.d(TAG, "anomaly: ${aiResponse.anomaly}")
+
                 _uiState.value = _uiState.value.copy(
+                    isLoading = false,
                     healthStatus = "정상",
                     riskLevel = aiResponse.riskLevel ?: "low",
+                    recommendations = emptyList(),
+                    sessionId = null,
+                    cooldownMinutes = null,
+                    isInCooldown = false,
+                    cooldownSecsLeft = 0,
+                    cooldownEndsAt = null,
+                    isEmergency = false,
+                    emergencyAction = null,
+                    safeTemplates = emptyList(),
                     errorMessage = null
                 )
+                Log.d(TAG, "정상 상태 UI 업데이트 완료")
             }
 
             aiResponse.isRestrict() -> {
-                Log.d(TAG, "제한 모드: 추천 활동 제공")
+                Log.d(TAG, ">>> 제한 모드 처리 시작 <<<")
+                Log.d(TAG, "reasons: ${aiResponse.reasons}")
+                Log.d(TAG, "cooldownMin: ${aiResponse.cooldownMin}")
+                Log.d(TAG, "newSession: ${aiResponse.newSession}")
+
                 aiResponse.recommendation?.let { recommendation ->
-                    Log.d(TAG, "세션 ID: ${recommendation.sessionId}")
+                    Log.d(TAG, "추천 데이터 처리:")
+                    Log.d(TAG, "  세션 ID: ${recommendation.sessionId}")
+                    Log.d(TAG, "  추천 카테고리 수: ${recommendation.categories.size}")
+
                     recommendation.categories.forEach { category ->
-                        Log.d(TAG, "추천: ${category.category} (순위: ${category.rank})")
+                        Log.d(TAG, "  추천 활동: ${category.category} (순위: ${category.rank}, 이유: ${category.reason})")
                     }
 
                     _uiState.value = _uiState.value.copy(
+                        isLoading = false,
                         healthStatus = "주의 필요",
                         riskLevel = aiResponse.riskLevel ?: "high",
                         recommendations = recommendation.categories,
                         sessionId = recommendation.sessionId,
                         cooldownMinutes = aiResponse.cooldownMin,
+                        isInCooldown = false,
+                        isEmergency = false,
+                        emergencyAction = null,
                         errorMessage = null
+                    )
+                    Log.d(TAG, "제한 모드 UI 업데이트 완료")
+
+                } ?: run {
+                    Log.w(TAG, "제한 모드인데 recommendation이 null입니다")
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        errorMessage = "추천 데이터를 받지 못했습니다"
                     )
                 }
             }
 
             aiResponse.isCooldown() -> {
-                Log.d(TAG, "쿨다운 모드")
+                Log.d(TAG, ">>> 쿨다운 모드 처리 시작 <<<")
+                Log.d(TAG, "source: ${aiResponse.source}")
+
                 aiResponse.cooldown?.let { cooldown ->
-                    Log.d(TAG, "쿨다운 남은 시간: ${cooldown.secsLeft}초")
+                    Log.d(TAG, "쿨다운 정보:")
+                    Log.d(TAG, "  활성 상태: ${cooldown.active}")
+                    Log.d(TAG, "  종료 시간: ${cooldown.endsAt}")
+                    Log.d(TAG, "  남은 시간(초): ${cooldown.secsLeft}")
+
                     _uiState.value = _uiState.value.copy(
+                        isLoading = false,
                         healthStatus = "쿨다운 중",
                         riskLevel = aiResponse.riskLevel ?: "high",
                         isInCooldown = true,
                         cooldownSecsLeft = cooldown.secsLeft,
                         cooldownEndsAt = cooldown.endsAt,
+                        isEmergency = false,
+                        recommendations = emptyList(),
                         errorMessage = null
+                    )
+                    Log.d(TAG, "쿨다운 모드 UI 업데이트 완료")
+
+                } ?: run {
+                    Log.w(TAG, "쿨다운 모드인데 cooldown 정보가 null입니다")
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        errorMessage = "쿨다운 정보를 받지 못했습니다"
                     )
                 }
             }
 
             aiResponse.isEmergency() -> {
-                Log.e(TAG, "응급 상황 발생!")
+                Log.e(TAG, ">>> 응급 상황 처리 시작 <<<")
+                Log.e(TAG, "riskLevel: ${aiResponse.riskLevel}")
+
                 aiResponse.action?.let { action ->
-                    Log.e(TAG, "응급 액션: ${action.type}")
+                    Log.e(TAG, "응급 액션 정보:")
+                    Log.e(TAG, "  타입: ${action.type}")
+                    Log.e(TAG, "  쿨다운 시간: ${action.cooldownMin}분")
+                } ?: Log.w(TAG, "응급 상황인데 action이 null입니다")
+
+                val templates = aiResponse.safeTemplates ?: emptyList()
+                Log.d(TAG, "안전 템플릿 수: ${templates.size}")
+                templates.forEach { template ->
+                    Log.d(TAG, "  템플릿: ${template.category} - ${template.title}")
                 }
 
                 _uiState.value = _uiState.value.copy(
+                    isLoading = false,
                     healthStatus = "응급 상황",
                     riskLevel = aiResponse.riskLevel ?: "critical",
                     isEmergency = true,
                     emergencyAction = aiResponse.action,
-                    safeTemplates = aiResponse.safeTemplates ?: emptyList(),
+                    safeTemplates = templates,
+                    isInCooldown = false,
+                    recommendations = emptyList(),
                     errorMessage = null
                 )
-
+                Log.e(TAG, "응급 상황 UI 업데이트 완료")
             }
 
             else -> {
+                Log.w(TAG, ">>> 알 수 없는 모드 처리 <<<")
                 Log.w(TAG, "알 수 없는 모드: ${aiResponse.mode}")
+                Log.w(TAG, "전체 응답: $aiResponse")
+
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    errorMessage = "알 수 없는 응답 모드: ${aiResponse.mode}"
+                )
+            }
+        }
+
+        Log.d(TAG, "=== handleAiResponse 완료 ===")
+        Log.d(TAG, "최종 UI 상태:")
+        Log.d(TAG, "  healthStatus: ${_uiState.value.healthStatus}")
+        Log.d(TAG, "  riskLevel: ${_uiState.value.riskLevel}")
+        Log.d(TAG, "  isLoading: ${_uiState.value.isLoading}")
+        Log.d(TAG, "  isEmergency: ${_uiState.value.isEmergency}")
+        Log.d(TAG, "  isInCooldown: ${_uiState.value.isInCooldown}")
+    }
+
+    /**
+     * AI 응답 데이터의 무결성을 검증하는 함수
+     */
+    private fun validateAiResponseData(aiResponse: AiResponse) {
+        val issues = mutableListOf<String>()
+
+        // 기본 필드 검증
+        if (aiResponse.mode.isBlank()) {
+            issues.add("mode 필드가 비어있음")
+        }
+
+        // 모드별 필수 필드 검증
+        when (aiResponse.mode) {
+            "restrict" -> {
+                if (aiResponse.recommendation == null) {
+                    issues.add("restrict 모드인데 recommendation이 null")
+                } else {
+                    if (aiResponse.recommendation.sessionId.isBlank()) {
+                        issues.add("sessionId가 비어있음")
+                    }
+                    if (aiResponse.recommendation.categories.isEmpty()) {
+                        issues.add("추천 카테고리가 비어있음")
+                    }
+                }
+                if (aiResponse.cooldownMin == null || aiResponse.cooldownMin <= 0) {
+                    issues.add("restrict 모드인데 cooldownMin이 유효하지 않음: ${aiResponse.cooldownMin}")
+                }
+            }
+
+            "cooldown" -> {
+                if (aiResponse.cooldown == null) {
+                    issues.add("cooldown 모드인데 cooldown 정보가 null")
+                } else {
+                    if (aiResponse.cooldown.secsLeft <= 0) {
+                        issues.add("쿨다운 남은 시간이 0 이하: ${aiResponse.cooldown.secsLeft}")
+                    }
+                    if (aiResponse.cooldown.endsAt.isBlank()) {
+                        issues.add("쿨다운 종료 시간이 비어있음")
+                    }
+                }
+                if (aiResponse.source.isNullOrBlank()) {
+                    issues.add("cooldown 모드인데 source가 비어있음")
+                }
+            }
+
+            "emergency" -> {
+                if (aiResponse.action == null) {
+                    issues.add("emergency 모드인데 action이 null")
+                } else {
+                    if (aiResponse.action.type.isBlank()) {
+                        issues.add("emergency action type이 비어있음")
+                    }
+                }
+                if (aiResponse.riskLevel != "critical") {
+                    issues.add("emergency 모드인데 riskLevel이 critical이 아님: ${aiResponse.riskLevel}")
+                }
+            }
+
+            "normal" -> {
+                // normal 모드는 기본 필드만 있으면 됨
+                if (aiResponse.anomaly == true) {
+                    issues.add("normal 모드인데 anomaly가 true")
+                }
+            }
+        }
+
+        // 검증 결과 로그
+        if (issues.isEmpty()) {
+            Log.d(TAG, "✅ 데이터 검증 통과")
+        } else {
+            Log.w(TAG, "⚠️ 데이터 검증 실패:")
+            issues.forEach { issue ->
+                Log.w(TAG, "  - $issue")
             }
         }
     }
+
+    /**
+     * AI 응답에 따른 상황별 처리
+     */
+//    private fun handleAiResponse(aiResponse: AiResponse) {
+//        when {
+//            aiResponse.isNormal() -> {
+//                Log.d(TAG, "정상 상태: ${aiResponse.riskLevel}")
+//                _uiState.value = _uiState.value.copy(
+//                    healthStatus = "정상",
+//                    riskLevel = aiResponse.riskLevel ?: "low",
+//                    errorMessage = null
+//                )
+//            }
+//
+//            aiResponse.isRestrict() -> {
+//                Log.d(TAG, "제한 모드: 추천 활동 제공")
+//                aiResponse.recommendation?.let { recommendation ->
+//                    Log.d(TAG, "세션 ID: ${recommendation.sessionId}")
+//                    recommendation.categories.forEach { category ->
+//                        Log.d(TAG, "추천: ${category.category} (순위: ${category.rank})")
+//                    }
+//
+//                    _uiState.value = _uiState.value.copy(
+//                        healthStatus = "주의 필요",
+//                        riskLevel = aiResponse.riskLevel ?: "high",
+//                        recommendations = recommendation.categories,
+//                        sessionId = recommendation.sessionId,
+//                        cooldownMinutes = aiResponse.cooldownMin,
+//                        errorMessage = null
+//                    )
+//                }
+//            }
+//
+//            aiResponse.isCooldown() -> {
+//                Log.d(TAG, "쿨다운 모드")
+//                aiResponse.cooldown?.let { cooldown ->
+//                    Log.d(TAG, "쿨다운 남은 시간: ${cooldown.secsLeft}초")
+//                    _uiState.value = _uiState.value.copy(
+//                        healthStatus = "쿨다운 중",
+//                        riskLevel = aiResponse.riskLevel ?: "high",
+//                        isInCooldown = true,
+//                        cooldownSecsLeft = cooldown.secsLeft,
+//                        cooldownEndsAt = cooldown.endsAt,
+//                        errorMessage = null
+//                    )
+//                }
+//            }
+//
+//            aiResponse.isEmergency() -> {
+//                Log.e(TAG, "응급 상황 발생!")
+//                aiResponse.action?.let { action ->
+//                    Log.e(TAG, "응급 액션: ${action.type}")
+//                }
+//
+//                _uiState.value = _uiState.value.copy(
+//                    healthStatus = "응급 상황",
+//                    riskLevel = aiResponse.riskLevel ?: "critical",
+//                    isEmergency = true,
+//                    emergencyAction = aiResponse.action,
+//                    safeTemplates = aiResponse.safeTemplates ?: emptyList(),
+//                    errorMessage = null
+//                )
+//
+//            }
+//
+//            else -> {
+//                Log.w(TAG, "알 수 없는 모드: ${aiResponse.mode}")
+//            }
+//        }
+//    }
 
 
     /**

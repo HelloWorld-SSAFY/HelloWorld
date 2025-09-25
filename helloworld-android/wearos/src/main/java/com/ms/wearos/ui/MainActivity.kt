@@ -653,6 +653,12 @@ class MainActivity : ComponentActivity() {
                     lifecycleScope.launch {
                         if (recordFetalMovement(viewModel)) {
                             fetalMovementCount++
+                            // 성공 시 토스트 메시지 표시
+                            Toast.makeText(
+                                this@MainActivity,
+                                "태동이 기록되었습니다",
+                                Toast.LENGTH_SHORT
+                            ).show()
                         }
                     }
                 },
