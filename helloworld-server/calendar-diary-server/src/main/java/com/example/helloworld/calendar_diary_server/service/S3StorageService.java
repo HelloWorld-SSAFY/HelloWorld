@@ -87,6 +87,42 @@ public class S3StorageService {
         if (name == null || !name.contains(".")) return "bin";
         return name.substring(name.lastIndexOf('.') + 1);
     }
+
+    // service/S3StorageService.java  (추가 메소드)
+    public UploadResult uploadBytes(String categoryKey, String filename, String contentType, byte[] bytes) {
+        String prefix = cfg.getPath().getOrDefault(categoryKey, categoryKey);
+        String ext = ext(filename);
+        String key = "%s/%s/%s.%s".formatted(prefix, LocalDate.now(), UUID.randomUUID(), ext);
+
+        PutObjectRequest put = PutObjectRequest.builder()
+                .bucket(cfg.getBucket())
+                .key(key)
+                .contentType(contentType != null ? contentType : "application/octet-stream")
+                .contentDisposition("inline")
+                .build();
+
+        s3.putObject(put, RequestBody.fromBytes(bytes));
+
+        var getReq = GetObjectRequest.builder()
+                .bucket(cfg.getBucket())
+                .key(key)
+                .responseContentType(contentType)
+                .responseContentDisposition("inline")
+                .build();
+
+        var pre = presigner.presignGetObject(b -> b
+                .signatureDuration(Duration.ofMinutes(10))
+                .getObjectRequest(getReq));
+
+        return new UploadResult(key, pre.url().toString());
+    }
+
+    public byte[] download(String key) throws IOException {
+        var obj = s3.getObject(GetObjectRequest.builder()
+                .bucket(cfg.getBucket()).key(key).build());
+        return obj.readAllBytes();
+    }
+
 }
 
 

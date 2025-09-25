@@ -285,4 +285,8 @@ public class DiaryService {
         };
     }
 
+    public String presignImage(String key) {
+        return presignGet(key);   // 기존 로직 재사용
+    }
+
 }
