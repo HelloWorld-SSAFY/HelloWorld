@@ -321,11 +321,11 @@ enum class StressLevel(
     val color: Color,
     val range: IntRange
 ) {
-    LOW("낮음", Color(0xFF4CAF50), 0..60),
-    STABLE("안정", Color(0xFF2196F3), 61..100),
-    MEDIUM("보통", Color(0xFFFF9800), 101..140),
-    HIGH("높음", Color(0xFFFF5722), 141..180),
-    VERY_HIGH("매우 높음", Color(0xFFF44336), 181..Int.MAX_VALUE); // 181 이상은 모두 매우 높음
+    LOW("낮음", Color(0xFF4CAF50), 0..20),
+    STABLE("안정", Color(0xFF2196F3), 21..40),
+    MEDIUM("보통", Color(0xFFFF9800), 41..60),
+    HIGH("높음", Color(0xFFFF5722), 61..80),
+    VERY_HIGH("매우 높음", Color(0xFFF44336), 81..Int.MAX_VALUE); // 81 이상은 모두 매우 높음
 
     companion object {
         fun fromScore(score: Int): StressLevel {

@@ -93,10 +93,10 @@ fun WearableRecommendedScreen(
             HealthMetricsSection(viewModel = wearableViewModel)
 
             // 음악 추천 섹션
-            MusicRecommendationSection()
+            MusicRecommendationSection(navController = navController)
 
             // 명상 추천 섹션
-            MeditationRecommendationSection()
+            MeditationRecommendationSection(navController = navController)
 
             // 요가 추천 섹션
             YogaRecommendationSection()
@@ -347,7 +347,9 @@ fun CircularProgressChart(
 }
 
 @Composable
-fun MusicRecommendationSection() {
+fun MusicRecommendationSection(
+    navController: NavHostController
+) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -360,7 +362,9 @@ fun MusicRecommendationSection() {
             modifier = Modifier.padding(20.dp)
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().clickable {
+                    navController.navigate(Screen.MusicScreen.route)
+                },
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
@@ -383,7 +387,7 @@ fun MusicRecommendationSection() {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { },
+                    .clickable { navController.navigate(Screen.MusicScreen.route)},
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -404,7 +408,7 @@ fun MusicRecommendationSection() {
 }
 
 @Composable
-fun MeditationRecommendationSection() {
+fun MeditationRecommendationSection(navController: NavHostController) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -417,7 +421,7 @@ fun MeditationRecommendationSection() {
             modifier = Modifier.padding(20.dp)
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().clickable { navController.navigate(Screen.MeditationScreen.route) },
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
@@ -440,7 +444,7 @@ fun MeditationRecommendationSection() {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { },
+                    .clickable { navController.navigate(Screen.MeditationScreen.route) },
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {

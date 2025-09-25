@@ -10,6 +10,7 @@ import com.ms.helloworld.network.api.DiaryApi
 import com.ms.helloworld.network.api.FcmApi
 import com.ms.helloworld.network.api.HealthApi
 import com.ms.helloworld.network.api.UserApi
+import com.ms.helloworld.network.api.WearApi
 import com.ms.helloworld.network.api.WeeklyApi
 import com.ms.helloworld.util.LocationManager
 import dagger.Module
@@ -123,6 +124,12 @@ object NetworkModule {
     @Singleton
     fun provideWeeklyApi(retrofit: Retrofit): WeeklyApi {
         return retrofit.create(WeeklyApi::class.java)
+    }
+
+    @Provides
+    @Singleton
+    fun provideWearApi(retrofit: Retrofit): WearApi {
+        return retrofit.create(WearApi::class.java)
     }
 
 }
