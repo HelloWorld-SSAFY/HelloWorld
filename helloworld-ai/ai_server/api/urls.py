@@ -33,6 +33,7 @@ from .views_main_bridge import (
     PullStepsBaselineView,
 )
 from .views_debug_baseline import BaselineProbeView
+from .views_debug_effective import BaselineEffectiveView
 
 # 선택: reverse 네임스페이스용
 app_name = "api"
@@ -87,4 +88,6 @@ urlpatterns = [
     path("debug/whoami",       whoami,          name="whoami"),
     path("debug/app-token",    app_token_probe, name="app-token-probe"),
     path("debug/baseline", BaselineProbeView.as_view(), name="debug-baseline"),
+    path("debug/baseline/effective", BaselineEffectiveView.as_view(), name="debug-baseline-effective"),
+
 ]
