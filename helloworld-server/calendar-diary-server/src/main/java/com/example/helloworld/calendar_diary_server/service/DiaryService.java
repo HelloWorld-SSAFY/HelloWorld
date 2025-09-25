@@ -14,7 +14,10 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
@@ -26,8 +29,14 @@ import java.util.NoSuchElementException;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class DiaryService {
+
+    // DiaryService 안쪽(클래스 내부)에 정의
+    public static record ImageItem(String key, boolean isUltrasound) {}
+
     private final DiaryRepository diaryRepository;
     private final DiaryPhotoRepository diaryPhotoRepository;
+    private final S3Presigner presigner;
+    private final com.example.helloworld.calendar_diary_server.config.S3Config s3cfg;
 
     @Value("${app.zone:Asia/Seoul}")
     private String appZone;
@@ -87,12 +96,13 @@ public class DiaryService {
                 .map(d -> {
                     String cover = diaryPhotoRepository
                             .findFirstByDiary_DiaryIdOrderByDiaryPhotoIdAsc(d.getDiaryId())
-                            .map(DiaryPhoto::getImageUrl).orElse(null);
+                            .map(DiaryPhoto::getImageKey).orElse(null);
+                    String coverUrl = presignGet(cover);
                     return DiaryListItemDto.builder()
                             .diaryId(String.valueOf(d.getDiaryId()))
                             .createdAt(DAY.format(d.getCreatedAt().withZoneSameInstant(ZONE).toLocalDate()))
                             .diaryTitle(d.getDiaryTitle())
-                            .imageUrl(cover)
+                            .imageUrl(coverUrl)
                             .authorId(String.valueOf(d.getAuthorId()))
                             .authorRole(d.getAuthorRole().name().toLowerCase())
                             .build();
@@ -107,15 +117,16 @@ public class DiaryService {
         // 대표 이미지(첫 장)
         String cover = diaryPhotoRepository
                 .findFirstByDiary_DiaryIdOrderByDiaryPhotoIdAsc(diaryId)
-                .map(DiaryPhoto::getImageUrl)
+                .map(DiaryPhoto::getImageKey)
                 .orElse(null);
+        String coverUrl = presignGet(cover);
 
         // 전체 이미지
         List<DiaryDetailPhotoDto> images = diaryPhotoRepository
                 .findAllByDiary_DiaryIdOrderByDiaryPhotoIdAsc(diaryId)
                 .stream()
                 .map(p -> DiaryDetailPhotoDto.builder()
-                        .imageUrl(p.getImageUrl())
+                        .imageUrl(presignGet(p.getImageKey()))
                         .isUltrasound(p.isUltrasound())
                         .build())
                 .toList();
@@ -124,7 +135,7 @@ public class DiaryService {
                 .createdAt(DAY.format(d.getCreatedAt().withZoneSameInstant(ZONE).toLocalDate()))
                 .diaryTitle(d.getDiaryTitle())
                 .diaryContent(d.getDiaryContent())
-                .imageUrl(cover)      // 호환성 위해 유지
+                .imageUrl(coverUrl)      // 호환성 위해 유지
                 .images(images)       // 신규: 전체 이미지
                 .authorId(String.valueOf(d.getAuthorId()))
                 .authorRole(d.getAuthorRole().name().toLowerCase())
@@ -149,16 +160,6 @@ public class DiaryService {
                 .build();
 
         diaryRepository.save(diary);
-
-        // 이미지 처리 로직
-        if (StringUtils.hasText(req.getImageUrl())) {
-            DiaryPhoto photo = DiaryPhoto.builder()
-                    .diary(diary)
-                    .imageUrl(req.getImageUrl())
-                    .isUltrasound(false)
-                    .build();
-            diaryPhotoRepository.save(photo);
-        }
         return diary.getDiaryId();
     }
 
@@ -177,7 +178,7 @@ public class DiaryService {
             diaryPhotoRepository.deleteByDiary_DiaryId(diaryId);
             if (!req.getImageUrl().isBlank()) {
                 diaryPhotoRepository.save(DiaryPhoto.builder()
-                        .diary(d).imageUrl(req.getImageUrl()).isUltrasound(false).build());
+                        .diary(d).imageKey(req.getImageUrl()).isUltrasound(false).build());
             }
         }
     }
@@ -198,9 +199,60 @@ public class DiaryService {
                 .stream()
                 .map(p -> DiaryPhotoDto.builder()
                         .diaryId(p.getDiary().getDiaryId())
-                        .imageUrl(p.getImageUrl())
+                        .imageUrl(presignGet(p.getImageKey()))
                         .isUltrasound(p.isUltrasound())
                         .build())
                 .toList();
+    }
+
+
+
+    // --- 단일 대표 이미지 교체(호환용) ---
+    @Transactional
+    public void updateImage(Long diaryId, Long coupleId, String imageKey) {
+        if (imageKey == null || imageKey.isBlank()) {
+            replaceImages(diaryId, coupleId, List.of()); // 전체 삭제
+            return;
+        }
+        replaceImages(diaryId, coupleId, List.of(new ImageItem(imageKey.trim(), false)));
+    }
+
+    // --- 여러 장 덮어쓰기(통째로 교체) : 권장 시그니처 ---
+    @Transactional
+    public void replaceImages(Long diaryId, Long coupleId, List<ImageItem> images) {
+        var diary = diaryRepository.findByDiaryIdAndCoupleId(diaryId, coupleId)
+                .orElseThrow(() -> new IllegalArgumentException("일기 없음 또는 권한 없음"));
+
+        // 1) 기존 전부 삭제
+        diaryPhotoRepository.deleteByDiary_DiaryId(diaryId);
+
+        // 2) 새로 삽입
+        if (images == null || images.isEmpty()) return;
+
+        images.stream()
+                .filter(it -> it != null && it.key() != null && !it.key().isBlank())
+                .map(it -> new ImageItem(it.key().trim(), it.isUltrasound()))
+                .distinct() // key 중복 방지
+                .forEach(it -> diaryPhotoRepository.save(
+                        DiaryPhoto.builder()
+                                .diary(diary)
+                                .imageKey(it.key())
+                                .isUltrasound(it.isUltrasound())
+                                .build()
+                ));
+    }
+
+
+
+    private String presignGet(String key) {
+        if (key == null || key.isBlank()) return null;
+        var get = GetObjectRequest.builder()
+                .bucket(s3cfg.getBucket())
+                .key(key)
+                .build();
+        return presigner.presignGetObject(b -> b
+                .signatureDuration(Duration.ofMinutes(10))
+                .getObjectRequest(get)
+        ).url().toString();
     }
 }

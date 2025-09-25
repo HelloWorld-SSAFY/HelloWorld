@@ -19,7 +19,7 @@ public class CreateDiaryRequest {
     private String entryDate;   // "yyyy-MM-dd"
     @NotBlank private String diaryTitle;
     @NotBlank private String diaryContent;
-    private String imageUrl;              // null 허용
+//    private String imageUrl;              // null 허용
 
     // 인증 컨텍스트에서 채운다고 해도, 여기선 명시
 

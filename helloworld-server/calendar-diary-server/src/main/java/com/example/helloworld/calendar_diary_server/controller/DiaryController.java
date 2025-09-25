@@ -6,6 +6,7 @@ import com.example.helloworld.calendar_diary_server.dto.*;
 import com.example.helloworld.calendar_diary_server.entity.Diary;
 import com.example.helloworld.calendar_diary_server.repository.DiaryRepository;
 import com.example.helloworld.calendar_diary_server.service.DiaryService;
+import com.example.helloworld.calendar_diary_server.service.S3StorageService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -19,12 +20,15 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.time.LocalDate;
 import java.time.ZonedDateTime;
 import java.util.List;
@@ -38,7 +42,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class DiaryController {
     private final DiaryService diaryApiService;
-
+    private final S3StorageService s3StorageService;
 
     @Value("${app.zone:Asia/Seoul}")
     private String appZone; //
@@ -99,21 +103,52 @@ public class DiaryController {
     }
 
     /** 6.3 일기 작성 */
-    @Operation(summary = "일기 작성",
-           description = "새로운 일정을 생성합니다. 인증된 사용자의 토큰을 기반으로 coupleId와 writerId가 자동으로 설정됩니다."
-            )
-    @PostMapping
-    //  Controller로부터 신뢰할 수 있는 정보를 받도록 시그니처 변경
-    public ResponseEntity<Map<String, String>> create(
-            @Valid @RequestBody CreateDiaryRequest req,
-           @AuthenticationPrincipal UserPrincipal userPrincipal
-    ) {
+    @Operation(
+            summary = "일기 작성(이미지 여러 장 포함 가능)",
+            description = "payload(JSON) + files(이미지 배열) + ultrasounds(이미지별 초음파 여부)를 multipart로 받아 처리합니다."
+    )
+    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<Map<String, Object>> create(
+            @RequestPart("payload") @Valid CreateDiaryRequest req,
+            @RequestPart(value = "files", required = false) List<MultipartFile> files,            // 여러 장
+            @RequestPart(value = "ultrasounds", required = false) List<Boolean> ultrasounds,      // 각 파일과 인덱스 매칭
+            @AuthenticationPrincipal UserPrincipal userPrincipal
+    ) throws IOException {
         Long coupleId = getCoupleIdFromPrincipal(userPrincipal);
-        // 서비스에 신뢰할 수 있는 인증 정보(coupleId, userId, role)를 함께 전달
-        // 서비스에 신뢰할 수 있는 인증 정보(coupleId, userId, role)를 함께 전달
-        Long newDiaryId = diaryApiService.create(req, coupleId, userPrincipal.getUserId(), userPrincipal.getAuthorRole());
-        return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("diaryId", String.valueOf(newDiaryId)));
+
+        // 1) 일기 먼저 생성
+        Long diaryId = diaryApiService.create(req, coupleId, userPrincipal.getUserId(), userPrincipal.getAuthorRole());
+
+        // 2) 이미지 없으면 종료
+        if (files == null || files.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("diaryId", diaryId));
+        }
+
+        // 3) 업로드 → ImageItem 목록 만들어 서비스에 통째로 교체 요청
+        List<DiaryService.ImageItem> items = new java.util.ArrayList<>();
+        for (int i = 0; i < files.size(); i++) {
+            MultipartFile file = files.get(i);
+            boolean isUS = (ultrasounds != null && i < ultrasounds.size() && Boolean.TRUE.equals(ultrasounds.get(i)));
+            String category = isUS ? "ultrasounds" : "snapshots";        // 🔸 yaml의 path 매핑 사용
+            var up = s3StorageService.upload(category, file);            // { key, url(10분) }
+            items.add(new DiaryService.ImageItem(up.key(), isUS));
+        }
+
+        diaryApiService.replaceImages(diaryId, coupleId, items);
+
+        // 필요시 첫 장 미리보기 URL 반환
+        String firstPreview = s3StorageService
+                .upload("snapshots", files.get(0))  // (이미 업로드했는데 또 올릴 필요는 없지만, 예시로 남김)
+                .url();                              // ← 실제로는 위 loop에서 만든 첫 up.url()을 보관해서 쓰세요.
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
+                "diaryId", diaryId,
+                "count", items.size()
+                // "previewUrl", firstPreview  // 원하면 포함
+        ));
     }
+
+
 
     /** 6.4 일기 수정(이미지까지 수정) */
     @Operation(summary = "일기 수정(이미지까지 수정)",
