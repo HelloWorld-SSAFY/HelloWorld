@@ -106,54 +106,35 @@ public class DiaryController {
     }
 
     /** 6.3 일기 작성 */
-    @Operation(
-            summary = "일기 작성(이미지 여러 장 포함 가능)",
-            description = "req(JSON) + files(이미지 배열) + ultrasounds(이미지별 초음파 여부) multipart 처리"
-    )
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<Map<String, Object>> create(
-            // ★ 여기: 문자열로 받고 직접 파싱
-            @RequestPart("req") String reqJson,
-
-            @RequestPart(value = "files", required = false)
-            List<MultipartFile> files,
-
-            @RequestPart(value = "ultrasounds", required = false)
-            List<Boolean> ultrasounds,
-
+            @RequestParam("req") String reqJson,        // ★ 폼필드로 받기
+            @RequestPart(value = "files", required = false) List<MultipartFile> files,
+            @RequestPart(value = "ultrasounds", required = false) List<Boolean> ultrasounds,
             @AuthenticationPrincipal UserPrincipal userPrincipal
     ) throws IOException {
-        // 0) JSON 파싱
         CreateDiaryRequest req = objectMapper.readValue(reqJson, CreateDiaryRequest.class);
-
         Long coupleId = getCoupleIdFromPrincipal(userPrincipal);
 
-        // 1) 일기 먼저 생성
-        Long diaryId = diaryApiService.create(
-                req, coupleId, userPrincipal.getUserId(), userPrincipal.getAuthorRole()
-        );
+        Long diaryId = diaryApiService.create(req, coupleId, userPrincipal.getUserId(), userPrincipal.getAuthorRole());
 
-        // 2) 이미지 없으면 종료
         if (files == null || files.isEmpty()) {
             return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("diaryId", diaryId));
         }
 
-        // 3) 업로드 → ImageItem 목록 만들어 서비스에 통째로 교체
         var items = new java.util.ArrayList<DiaryService.ImageItem>();
         for (int i = 0; i < files.size(); i++) {
-            MultipartFile file = files.get(i);
+            var file = files.get(i);
             boolean isUS = ultrasounds != null && i < ultrasounds.size() && Boolean.TRUE.equals(ultrasounds.get(i));
-            String category = isUS ? "ultrasounds" : "snapshots"; // app.s3.path 매핑 사용
-            var up = s3StorageService.upload(category, file);     // {key, url(10분)}
+            String category = isUS ? "ultrasounds" : "snapshots";
+            var up = s3StorageService.upload(category, file);
             items.add(new DiaryService.ImageItem(up.key(), isUS));
         }
         diaryApiService.replaceImages(diaryId, coupleId, items);
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
-                "diaryId", diaryId,
-                "count", items.size()
-        ));
+        return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("diaryId", diaryId, "count", items.size()));
     }
+
 
 
 
