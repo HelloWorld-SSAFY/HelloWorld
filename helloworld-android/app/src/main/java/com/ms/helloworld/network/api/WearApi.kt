@@ -2,6 +2,7 @@ package com.ms.helloworld.network.api
 
 import com.ms.helloworld.dto.response.MeditationResponse
 import com.ms.helloworld.dto.response.MusicResponse
+import com.ms.helloworld.dto.response.OutingResponse
 import com.ms.helloworld.dto.response.YogaResponse
 import retrofit2.http.GET
 import retrofit2.http.Header
@@ -21,4 +22,9 @@ interface WearApi {
     suspend fun getMusicRecommendations(
         @Header("X-App-Token") appToken: String
     ): MusicResponse
+
+    @GET("/ai/v1/delivery/outing")
+    suspend fun getOutingRecommendations(
+        @Header("X-App-Token") appToken: String
+    ): OutingResponse
 }

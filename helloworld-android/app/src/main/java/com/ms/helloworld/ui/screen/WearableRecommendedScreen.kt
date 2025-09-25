@@ -102,7 +102,7 @@ fun WearableRecommendedScreen(
             YogaRecommendationSection(navController = navController)
 
             // 나들이 추천 섹션
-            OutdoorRecommendationSection()
+            OutdoorRecommendationSection(navController = navController)
 
             // 태동/진통 기록 섹션
             RecordSection(
@@ -480,7 +480,7 @@ fun YogaRecommendationSection(
             modifier = Modifier.padding(20.dp)
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().clickable { navController.navigate(Screen.YogaScreen.route) },
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
@@ -524,7 +524,7 @@ fun YogaRecommendationSection(
 }
 
 @Composable
-fun OutdoorRecommendationSection() {
+fun OutdoorRecommendationSection(navController : NavHostController) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -537,7 +537,7 @@ fun OutdoorRecommendationSection() {
             modifier = Modifier.padding(20.dp)
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().clickable {navController.navigate(Screen.OutingScreen.route) },
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
@@ -560,7 +560,7 @@ fun OutdoorRecommendationSection() {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { },
+                    .clickable {navController.navigate(Screen.OutingScreen.route) },
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
