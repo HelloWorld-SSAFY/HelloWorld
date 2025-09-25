@@ -70,6 +70,7 @@ dependencies {
     implementation 'com.fasterxml.jackson.core:jackson-databind'
 }
 
+
 dependencyManagement {
     imports {
         mavenBom "org.springframework.cloud:spring-cloud-dependencies:${springCloudVersion}"

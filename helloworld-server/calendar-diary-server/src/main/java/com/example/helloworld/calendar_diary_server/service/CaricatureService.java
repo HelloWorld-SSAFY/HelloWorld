@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 
+@Service
 // service/CaricatureService.java (핵심 부분만)
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
