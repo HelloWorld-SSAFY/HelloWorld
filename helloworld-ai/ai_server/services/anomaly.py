@@ -1,3 +1,4 @@
+# services/anomaly.py
 from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta, date
@@ -211,15 +212,19 @@ class AnomalyDetector:
             try:
                 s = float(stress)
             except Exception:
-                pass
+                s = None
 
             stats_s = self.stats.get_bucket_stats(user_ref, as_of, "stress", bucket)
             mu_s, sd_s = (stats_s or (None, None))
 
-            # 🔧 스케일 자동 정합:
-            # 기준선(μ,σ)이 0~1대인데 입력이 0~100이면 /100 해 정렬
-            if (mu_s is not None and sd_s is not None and mu_s <= 1.0 and sd_s <= 1.0 and s is not None and s > 1.5):
-                s = s / 100.0
+            # 🔧 스케일 자동 정합(양방향)
+            # μ/σ가 0~1대인데 s가 1.5 이상이면 → 0~100 입력으로 판단 → /100
+            # μ/σ가 5 이상(대략 10~100 스케일)인데 s가 1.5 이하이면 → 0~1 입력으로 판단 → ×100
+            if (mu_s is not None and sd_s is not None and s is not None):
+                if (mu_s <= 1.5 and sd_s <= 1.5 and s > 1.5):
+                    s = s / 100.0
+                elif (s <= 1.5 and (mu_s >= 5.0 or sd_s >= 5.0)):
+                    s = s * 100.0
 
             if s is not None:
                 stress_z = self._z(s, mu_s, sd_s)
