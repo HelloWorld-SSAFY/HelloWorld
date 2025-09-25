@@ -33,7 +33,7 @@ public class GmsDalleClient implements GmsImageGenClient {
                 .baseUrl(baseUrl)
                 .defaultHeader("Authorization", "Bearer " + apiKey)
                 .defaultHeader("Accept", "application/json")
-//                .defaultHeader("Host", "api.openai.com")
+                .defaultHeader("Host", "api.openai.com")
                 .build();
     }
 
@@ -44,11 +44,11 @@ public class GmsDalleClient implements GmsImageGenClient {
 
     public byte[] generateCaricatureWithPrompt(String prompt) {
         Map<String, Object> payload = Map.of(
-                "model", model,
+                "model", model,                 // dall-e-3 또는 gpt-image-1
                 "prompt", prompt,
                 "size", size,
-                "n", 1,                          // 한 장만 생성
-                "response_format", "b64_json"    // 바디로 base64 받기
+                "n", 1,
+                "response_format", "b64_json"
         );
 
         try {
@@ -65,11 +65,12 @@ public class GmsDalleClient implements GmsImageGenClient {
             return Base64.getDecoder().decode(resp.data.get(0).b64);
 
         } catch (RestClientResponseException e) {
-            // 원인 추적 좋게 응답 전문 노출
-            String body = e.getMessage();
-            throw new IllegalStateException("GMS error: " + body, e);
+            // ⬇️ 원문 바디를 그대로 남겨야 원인 파악 가능
+            String body = e.getResponseBodyAsString();
+            throw new IllegalStateException("GMS/OpenAI 4xx/5xx. status=" + e.getStatusCode() + " body=" + body, e);
         }
     }
+
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     static class GmsResponse { public List<Item> data; }
