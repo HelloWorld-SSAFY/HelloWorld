@@ -1,4 +1,3 @@
-# services/anomaly.py
 from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta, date
@@ -45,15 +44,13 @@ class AnomalyConfig:
     z_restrict: float = 2.5
     z_emergency: float = 5.0
 
-    # HR 절대값 임계(Restrict 용, 지속 30초)
+    # HR 절대값 임계(Restrict 전용, 연속 3틱)
     hr_inst_restrict_high: int = 150
     hr_inst_restrict_low:  int = 45
 
-    # 지속 시간(초)
-    restrict_window_sec: int = 30  # ← 요구사항: 30초 지속이면 restrict
-
-    # 연속성 판단을 위한 최대 간격(초) — 이보다 큰 갭이 생기면 지속 타이머 리셋
-    max_gap_sec: int = 45
+    # 연속 틱 요구 개수 / 최대 간격(초)
+    consecutive_required: int = 3
+    max_gap_sec: int = 30  # 10초 간격 가정, 여유 30초
 
     supported_metrics: Tuple[str, ...] = ("hr", "stress")
 
@@ -66,11 +63,14 @@ class AnomalyConfig:
 # ──────────────────────────────────────────────────────────────────────────────
 @dataclass
 class UserState:
-    # 지속 판정용 시작시각(UTC)
-    hr_hi_start: Optional[datetime] = None      # HR ≥ 150 시작 시각
-    hr_lo_start: Optional[datetime] = None      # HR ≤ 45 시작 시각
-    z_hr_start: Optional[datetime] = None       # |HR_Z| ≥ 2.5 시작 시각
-    z_stress_start: Optional[datetime] = None   # |STRESS_Z| ≥ 2.5 시작 시각
+    # 응급 카운터: |Z|>=5 (HR/Stress)
+    emg_hr_z_c: int = 0
+    emg_stress_z_c: int = 0
+
+    # Restrict 카운터(심박 ↑/↓ / 스트레스 |Z|)
+    res_hr_high_c: int = 0      # HR_Z>=2.5  또는 HR_inst>=150
+    res_hr_low_c:  int = 0      # HR_Z<=-2.5 또는 HR_inst<=45
+    res_stress_c:  int = 0      # |STRESS_Z|>=2.5
 
     # 쿨다운
     restrict_until: Optional[datetime] = None
@@ -86,7 +86,7 @@ class AnomalyResult:
     risk_level: str         # "low" | "high" | "critical"
     mode: str               # "normal" | "restrict" | "emergency" | "cooldown"
     reasons: Tuple[str, ...]
-    trigger: Optional[str] = None  # "hr_high" | "hr_low" | "hr_z" | "stress_z"
+    trigger: Optional[str] = None  # "hr_high" | "hr_low" | "stress_up"
     z: Optional[float] = None
 
     # cooldown payload
@@ -131,14 +131,13 @@ class AnomalyDetector:
         except Exception:
             return None
 
-    def _reset_if_gap(self, S: UserState, ts_utc: datetime):
+    def _reset_counters_if_gap(self, S: UserState, ts_utc: datetime):
         if S.last_ts is None:
             return
         if (ts_utc - S.last_ts).total_seconds() > self.cfg.max_gap_sec:
-            S.hr_hi_start = None
-            S.hr_lo_start = None
-            S.z_hr_start = None
-            S.z_stress_start = None
+            S.emg_hr_z_c = S.emg_stress_z_c = 0
+            S.res_hr_high_c = S.res_hr_low_c = 0
+            S.res_stress_c = 0
 
     # ──────────────────────────────────────────────────────────────────
     # 외부: 평가 (UTC 기준)
@@ -175,78 +174,107 @@ class AnomalyDetector:
         as_of = kst.date()
 
         # 2) 연속성/시간 역행
-        self._reset_if_gap(S, ts_utc)
-        forward = (S.last_ts is None) or (ts_utc > S.last_ts)  # 과거 ts는 지속 타이머/쿨다운 미반영
+        self._reset_counters_if_gap(S, ts_utc)
+        forward = (S.last_ts is None) or (ts_utc > S.last_ts)  # 과거 ts는 카운터 미반영
         if forward:
             S.last_ts = ts_utc
 
-        # 3) HR 값/기준선
+        # 3) HR
         hr = metrics.get("hr")
-        hrf: Optional[float] = None
-        hr_z: Optional[float] = None
+        hr_z = None
         if hr is not None:
+            stats_hr = self.stats.get_bucket_stats(user_ref, as_of, "hr", bucket)
+            mu_h, sd_h = (stats_hr or (None, None))
+            hr_z = self._z(hr, mu_h, sd_h)
+            hrf = None
             try:
                 hrf = float(hr)
             except Exception:
-                hrf = None
+                pass
 
-            stats_hr = self.stats.get_bucket_stats(user_ref, as_of, "hr", bucket)
-            mu_h, sd_h = (stats_hr or (None, None))
-            if hrf is not None:
-                hr_z = self._z(hrf, mu_h, sd_h)
+            emg_hr_z = (hr_z is not None and abs(hr_z) >= self.cfg.z_emergency)
+            res_hr_z_hi = (hr_z is not None and hr_z >= self.cfg.z_restrict)
+            res_hr_z_lo = (hr_z is not None and hr_z <= -self.cfg.z_restrict)
+            res_hr_inst_hi = (hrf is not None and hrf >= self.cfg.hr_inst_restrict_high)
+            res_hr_inst_lo = (hrf is not None and hrf <= self.cfg.hr_inst_restrict_low)
 
-        # 4) STRESS 값/기준선
+            if forward:
+                S.emg_hr_z_c    = (S.emg_hr_z_c    + 1) if emg_hr_z else 0
+                S.res_hr_high_c = (S.res_hr_high_c + 1) if (res_hr_z_hi or res_hr_inst_hi) else 0
+                S.res_hr_low_c  = (S.res_hr_low_c  + 1) if (res_hr_z_lo or res_hr_inst_lo) else 0
+
+        # 4) STRESS: |Z| 기반 (restrict & emergency)
         stress = metrics.get("stress")
-        s_val: Optional[float] = None
-        stress_z: Optional[float] = None
+        stress_z = None
         if stress is not None:
+            s = None
             try:
-                s_val = float(stress)
-                if s_val > 1.0:  # 0~100 → 0~1
-                    s_val = s_val / 100.0
+                s = float(stress)
             except Exception:
-                s_val = None
+                pass
 
             stats_s = self.stats.get_bucket_stats(user_ref, as_of, "stress", bucket)
             mu_s, sd_s = (stats_s or (None, None))
-            if s_val is not None:
-                stress_z = self._z(s_val, mu_s, sd_s)
+
+            # 🔧 스케일 자동 정합:
+            # 기준선(μ,σ)이 0~1대인데 입력이 0~100이면 /100 해 정렬
+            if (mu_s is not None and sd_s is not None and mu_s <= 1.0 and sd_s <= 1.0 and s is not None and s > 1.5):
+                s = s / 100.0
+
+            if s is not None:
+                stress_z = self._z(s, mu_s, sd_s)
+                emg_stress_z = (stress_z is not None and abs(stress_z) >= self.cfg.z_emergency)
+                res_stress_z = (stress_z is not None and abs(stress_z) >= self.cfg.z_restrict)
+                if forward:
+                    S.emg_stress_z_c = (S.emg_stress_z_c + 1) if emg_stress_z else 0
+                    S.res_stress_c   = (S.res_stress_c   + 1) if res_stress_z   else 0
 
         if ANOMALY_DEBUG:
             log.info(
                 "[ANOM] user=%s ts=%s bkt=%d hr=%s hr_z=%s st=%s st_z=%s "
-                "state(hi=%s,lo=%s,zhr=%s,zst=%s) "
+                "cnt(emg_hr=%d,emg_st=%d,res_hi=%d,res_lo=%d,res_st=%d) "
                 "cd(res=%s,emg=%s)",
-                user_ref, kst.isoformat(), bucket, hrf, hr_z, s_val, stress_z,
-                S.hr_hi_start.isoformat() if S.hr_hi_start else None,
-                S.hr_lo_start.isoformat() if S.hr_lo_start else None,
-                S.z_hr_start.isoformat() if S.z_hr_start else None,
-                S.z_stress_start.isoformat() if S.z_stress_start else None,
+                user_ref, kst.isoformat(), bucket, hr, hr_z, stress, stress_z,
+                S.emg_hr_z_c, S.emg_stress_z_c, S.res_hr_high_c, S.res_hr_low_c, S.res_stress_c,
                 S.restrict_until.isoformat() if S.restrict_until else None,
                 S.emergency_until.isoformat() if S.emergency_until else None,
             )
 
-        # 5) EMERGENCY: |Z| ≥ z_emergency (즉시) — HR 또는 STRESS
-        if (hr_z is not None and abs(hr_z) >= self.cfg.z_emergency) or \
-           (stress_z is not None and abs(stress_z) >= self.cfg.z_emergency):
-            S.hr_hi_start = S.hr_lo_start = None
-            S.z_hr_start = S.z_stress_start = None
+        # 5) EMERGENCY: |Z|>=5 3틱 (HR 또는 STRESS)
+        if S.emg_hr_z_c >= self.cfg.consecutive_required:
+            S.emg_hr_z_c = S.emg_stress_z_c = 0
+            S.res_hr_high_c = S.res_hr_low_c = 0
+            S.res_stress_c = 0
             S.restrict_until = None
             S.emergency_until = ts_utc + timedelta(seconds=self.cfg.emergency_cooldown_sec)
-            trig = ("hr_high" if hr_z is not None and hr_z >= 0 else
-                    "hr_low"  if hr_z is not None and hr_z <  0 else
-                    "stress_z")
+            trig = "hr_high" if (hr_z is None or hr_z >= 0) else "hr_low"
             res = AnomalyResult(
                 True, True, "critical", "emergency",
-                (f"|Z|>={self.cfg.z_emergency:g} immediate",),
-                trigger=trig, z=hr_z if hr_z is not None else stress_z
+                (f"|HR_Z|>={self.cfg.z_emergency:g} x{self.cfg.consecutive_required}",),
+                trigger=trig, z=hr_z
             )
             res.cooldown_min = max(1, math.ceil(self.cfg.emergency_cooldown_sec / 60))
             res.cooldown_source = "emergency"
             res.cooldown_until = S.emergency_until
             return res
 
-        # 6) RESTRICT 쿨다운 (emergency보다 우선 검사했으므로 여기서 검사)
+        if S.emg_stress_z_c >= self.cfg.consecutive_required:
+            S.emg_hr_z_c = S.emg_stress_z_c = 0
+            S.res_hr_high_c = S.res_hr_low_c = 0
+            S.res_stress_c = 0
+            S.restrict_until = None
+            S.emergency_until = ts_utc + timedelta(seconds=self.cfg.emergency_cooldown_sec)
+            res = AnomalyResult(
+                True, True, "critical", "emergency",
+                (f"|STRESS_Z|>={self.cfg.z_emergency:g} x{self.cfg.consecutive_required}",),
+                trigger="stress_up", z=stress_z
+            )
+            res.cooldown_min = max(1, math.ceil(self.cfg.emergency_cooldown_sec / 60))
+            res.cooldown_source = "emergency"
+            res.cooldown_until = S.emergency_until
+            return res
+
+        # 6) RESTRICT 쿨다운
         if S.restrict_until and ts_utc <= S.restrict_until:
             remain = max(0, int((S.restrict_until - ts_utc).total_seconds()))
             cd_min = max(1, math.ceil(remain / 60)) if remain > 0 else 1
@@ -256,84 +284,47 @@ class AnomalyDetector:
                 cooldown_min=cd_min, cooldown_source="restrict", cooldown_until=S.restrict_until
             )
 
-        # 7) RESTRICT(지속 30초) — (a) HR 절대값, (b) |Z| ≥ 2.5
-        win = self.cfg.restrict_window_sec
+        # 7) RESTRICT: HR Z/절대값 or STRESS Z — 3틱
+        if S.res_hr_high_c >= self.cfg.consecutive_required:
+            S.res_hr_high_c = S.res_hr_low_c = 0
+            S.res_stress_c = 0
+            S.restrict_until = ts_utc + timedelta(seconds=self.cfg.restrict_cooldown_sec)
+            reason = (
+                "HR_Z>={:.1f} x{}".format(self.cfg.z_restrict, self.cfg.consecutive_required)
+                if (hr_z is not None and hr_z >= self.cfg.z_restrict)
+                else "HR_inst>={} x{}".format(self.cfg.hr_inst_restrict_high, self.cfg.consecutive_required)
+            )
+            res = AnomalyResult(True, True, "high", "restrict", (reason,), trigger="hr_high", z=hr_z)
+            res.cooldown_min = max(1, math.ceil(self.cfg.restrict_cooldown_sec / 60))
+            res.cooldown_source = "restrict"
+            res.cooldown_until = S.restrict_until
+            return res
 
-        # (a) HR 절대값 지속
-        if forward and hrf is not None:
-            if hrf >= self.cfg.hr_inst_restrict_high:
-                if S.hr_hi_start is None:
-                    S.hr_hi_start = ts_utc
-                elif (ts_utc - S.hr_hi_start).total_seconds() >= win:
-                    S.hr_hi_start = S.hr_lo_start = None
-                    S.z_hr_start = S.z_stress_start = None
-                    S.restrict_until = ts_utc + timedelta(seconds=self.cfg.restrict_cooldown_sec)
-                    res = AnomalyResult(True, True, "high", "restrict",
-                                        (f"HR≥{self.cfg.hr_inst_restrict_high} sustained {win}s (hr={hrf:.1f})",),
-                                        trigger="hr_high", z=hr_z)
-                    res.cooldown_min = max(1, math.ceil(self.cfg.restrict_cooldown_sec / 60))
-                    res.cooldown_source = "restrict"
-                    res.cooldown_until = S.restrict_until
-                    return res
-                # 반대 임계는 리셋
-                S.hr_lo_start = None
-            elif hrf <= self.cfg.hr_inst_restrict_low:
-                if S.hr_lo_start is None:
-                    S.hr_lo_start = ts_utc
-                elif (ts_utc - S.hr_lo_start).total_seconds() >= win:
-                    S.hr_hi_start = S.hr_lo_start = None
-                    S.z_hr_start = S.z_stress_start = None
-                    S.restrict_until = ts_utc + timedelta(seconds=self.cfg.restrict_cooldown_sec)
-                    res = AnomalyResult(True, True, "high", "restrict",
-                                        (f"HR≤{self.cfg.hr_inst_restrict_low} sustained {win}s (hr={hrf:.1f})",),
-                                        trigger="hr_low", z=hr_z)
-                    res.cooldown_min = max(1, math.ceil(self.cfg.restrict_cooldown_sec / 60))
-                    res.cooldown_source = "restrict"
-                    res.cooldown_until = S.restrict_until
-                    return res
-                S.hr_hi_start = None
-            else:
-                S.hr_hi_start = None
-                S.hr_lo_start = None
+        if S.res_hr_low_c >= self.cfg.consecutive_required:
+            S.res_hr_high_c = S.res_hr_low_c = 0
+            S.res_stress_c = 0
+            S.restrict_until = ts_utc + timedelta(seconds=self.cfg.restrict_cooldown_sec)
+            reason = (
+                "HR_Z<={:.1f} x{}".format(-self.cfg.z_restrict, self.cfg.consecutive_required)
+                if (hr_z is not None and hr_z <= -self.cfg.z_restrict)
+                else "HR_inst<={} x{}".format(self.cfg.hr_inst_restrict_low, self.cfg.consecutive_required)
+            )
+            res = AnomalyResult(True, True, "high", "restrict", (reason,), trigger="hr_low", z=hr_z)
+            res.cooldown_min = max(1, math.ceil(self.cfg.restrict_cooldown_sec / 60))
+            res.cooldown_source = "restrict"
+            res.cooldown_until = S.restrict_until
+            return res
 
-        # (b) |Z| ≥ 2.5 지속 (HR / STRESS 각각 독립)
-        if forward:
-            # HR Z
-            if hr_z is not None and abs(hr_z) >= self.cfg.z_restrict:
-                if S.z_hr_start is None:
-                    S.z_hr_start = ts_utc
-                elif (ts_utc - S.z_hr_start).total_seconds() >= win:
-                    S.hr_hi_start = S.hr_lo_start = None
-                    S.z_hr_start = S.z_stress_start = None
-                    S.restrict_until = ts_utc + timedelta(seconds=self.cfg.restrict_cooldown_sec)
-                    trig = "hr_high" if hr_z >= 0 else "hr_low"
-                    res = AnomalyResult(True, True, "high", "restrict",
-                                        (f"|HR_Z|>={self.cfg.z_restrict:g} sustained {win}s (z={hr_z:.2f})",),
-                                        trigger=trig, z=hr_z)
-                    res.cooldown_min = max(1, math.ceil(self.cfg.restrict_cooldown_sec / 60))
-                    res.cooldown_source = "restrict"
-                    res.cooldown_until = S.restrict_until
-                    return res
-            else:
-                S.z_hr_start = None
-
-            # STRESS Z
-            if stress_z is not None and abs(stress_z) >= self.cfg.z_restrict:
-                if S.z_stress_start is None:
-                    S.z_stress_start = ts_utc
-                elif (ts_utc - S.z_stress_start).total_seconds() >= win:
-                    S.hr_hi_start = S.hr_lo_start = None
-                    S.z_hr_start = S.z_stress_start = None
-                    S.restrict_until = ts_utc + timedelta(seconds=self.cfg.restrict_cooldown_sec)
-                    res = AnomalyResult(True, True, "high", "restrict",
-                                        (f"|STRESS_Z|>={self.cfg.z_restrict:g} sustained {win}s (z={stress_z:.2f})",),
-                                        trigger="stress_z", z=stress_z)
-                    res.cooldown_min = max(1, math.ceil(self.cfg.restrict_cooldown_sec / 60))
-                    res.cooldown_source = "restrict"
-                    res.cooldown_until = S.restrict_until
-                    return res
-            else:
-                S.z_stress_start = None
+        if S.res_stress_c >= self.cfg.consecutive_required:
+            S.res_hr_high_c = S.res_hr_low_c = 0
+            S.res_stress_c = 0
+            S.restrict_until = ts_utc + timedelta(seconds=self.cfg.restrict_cooldown_sec)
+            reason = "|STRESS_Z|>={:.1f} x{}".format(self.cfg.z_restrict, self.cfg.consecutive_required)
+            res = AnomalyResult(True, True, "high", "restrict", (reason,), trigger="stress_up", z=stress_z)
+            res.cooldown_min = max(1, math.ceil(self.cfg.restrict_cooldown_sec / 60))
+            res.cooldown_source = "restrict"
+            res.cooldown_until = S.restrict_until
+            return res
 
         # 8) 이상 없음
         return AnomalyResult(True, False, "low", "normal", ())
