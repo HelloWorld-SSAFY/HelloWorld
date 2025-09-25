@@ -33,7 +33,7 @@ public class GmsDalleClient implements GmsImageGenClient {
                 .baseUrl(baseUrl)
                 .defaultHeader("Authorization", "Bearer " + apiKey)
                 .defaultHeader("Accept", "application/json")
-                .defaultHeader("Host", "api.openai.com")
+//                .defaultHeader("Host", "api.openai.com")
                 .build();
     }
 
@@ -65,7 +65,7 @@ public class GmsDalleClient implements GmsImageGenClient {
             return Base64.getDecoder().decode(resp.data.get(0).b64);
 
         } catch (RestClientResponseException e) {
-            // ⬇️ 원문 바디를 그대로 남겨야 원인 파악 가능
+            // ⬇원문 바디를 그대로 남겨야 원인 파악 가능
             String body = e.getResponseBodyAsString();
             throw new IllegalStateException("GMS/OpenAI 4xx/5xx. status=" + e.getStatusCode() + " body=" + body, e);
         }
