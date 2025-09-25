@@ -99,7 +99,7 @@ fun WearableRecommendedScreen(
             MeditationRecommendationSection(navController = navController)
 
             // 요가 추천 섹션
-            YogaRecommendationSection()
+            YogaRecommendationSection(navController = navController)
 
             // 나들이 추천 섹션
             OutdoorRecommendationSection()
@@ -465,7 +465,9 @@ fun MeditationRecommendationSection(navController: NavHostController) {
 }
 
 @Composable
-fun YogaRecommendationSection() {
+fun YogaRecommendationSection(
+    navController: NavHostController
+) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -501,7 +503,7 @@ fun YogaRecommendationSection() {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { },
+                    .clickable { navController.navigate(Screen.YogaScreen.route) },
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {

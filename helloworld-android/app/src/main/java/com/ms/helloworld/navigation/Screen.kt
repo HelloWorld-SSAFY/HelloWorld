@@ -42,4 +42,5 @@ sealed class Screen(val route: String) {
     object SplashScreen : Screen("splash")
     object MusicScreen : Screen("music")
     object MeditationScreen : Screen("meditation")
+    object YogaScreen : Screen("yoga")
 }

@@ -37,6 +37,7 @@ import com.ms.helloworld.ui.screen.SplashScreen
 import com.ms.helloworld.ui.screen.WeeklyDietScreen
 import com.ms.helloworld.ui.screen.WeeklyWorkoutScreen
 import com.ms.helloworld.ui.screen.WeeklyInfoScreen
+import com.ms.helloworld.ui.screen.YogaScreen
 
 @Composable
 fun MainNavigation(
@@ -269,6 +270,10 @@ fun MainNavigation(
             }
             composable(Screen.MeditationScreen.route) {
                 MeditationScreen(navController = navController)
+            }
+
+            composable(Screen.YogaScreen.route) {
+                YogaScreen(navController = navController)
             }
         }
     }
