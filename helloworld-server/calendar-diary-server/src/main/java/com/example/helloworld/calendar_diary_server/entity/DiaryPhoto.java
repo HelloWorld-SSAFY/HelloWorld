@@ -28,7 +28,7 @@ public class DiaryPhoto {
     private Diary diary;
 
     @Column(name = "image_url", nullable = false, columnDefinition = "TEXT")
-    private String imageUrl;
+    private String imageKey;
 
     @Column(name = "is_ultrasound", nullable = false)
     private boolean isUltrasound = false;
