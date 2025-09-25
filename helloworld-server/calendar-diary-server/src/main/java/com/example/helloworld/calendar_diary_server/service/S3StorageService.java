@@ -19,6 +19,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 // service/S3StorageService.java
+// service/S3StorageService.java
 @Service
 @RequiredArgsConstructor
 public class S3StorageService {
@@ -29,26 +30,57 @@ public class S3StorageService {
     public static record UploadResult(String key, String url) {}
 
     public UploadResult upload(String categoryKey, MultipartFile file) throws IOException {
-        String prefix = cfg.getPath().getOrDefault(categoryKey, categoryKey); // "caricature"
+        String prefix = cfg.getPath().getOrDefault(categoryKey, categoryKey);
         String ext = ext(file.getOriginalFilename());
         String key = "%s/%s/%s.%s".formatted(prefix, LocalDate.now(), UUID.randomUUID(), ext);
+
+        // 여기: MIME 타입 보정 + inline 표시
+        String mime = resolveMime(file.getOriginalFilename(), file.getContentType());
 
         PutObjectRequest put = PutObjectRequest.builder()
                 .bucket(cfg.getBucket())
                 .key(key)
-                .contentType(Optional.ofNullable(file.getContentType()).orElse("application/octet-stream"))
+                .contentType(mime)                 // ← image/jpeg 등으로 강제
+                .contentDisposition("inline")      // ← 브라우저에서 바로 표시 유도
                 .build();
 
         try (InputStream in = file.getInputStream()) {
             s3.putObject(put, RequestBody.fromInputStream(in, file.getSize()));
         }
 
-        // presigned GET (10분 유효)
-        var getReq = GetObjectRequest.builder().bucket(cfg.getBucket()).key(key).build();
-        var pre = presigner.presignGetObject(b -> b.signatureDuration(Duration.ofMinutes(10))
+        // presigned GET (10분 유효) – 필요 시 여기서도 override 가능
+        var getReq = GetObjectRequest.builder()
+                .bucket(cfg.getBucket())
+                .key(key)
+                 .responseContentType(mime)        // (선택) 응답 헤더 강제
+                 .responseContentDisposition("inline")
+                .build();
+
+        var pre = presigner.presignGetObject(b -> b
+                .signatureDuration(Duration.ofMinutes(10))
                 .getObjectRequest(getReq));
 
-        return new UploadResult(key, pre.url().toString());  // key + 임시 URL 반환
+        return new UploadResult(key, pre.url().toString());
+    }
+
+    private static String resolveMime(String filename, String declared) {
+        // 클라이언트가 제대로 보내줬으면 그대로 사용
+        if (declared != null) {
+            String low = declared.toLowerCase();
+            if (!low.isBlank() && !low.equals("application/octet-stream")) return low;
+        }
+        // 확장자로 보정
+        String ext = ext(filename).toLowerCase();
+        return switch (ext) {
+            case "jpg", "jpeg" -> "image/jpeg";
+            case "png" -> "image/png";
+            case "gif" -> "image/gif";
+            case "webp" -> "image/webp";
+            case "bmp" -> "image/bmp";
+            case "svg" -> "image/svg+xml";
+            case "heic", "heif" -> "image/heic"; // 브라우저 미표시 가능
+            default -> "application/octet-stream";
+        };
     }
 
     private static String ext(String name) {
@@ -56,4 +88,5 @@ public class S3StorageService {
         return name.substring(name.lastIndexOf('.') + 1);
     }
 }
+
 
