@@ -67,7 +67,7 @@ fun CustomTopAppBar(
                             .padding(end = 16.dp)
                     )
                 }
-                "출산일기", "관찰일기", "임신 통계" -> {
+                "출산일기", "관찰일기", "임신 통계", "오늘의 명상" -> {
                     Text(
                         text = title,
                         fontWeight = FontWeight.Bold,
@@ -105,7 +105,7 @@ fun CustomTopAppBar(
         },
         navigationIcon = {
             when(title) {
-                "profile", "calendar", "diary", "출산일기", "관찰일기", "임신 통계", "알림" -> {
+                "profile", "calendar", "diary", "출산일기", "관찰일기", "임신 통계", "알림", "오늘의 명상" -> {
                     Icon(
                         painter = painterResource(R.drawable.ic_back),
                         contentDescription = "뒤로가기",

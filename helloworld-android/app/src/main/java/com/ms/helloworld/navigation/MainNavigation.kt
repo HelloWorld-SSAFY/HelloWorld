@@ -30,6 +30,8 @@ import com.ms.helloworld.ui.screen.RecordDetailScreen
 import com.ms.helloworld.ui.screen.HealthStatusScreen
 import com.ms.helloworld.ui.screen.HealthRegisterScreen
 import com.ms.helloworld.ui.screen.DiaryBoardScreen
+import com.ms.helloworld.ui.screen.MeditationScreen
+import com.ms.helloworld.ui.screen.MusicScreen
 import com.ms.helloworld.ui.screen.NotificationScreen
 import com.ms.helloworld.ui.screen.SplashScreen
 import com.ms.helloworld.ui.screen.WeeklyDietScreen
@@ -258,6 +260,15 @@ fun MainNavigation(
                         navController.popBackStack()
                     }
                 )
+            }
+
+            composable(Screen.MusicScreen.route) {
+                MusicScreen(
+                    navController = navController
+                )
+            }
+            composable(Screen.MeditationScreen.route) {
+                MeditationScreen(navController = navController)
             }
         }
     }
