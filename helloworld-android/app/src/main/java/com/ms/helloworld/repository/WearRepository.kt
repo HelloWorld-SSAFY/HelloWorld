@@ -3,6 +3,7 @@ package com.ms.helloworld.repository
 import android.util.Log
 import com.ms.helloworld.dto.response.ContractionsResponse
 import com.ms.helloworld.dto.response.FetalMovementResponse
+import com.ms.helloworld.dto.response.WearableResponse
 import com.ms.helloworld.network.api.HealthApi
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -117,6 +118,21 @@ class WearRepository @Inject constructor(
             Result.failure(e)
         } finally {
             Log.d(TAG, "=== getFetalMovement 호출 종료 ===")
+        }
+    }
+
+    suspend fun getLatestData(): Result<WearableResponse> {
+        return try {
+            val response = apiService.getLatestWearableData()
+            if (response.isSuccessful) {
+                response.body()?.let { data ->
+                    Result.success(data)
+                } ?: Result.failure(Exception("Response body is null"))
+            } else {
+                Result.failure(Exception("API call failed: ${response.code()}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 }

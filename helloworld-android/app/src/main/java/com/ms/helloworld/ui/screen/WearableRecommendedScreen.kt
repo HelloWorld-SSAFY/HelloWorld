@@ -35,10 +35,6 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun WearableRecommendedScreen(
     navController: NavHostController,
-    stressLevel: StressLevel = StressLevel.STABLE,
-    heartRate: Int = 75,      // 현재 심박수 (분당)
-    stressScore: Int = 65,    // 스트레스 점수 (0-100)
-    steps: Int = 6500,         // 오늘 걸음수
     wearableViewModel: WearableViewModel = hiltViewModel()
 
 ) {
@@ -46,6 +42,9 @@ fun WearableRecommendedScreen(
     val fetalMovements by wearableViewModel.fetalMovements.collectAsState()
     val isLoadingContractions by wearableViewModel.isLoading.collectAsState()
     val isLoadingFetal by wearableViewModel.isLoadingFetal.collectAsState()
+
+    // 실시간 스트레스 레벨 상태 추가
+    val stressLevel by wearableViewModel.stressLevel.collectAsState()
 
     // 오늘 날짜로 진통 기록 로드
     LaunchedEffect(Unit) {
@@ -91,11 +90,7 @@ fun WearableRecommendedScreen(
             RealTimeStatusSection(stressLevel = stressLevel)
 
             // 건강 지표 섹션
-            HealthMetricsSection(
-                heartRate = heartRate,
-                stressScore = stressScore,
-                steps = steps
-            )
+            HealthMetricsSection(viewModel = wearableViewModel)
 
             // 음악 추천 섹션
             MusicRecommendationSection()
@@ -165,16 +160,45 @@ fun RealTimeStatusSection(stressLevel: StressLevel) {
                     fontWeight = FontWeight.Medium
                 )
             }
+
+            // 추가: 스트레스 레벨별 메시지
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = getStressLevelMessage(stressLevel),
+                fontSize = 12.sp,
+                color = Color.Gray,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+
         }
+    }
+}
+
+private fun getStressLevelMessage(stressLevel: StressLevel): String {
+    return when (stressLevel) {
+        StressLevel.LOW -> "컨디션이 매우 좋습니다"
+        StressLevel.STABLE -> "안정적인 상태를 유지하고 있습니다"
+        StressLevel.MEDIUM -> "적당한 휴식을 취해보세요"
+        StressLevel.HIGH -> "충분한 휴식이 필요합니다"
+        StressLevel.VERY_HIGH -> "즉시 휴식을 취하고 전문가와 상담하세요"
     }
 }
 
 @Composable
 fun HealthMetricsSection(
-    heartRate: Int = 75,      // 현재 심박수 (분당)
-    stressScore: Int = 65,    // 스트레스 점수 (0-100)
-    steps: Int = 6500         // 오늘 걸음수
+    viewModel: WearableViewModel = hiltViewModel()
 ) {
+    val wearableData by viewModel.wearableData.collectAsState()
+    val isLoading by viewModel.isLoadingWearable.collectAsState()
+    val error by viewModel.error.collectAsState()
+
+    // 컴포넌트가 처음 로드될 때 데이터 가져오기
+    LaunchedEffect(Unit) {
+        viewModel.loadWearableData()
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -186,33 +210,102 @@ fun HealthMetricsSection(
         Column(
             modifier = Modifier.padding(20.dp)
         ) {
-            // 원형 차트 3개
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                CircularProgressChart(
-                    percentage = calculateHeartRatePercentage(heartRate),
-                    label = "심박수",
-                    color = Color(0xFFFF6B6B),
-                    value = "${heartRate}bpm"
-                )
-                CircularProgressChart(
-                    percentage = stressScore.toFloat(),
-                    label = "스트레스",
-                    color = Color(0xFF4DABF7),
-                    value = "${stressScore}점"
-                )
-                CircularProgressChart(
-                    percentage = calculateStepsPercentage(steps),
-                    label = "걸음수",
-                    color = Color(0xFFFFD93D),
-                    value = "${String.format("%.1f", steps / 1000f)}K"
-                )
+            when {
+                isLoading -> {
+                    // 로딩 상태
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(120.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(
+                            color = Color(0xFF4DABF7)
+                        )
+                    }
+                }
+                error != null -> {
+                    // 에러 상태
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "데이터를 불러올 수 없습니다",
+                            color = Color.Red,
+                            fontSize = 14.sp
+                        )
+                        Button(
+                            onClick = { viewModel.loadWearableData() },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF4DABF7)
+                            )
+                        ) {
+                            Text("다시 시도")
+                        }
+                    }
+                }
+                wearableData != null -> {
+                    // 데이터가 있을 때
+                    val heartRate = wearableData!!.heartrate.hr
+                    val stressScore = wearableData!!.heartrate.stress
+                    val steps = wearableData!!.step.steps
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        CircularProgressChart(
+                            percentage = calculateHeartRatePercentage(heartRate),
+                            label = "심박수",
+                            color = Color(0xFFFF6B6B),
+                            value = "${heartRate}bpm"
+                        )
+                        CircularProgressChart(
+                            percentage = stressScore.toFloat(),
+                            label = "스트레스",
+                            color = Color(0xFF4DABF7),
+                            value = "${stressScore}점"
+                        )
+                        CircularProgressChart(
+                            percentage = calculateStepsPercentage(steps),
+                            label = "걸음수",
+                            color = Color(0xFFFFD93D),
+                            value = "${steps}걸음"
+                        )
+                    }
+                }
+                else -> {
+                    // 초기 상태 또는 데이터 없음
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        CircularProgressChart(
+                            percentage = 0f,
+                            label = "심박수",
+                            color = Color(0xFFFF6B6B),
+                            value = "--bpm"
+                        )
+                        CircularProgressChart(
+                            percentage = 0f,
+                            label = "스트레스",
+                            color = Color(0xFF4DABF7),
+                            value = "--점"
+                        )
+                        CircularProgressChart(
+                            percentage = 0f,
+                            label = "걸음수",
+                            color = Color(0xFFFFD93D),
+                            value = "--걸음"
+                        )
+                    }
+                }
             }
         }
     }
 }
+
 
 @Composable
 fun CircularProgressChart(
@@ -640,16 +733,18 @@ fun RecordSection(
 }
 
 // 심박수 퍼센트 계산 (60-100bpm을 정상 범위로 가정)
-fun calculateHeartRatePercentage(heartRate: Int): Float {
+private fun calculateHeartRatePercentage(heartRate: Int): Float {
+    // 일반적인 성인 심박수 범위: 60-100bpm
+    // 60을 0%, 100을 100%로 계산
     return when {
-        heartRate < 60 -> (heartRate / 60f) * 50f  // 60 미만은 0-50%
-        heartRate <= 100 -> 50f + ((heartRate - 60f) / 40f) * 30f  // 60-100은 50-80%
-        else -> 80f + ((heartRate - 100f) / 50f) * 20f  // 100 초과는 80-100%
+        heartRate < 60 -> 0f
+        heartRate > 100 -> 100f
+        else -> ((heartRate - 60) / 40f) * 100f
     }.coerceIn(0f, 100f)
 }
 
-// 걸음수 퍼센트 계산 (10,000걸음을 100%로 가정)
-fun calculateStepsPercentage(steps: Int): Float {
+private fun calculateStepsPercentage(steps: Int): Float {
+    // 하루 권장 걸음수 10,000보를 100%로 계산
     return (steps / 10000f * 100f).coerceIn(0f, 100f)
 }
 

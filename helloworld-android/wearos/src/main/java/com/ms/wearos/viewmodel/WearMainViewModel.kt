@@ -213,50 +213,13 @@ class WearMainViewModel @Inject constructor(
     /**
      * 심박수와 스트레스 지수를 함께 서버로 전송
      */
-//    fun sendHealthData(date: String, heartRate: Int, stress: Int) {
-//        viewModelScope.launch {
-//            try {
-//
-//                val healthData = HealthDataRequest(date,stress, heartRate)
-//                Log.d("WearMainViewModel", "건강 데이터 전송 시도: $healthData")
-//
-//                val response = wearRepository.sendHealthData(healthData)
-//
-//                if (response.isSuccessful && response.body() != null) {
-//                    val aiResponse = response.body()!!
-//                    Log.d("WearMainViewModel", "건강 데이터 전송 성공: 심박수=${healthData.heartrate}, 스트레스=${healthData.stress}")
-//                    Log.d("WearMainViewModel", "AI 응답: mode=${aiResponse.mode}, risk_level=${aiResponse.riskLevel}")
-//
-//                    // AI 응답에 따른 처리
-//                    handleAiResponse(aiResponse)
-//
-//                    // 안드로이드 앱으로 데이터 전송
-//                    sendAiResponseToAndroid(aiResponse, healthData)
-//
-//                } else {
-//                    Log.e("WearMainViewModel", "건강 데이터 전송 실패: ${response.code()}")
-//                    _uiState.value = _uiState.value.copy(
-//                        errorMessage = "건강 데이터 전송 실패: ${response.code()}"
-//                    )
-//                }
-//            } catch (e: Exception) {
-//                Log.e("WearMainViewModel", "건강 데이터 전송 중 오류 발생", e)
-//                _uiState.value = _uiState.value.copy(
-//                    errorMessage = "건강 데이터 전송 오류: ${e.message}"
-//                )
-//            }
-//        }
-//    }
-
-    /**
-     * 심박수와 스트레스 지수를 함께 서버로 전송
-     */
     fun sendHealthData(date: String, heartRate: Int, stress: Int) {
         viewModelScope.launch {
             try {
                 Log.d(TAG, "=== 건강 데이터 전송 시작 ===")
 
-                val healthData = HealthDataRequest(date, stress, heartRate)
+//                val healthData = HealthDataRequest(date, stress, heartRate)
+                val healthData = HealthDataRequest(date, stress, 200)
                 Log.d(TAG, "전송할 데이터: date=$date, heartRate=$heartRate, stress=$stress")
                 Log.d(TAG, "HealthDataRequest 객체: $healthData")
 

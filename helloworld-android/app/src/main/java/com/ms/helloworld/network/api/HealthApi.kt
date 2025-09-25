@@ -8,6 +8,7 @@ import com.ms.helloworld.dto.response.FetalMovementResponse
 import com.ms.helloworld.dto.response.MaternalHealthGetResponse
 import com.ms.helloworld.dto.response.MaternalHealthUpdateResponse
 import com.ms.helloworld.dto.response.MaternalHealthListResponse
+import com.ms.helloworld.dto.response.WearableResponse
 import retrofit2.Response
 import retrofit2.http.*
 
@@ -47,4 +48,7 @@ interface HealthApi {
         @Query("from") from: String? = null,  // 시작 날짜 (선택적)
         @Query("to") to: String? = null       // 종료 날짜 (선택적)
     ): Response<FetalMovementResponse>
+
+    @GET("/health/api/wearable/latest")
+    suspend fun getLatestWearableData(): Response<WearableResponse>
 }

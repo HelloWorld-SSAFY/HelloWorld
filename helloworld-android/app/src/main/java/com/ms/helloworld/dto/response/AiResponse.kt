@@ -316,9 +316,20 @@ object AiResponseSamples {
     }
 }
 // 스트레스 지수 레벨 enum
-enum class StressLevel(val displayName: String, val color: Color) {
-    STABLE("안정", Color(0xFF4CAF50)),    // 초록색
-    CAUTION("주의", Color(0xFFFF9800)),   // 주황색
-    WARNING("경고", Color(0xFFFF5722)),   // 빨간-주황색
-    DANGER("위험", Color(0xFFD32F2F))     // 빨간색
+enum class StressLevel(
+    val displayName: String,
+    val color: Color,
+    val range: IntRange
+) {
+    LOW("낮음", Color(0xFF4CAF50), 0..60),
+    STABLE("안정", Color(0xFF2196F3), 61..100),
+    MEDIUM("보통", Color(0xFFFF9800), 101..140),
+    HIGH("높음", Color(0xFFFF5722), 141..180),
+    VERY_HIGH("매우 높음", Color(0xFFF44336), 181..Int.MAX_VALUE); // 181 이상은 모두 매우 높음
+
+    companion object {
+        fun fromScore(score: Int): StressLevel {
+            return values().find { score in it.range } ?: VERY_HIGH // 범위를 벗어나면 매우 높음으로 설정
+        }
+    }
 }
