@@ -36,6 +36,7 @@ public class SecurityConfig {
                                 "/v3/api-docs/**",
                                 "/actuator/**"
                         ).permitAll()
+                        .requestMatchers("/api/internal/**").permitAll()
                         // 2. /api/** 경로는 'INTERNAL_USER' 역할이 반드시 필요
                         .requestMatchers("/api/**").hasRole("INTERNAL_USER")
                         // 3. 그 외 명시되지 않은 모든 요청은 인증만 되면 허용

@@ -64,6 +64,10 @@ dependencies {
 
 
     runtimeOnly   'io.micrometer:micrometer-registry-prometheus'
+
+	// DB-Scheduler: DB를 이용한 영구적인 동적 스케줄러
+	implementation 'com.github.kagkarlsson:db-scheduler-spring-boot-starter:12.4.0'
+
 }
 
 

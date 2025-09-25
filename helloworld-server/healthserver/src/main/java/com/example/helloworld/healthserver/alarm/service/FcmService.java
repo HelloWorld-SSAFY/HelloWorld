@@ -75,7 +75,58 @@ public class FcmService {
         if (Objects.equals(currentUserId, userBId)) {
             return userAId;
         }
+
+        if (coupleDetail == null || coupleDetail.couple() == null) {
+            return null;
+        }
+
+        if (Objects.equals(currentUserId, userAId)) {
+            return userBId;
+        }
+        if (Objects.equals(currentUserId, userBId)) {
+            return userAId;
+        }
         return null;
+    }
+
+    /**
+     * 예약된 일정 알림을 보냅니다.
+     * @param userId 알림을 받을 사용자의 ID
+     * @param title 알림 제목
+     * @param body 알림 내용
+     */
+    @Async
+    public void sendReminderNotification(Long userId, String title, String body) {
+        try {
+            // 1. user-server에서 사용자의 FCM 토큰 목록 조회
+            UserServerClient.FcmTokenResponse tokenResponse = userServerClient.getFcmTokens(userId);
+            List<String> tokens = (tokenResponse != null) ? tokenResponse.tokens() : null;
+
+            if (tokens == null || tokens.isEmpty()) {
+                log.warn("[FCM-REMINDER] No active FCM tokens found for user {}. Cannot send reminder.", userId);
+                return;
+            }
+
+            // 2. 요구사항에 맞는 데이터 페이로드 생성
+            Map<String, String> dataPayload = Map.of(
+                    "type", "REMINDER",
+                    "title", title,
+                    "body", body
+            );
+
+            // 3. 각 토큰에 메시지 전송
+            for (String token : tokens) {
+                Message message = Message.builder()
+                        .putAllData(dataPayload)
+                        .setToken(token)
+                        .build();
+                String response = FirebaseMessaging.getInstance().send(message);
+                log.info("[FCM-REMINDER] Successfully sent FCM reminder to user {}: {}", userId, response);
+            }
+
+        } catch (Exception e) {
+            log.error("[FCM-REMINDER] Failed to send FCM reminder notification for user {}", userId, e);
+        }
     }
 
 }
