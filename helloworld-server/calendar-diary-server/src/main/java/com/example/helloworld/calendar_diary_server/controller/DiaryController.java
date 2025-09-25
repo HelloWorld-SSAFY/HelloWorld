@@ -7,6 +7,7 @@ import com.example.helloworld.calendar_diary_server.entity.Diary;
 import com.example.helloworld.calendar_diary_server.repository.DiaryRepository;
 import com.example.helloworld.calendar_diary_server.service.DiaryService;
 import com.example.helloworld.calendar_diary_server.service.S3StorageService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -44,6 +45,7 @@ import java.util.Map;
 public class DiaryController {
     private final DiaryService diaryApiService;
     private final S3StorageService s3StorageService;
+    private final ObjectMapper objectMapper;
 
     @Value("${app.zone:Asia/Seoul}")
     private String appZone; //
@@ -106,53 +108,50 @@ public class DiaryController {
     /** 6.3 일기 작성 */
     @Operation(
             summary = "일기 작성(이미지 여러 장 포함 가능)",
-            description = "payload(JSON) + files(이미지 배열) + ultrasounds(이미지별 초음파 여부)를 multipart로 받아 처리합니다."
+            description = "req(JSON) + files(이미지 배열) + ultrasounds(이미지별 초음파 여부) multipart 처리"
     )
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<Map<String, Object>> create(
-            @RequestPart("req")
-            @Parameter(
-                    description = "CreateDiaryRequest JSON",
-                    content = @Content(
-                            mediaType = MediaType.APPLICATION_JSON_VALUE,
-                            schema = @Schema(implementation = CreateDiaryRequest.class)
-                    )
-            ) @Valid CreateDiaryRequest req,
-            @RequestPart(value = "files", required = false) List<MultipartFile> files,            // 여러 장
-            @RequestPart(value = "ultrasounds", required = false) List<Boolean> ultrasounds,      // 각 파일과 인덱스 매칭
+            // ★ 여기: 문자열로 받고 직접 파싱
+            @RequestPart("req") String reqJson,
+
+            @RequestPart(value = "files", required = false)
+            List<MultipartFile> files,
+
+            @RequestPart(value = "ultrasounds", required = false)
+            List<Boolean> ultrasounds,
+
             @AuthenticationPrincipal UserPrincipal userPrincipal
     ) throws IOException {
+        // 0) JSON 파싱
+        CreateDiaryRequest req = objectMapper.readValue(reqJson, CreateDiaryRequest.class);
+
         Long coupleId = getCoupleIdFromPrincipal(userPrincipal);
 
         // 1) 일기 먼저 생성
-        Long diaryId = diaryApiService.create(req, coupleId, userPrincipal.getUserId(), userPrincipal.getAuthorRole());
+        Long diaryId = diaryApiService.create(
+                req, coupleId, userPrincipal.getUserId(), userPrincipal.getAuthorRole()
+        );
 
         // 2) 이미지 없으면 종료
         if (files == null || files.isEmpty()) {
             return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("diaryId", diaryId));
         }
 
-        // 3) 업로드 → ImageItem 목록 만들어 서비스에 통째로 교체 요청
-        List<DiaryService.ImageItem> items = new java.util.ArrayList<>();
+        // 3) 업로드 → ImageItem 목록 만들어 서비스에 통째로 교체
+        var items = new java.util.ArrayList<DiaryService.ImageItem>();
         for (int i = 0; i < files.size(); i++) {
             MultipartFile file = files.get(i);
-            boolean isUS = (ultrasounds != null && i < ultrasounds.size() && Boolean.TRUE.equals(ultrasounds.get(i)));
-            String category = isUS ? "ultrasounds" : "snapshots";        // 🔸 yaml의 path 매핑 사용
-            var up = s3StorageService.upload(category, file);            // { key, url(10분) }
+            boolean isUS = ultrasounds != null && i < ultrasounds.size() && Boolean.TRUE.equals(ultrasounds.get(i));
+            String category = isUS ? "ultrasounds" : "snapshots"; // app.s3.path 매핑 사용
+            var up = s3StorageService.upload(category, file);     // {key, url(10분)}
             items.add(new DiaryService.ImageItem(up.key(), isUS));
         }
-
         diaryApiService.replaceImages(diaryId, coupleId, items);
-
-        // 필요시 첫 장 미리보기 URL 반환
-        String firstPreview = s3StorageService
-                .upload("snapshots", files.get(0))  // (이미 업로드했는데 또 올릴 필요는 없지만, 예시로 남김)
-                .url();                              // ← 실제로는 위 loop에서 만든 첫 up.url()을 보관해서 쓰세요.
 
         return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
                 "diaryId", diaryId,
                 "count", items.size()
-                // "previewUrl", firstPreview  // 원하면 포함
         ));
     }
 
