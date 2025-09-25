@@ -72,9 +72,6 @@ public class FcmService {
         if (Objects.equals(currentUserId, userAId)) {
             return userBId;
         }
-        if (Objects.equals(currentUserId, userBId)) {
-            return userAId;
-        }
 
         if (coupleDetail == null || coupleDetail.couple() == null) {
             return null;
