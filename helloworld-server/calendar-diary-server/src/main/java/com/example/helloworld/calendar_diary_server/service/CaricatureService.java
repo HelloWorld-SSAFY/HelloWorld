@@ -5,6 +5,7 @@ import com.example.helloworld.calendar_diary_server.entity.Caricature;
 import com.example.helloworld.calendar_diary_server.entity.DiaryPhoto;
 import com.example.helloworld.calendar_diary_server.repository.CaricatureRepository;
 import com.example.helloworld.calendar_diary_server.repository.DiaryPhotoRepository;
+import com.example.helloworld.calendar_diary_server.service.gen.GmsDalleClient;
 import com.example.helloworld.calendar_diary_server.service.gen.GmsImageGenClient;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -13,7 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 
-@Service
+// service/CaricatureService.java (핵심 부분만)
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class CaricatureService {
@@ -21,10 +22,8 @@ public class CaricatureService {
     private final DiaryPhotoRepository diaryPhotoRepository;
     private final CaricatureRepository caricatureRepository;
     private final S3StorageService s3;
-    private final GmsImageGenClient gms;
-
-    // ★ 추가: presigned URL 만들 때 DiaryService의 메서드 사용
-    private final DiaryService diaryService;
+    private final GmsDalleClient gms;        // ← 구현체 주입
+    private final DiaryService diaryService; // ← presign 재사용을 위해 주입
 
     private static final ZoneId ZONE = ZoneId.of("Asia/Seoul");
 
@@ -39,31 +38,38 @@ public class CaricatureService {
             throw new IllegalArgumentException("초음파 사진이 아닙니다.");
         }
 
-        // 1) 원본 다운로드
-        byte[] source = s3.download(photo.getImageKey());
+        // 1) 원본 presigned URL (inline/content-type 강제는 DiaryService 쪽 구현 사용)
+        String srcUrl = diaryService.presignImage(photo.getImageKey());
 
-        // 2) GMS 호출
-        byte[] out = gms.generateCaricature(source);
+        // 2) 프롬프트 구성 (게이트웨이/운영팀 가이드에 맞춰 문구 조절)
+        String prompt = """
+                Create a cute, heartwarming caricature of a baby derived from this ultrasound image:
+                %s
+                Style: clean line art, high contrast, soft shading, gentle smile.
+                Background: simple, warm tone. Output as a single centered character.
+                """.formatted(srcUrl);
 
-        // 3) 결과 업로드 (caricatures/)
+        // 3) GMS 호출 (텍스트→이미지)
+        byte[] out = gms.generateCaricatureWithPrompt(prompt);
+
+        // 4) S3 caricatures/ 업로드
         var up = s3.uploadBytes("caricatures", "caricature.png", "image/png", out);
 
-        // 4) DB 저장
+        // 5) DB 저장
         Caricature c = caricatureRepository.save(Caricature.builder()
                 .diaryPhoto(photo)
                 .imageKey(up.key())
                 .createdAt(ZonedDateTime.now(ZONE))
                 .build());
 
-        // 5) presigned URL은 DiaryService의 메서드로 생성
-        String url = diaryService.presignImage(up.key());
-
+        // 6) presigned URL 반환(10분)
         return CaricatureDto.builder()
                 .id(c.getId())
                 .diaryPhotoId(photo.getDiaryPhotoId())
-                .imageUrl(url)
+                .imageUrl(diaryService.presignImage(up.key()))
                 .build();
     }
+
 
     /** 최근 생성본 presigned URL 조회 */
     public CaricatureDto getLatest(Long diaryPhotoId) {
@@ -76,3 +82,6 @@ public class CaricatureService {
                 .orElse(null);
     }
 }
+
+
+
