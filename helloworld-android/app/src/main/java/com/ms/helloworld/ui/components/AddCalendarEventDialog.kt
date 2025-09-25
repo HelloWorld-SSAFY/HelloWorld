@@ -2,6 +2,7 @@ package com.ms.helloworld.ui.components
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -25,6 +26,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.math.abs
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddCalendarEventDialog(
     selectedDate: String,
@@ -43,6 +45,22 @@ fun AddCalendarEventDialog(
     var endTime by remember { mutableStateOf(initialEndTime) }
     var isRemind by remember { mutableStateOf(initialIsRemind) }
     var offsetX by remember { mutableStateOf(0f) }
+
+    // TimePicker 상태
+    var showStartTimePicker by remember { mutableStateOf(false) }
+    var showEndTimePicker by remember { mutableStateOf(false) }
+
+    // TimePickerState 생성 함수
+    fun createTimePickerState(timeString: String): TimePickerState {
+        val parts = timeString.split(":")
+        val hour = if (parts.size >= 2) parts[0].toIntOrNull() ?: 9 else 9
+        val minute = if (parts.size >= 2) parts[1].toIntOrNull() ?: 0 else 0
+        return TimePickerState(
+            initialHour = hour,
+            initialMinute = minute,
+            is24Hour = true
+        )
+    }
     
     // 등장 애니메이션
     var isVisible by remember { mutableStateOf(false) }
@@ -130,28 +148,44 @@ fun AddCalendarEventDialog(
                         // 시작 시간
                         OutlinedTextField(
                             value = startTime,
-                            onValueChange = { startTime = it },
+                            onValueChange = { },
                             label = { Text("시작 시간", fontSize = 14.sp) },
                             placeholder = { Text("09:00", fontSize = 14.sp) },
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable {
+                                    showStartTimePicker = true
+                                },
                             singleLine = true,
+                            readOnly = true,
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = Color.Black,
-                                focusedLabelColor = Color.Black
+                                focusedLabelColor = Color.Black,
+                                unfocusedBorderColor = Color.Gray,
+                                unfocusedLabelColor = Color.Gray,
+                                disabledTextColor = Color.Black
                             )
                         )
-                        
+
                         // 종료 시간
                         OutlinedTextField(
                             value = endTime,
-                            onValueChange = { endTime = it },
+                            onValueChange = { },
                             label = { Text("종료 시간", fontSize = 14.sp) },
                             placeholder = { Text("10:00", fontSize = 14.sp) },
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable {
+                                    showEndTimePicker = true
+                                },
                             singleLine = true,
+                            readOnly = true,
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = Color.Black,
-                                focusedLabelColor = Color.Black
+                                focusedLabelColor = Color.Black,
+                                unfocusedBorderColor = Color.Gray,
+                                unfocusedLabelColor = Color.Gray,
+                                disabledTextColor = Color.Black
                             )
                         )
                     }
@@ -243,6 +277,70 @@ fun AddCalendarEventDialog(
                 }
             }
         }
+    }
+
+    // 시작 시간 TimePicker Dialog
+    if (showStartTimePicker) {
+        val timePickerState = remember { createTimePickerState(startTime) }
+
+        AlertDialog(
+            onDismissRequest = { showStartTimePicker = false },
+            title = { Text("시작 시간 선택") },
+            text = {
+                TimePicker(
+                    state = timePickerState
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        startTime = String.format("%02d:%02d", timePickerState.hour, timePickerState.minute)
+                        showStartTimePicker = false
+                    }
+                ) {
+                    Text("확인")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showStartTimePicker = false }
+                ) {
+                    Text("취소")
+                }
+            }
+        )
+    }
+
+    // 종료 시간 TimePicker Dialog
+    if (showEndTimePicker) {
+        val timePickerState = remember { createTimePickerState(endTime) }
+
+        AlertDialog(
+            onDismissRequest = { showEndTimePicker = false },
+            title = { Text("종료 시간 선택") },
+            text = {
+                TimePicker(
+                    state = timePickerState
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        endTime = String.format("%02d:%02d", timePickerState.hour, timePickerState.minute)
+                        showEndTimePicker = false
+                    }
+                ) {
+                    Text("확인")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showEndTimePicker = false }
+                ) {
+                    Text("취소")
+                }
+            }
+        )
     }
 }
 

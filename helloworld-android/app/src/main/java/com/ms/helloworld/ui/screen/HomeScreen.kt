@@ -27,6 +27,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.zIndex
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalDensity
 import androidx.navigation.NavHostController
 import com.airbnb.lottie.compose.LottieAnimation
 import com.airbnb.lottie.compose.LottieClipSpec
@@ -77,11 +81,28 @@ fun HomeScreen(
         lifecycleOwner.lifecycle.addObserver(observer)
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+    // 점의 위치를 추적하기 위한 상태
+    var dotPosition by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+    val density = LocalDensity.current
+
+    // Lottie 애니메이션 준비 (Box 레벨에서)
+    val composition by rememberLottieComposition(LottieCompositionSpec.RawRes(R.raw.home_baby))
+    val progress by animateLottieCompositionAsState(
+        composition = composition,
+        isPlaying = true,
+        iterations = LottieConstants.IterateForever,
+        speed = 0.2f,
+        clipSpec = LottieClipSpec.Frame(min = 0, max = 10),
+    )
+
+    Box(
+        modifier = Modifier.fillMaxSize()
     ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+        ) {
         CustomTopAppBar(
             title = "home",
             navController = navController
@@ -97,7 +118,7 @@ fun HomeScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp)
+                        .padding(horizontal = 16.dp, vertical = 24.dp)
                 ) {
                     ProfileSection(
                         momProfile = momProfile,
@@ -119,39 +140,39 @@ fun HomeScreen(
             }
         }
 
+
+        // 공간만 차지하는 Box
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(170.dp) // 최소 공간만 차지
+        ){
+            // 중앙에 점 표시 (참조점) - 위치 추적
+            Text(
+                text = "•",
+                fontSize = 20.sp,
+                color = MainColor,
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .onGloballyPositioned { coordinates ->
+                        dotPosition = coordinates.positionInRoot()
+                    }
+            )
+        }
+
+        HorizontalDivider(
+                thickness = 0.5.dp,
+        color = Color(0xFFD0D0D0)
+        )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
         // 캘린더 섹션
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(horizontal = 16.dp, vertical = 4.dp)
         ) {
-            // Lottie 애니메이션으로 변경
-            val composition by rememberLottieComposition(LottieCompositionSpec.RawRes(R.raw.home_baby))
-            val progress by animateLottieCompositionAsState(
-                composition = composition,
-                isPlaying = true,
-                iterations = LottieConstants.IterateForever,
-                speed = 0.4f,
-                clipSpec = LottieClipSpec.Frame(min = 0, max = 10),
-            )
-
-            LottieAnimation(
-                composition = composition,
-                progress = { progress },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(300.dp)
-                    .padding(end = 60.dp)
-                    .clip(RoundedCornerShape(16.dp))
-            )
-
-            HorizontalDivider(
-                thickness = 0.5.dp,
-                color = Color(0xFFD0D0D0)
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
             CalendarSection(
                 onDateClick = { dateKey ->
                     navController.navigate(Screen.CalendarScreen.createRoute(dateKey)) {
@@ -216,7 +237,21 @@ fun HomeScreen(
 //                locationManager = locationManager
 //            )
 //        }
-    }
+        } // Column 끝
+
+        // Lottie를 실제 빨간 점 위치에 정확히 배치
+        LottieAnimation(
+            composition = composition,
+            progress = { progress },
+            modifier = Modifier
+                .width(300.dp)
+                .height(300.dp)
+                .offset(
+                    x = with(density) { (dotPosition.x - 170.dp.toPx()).toDp() }, // 점 위치 - Lottie 폭의 절반
+                    y = with(density) { (dotPosition.y - 140.dp.toPx()).toDp() }  // 점 위치 - Lottie 높이의 절반
+                )
+        )
+    } // Box 끝
 }
 
 // 프로필 로딩 스켈레톤 컴포저블

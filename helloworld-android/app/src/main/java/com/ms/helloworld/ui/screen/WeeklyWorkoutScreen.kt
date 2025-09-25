@@ -1,6 +1,7 @@
 package com.ms.helloworld.ui.screen
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -16,12 +17,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.abs
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
@@ -47,13 +51,31 @@ fun WeeklyWorkoutScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFFF8F9FA))
+            .pointerInput(state.currentWeek) {
+                var totalDragAmount = 0f
+                detectHorizontalDragGestures(
+                    onDragStart = { totalDragAmount = 0f },
+                    onDragEnd = {
+                        if (abs(totalDragAmount) > 100f) {
+                            when {
+                                totalDragAmount > 0 && state.currentWeek > 1 -> {
+                                    viewModel.changeWeek(state.currentWeek - 1)
+                                }
+                                totalDragAmount < 0 && state.currentWeek < 42 -> {
+                                    viewModel.changeWeek(state.currentWeek + 1)
+                                }
+                            }
+                        }
+                    }
+                ) { _, dragAmount ->
+                    totalDragAmount += dragAmount
+                }
+            }
     ) {
-        // 상단 헤더
+        // 상단 헤더 (뒤로가기 + 주차 표시)
         WeeklyWorkoutHeader(
             currentWeek = state.currentWeek,
-            onBackClick = onBackClick,
-            onPreviousWeek = { viewModel.changeWeek(state.currentWeek - 1) },
-            onNextWeek = { viewModel.changeWeek(state.currentWeek + 1) }
+            onBackClick = onBackClick
         )
 
         if (state.isLoading) {
@@ -65,24 +87,60 @@ fun WeeklyWorkoutScreen(
             }
         } else {
             LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
+                modifier = Modifier
+                    .fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // 주차별 운동 제목
+                // 주차별 운동 제목 (화살표 버튼 포함)
                 item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        IconButton(
+                            onClick = { viewModel.changeWeek(state.currentWeek - 1) },
+                            enabled = state.currentWeek > 1
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.KeyboardArrowLeft,
+                                contentDescription = "이전 주차",
+                                tint = if (state.currentWeek > 1) Color(0xFF333333) else Color(0xFFCCCCCC)
+                            )
+                        }
+
+                        Text(
+                            text = "${state.currentWeek}주차 루틴 추천",
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF333333),
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 8.dp)
+                        )
+
+                        IconButton(
+                            onClick = { viewModel.changeWeek(state.currentWeek + 1) },
+                            enabled = state.currentWeek < 42
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.KeyboardArrowRight,
+                                contentDescription = "다음 주차",
+                                tint = if (state.currentWeek < 42) Color(0xFF333333) else Color(0xFFCCCCCC)
+                            )
+                        }
+                    }
+
                     Text(
-                        text = "${state.currentWeek}주차 운동 추천",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF333333),
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-                    Text(
-                        text = "임신 ${state.currentWeek}주차에 안전하고 효과적인 운동들을 추천해드려요",
+                        text = "임신 ${state.currentWeek}주차에 안전하고 효과적인 루틴들을 추천해드려요",
                         fontSize = 14.sp,
                         color = Color(0xFF666666),
-                        modifier = Modifier.padding(bottom = 16.dp)
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 16.dp)
                     )
                 }
 
@@ -110,16 +168,16 @@ fun WeeklyWorkoutScreen(
 @Composable
 private fun WeeklyWorkoutHeader(
     currentWeek: Int,
-    onBackClick: () -> Unit,
-    onPreviousWeek: () -> Unit,
-    onNextWeek: () -> Unit
+    onBackClick: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 16.dp),
+            .padding(horizontal = 16.dp)
+            .padding(top = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        // 뒤로가기 버튼 (좌측)
         IconButton(onClick = onBackClick) {
             Icon(
                 imageVector = Icons.Default.ArrowBack,
@@ -128,43 +186,22 @@ private fun WeeklyWorkoutHeader(
             )
         }
 
-        Spacer(modifier = Modifier.weight(1f))
-
+        // 가운데 주차 표시
         Row(
-            verticalAlignment = Alignment.CenterVertically
+            modifier = Modifier.weight(1f),
+            horizontalArrangement = Arrangement.Center
         ) {
-            IconButton(
-                onClick = onPreviousWeek,
-                enabled = currentWeek > 1
-            ) {
-                Icon(
-                    imageVector = Icons.Default.KeyboardArrowLeft,
-                    contentDescription = "이전 주차",
-                    tint = if (currentWeek > 1) Color(0xFF333333) else Color(0xFFCCCCCC)
-                )
-            }
-
             Text(
                 text = "${currentWeek}주차",
                 fontSize = 18.sp,
-                fontWeight = FontWeight.Medium,
+                fontWeight = FontWeight.Bold,
                 color = Color(0xFF333333),
-                modifier = Modifier.padding(horizontal = 16.dp)
+                textAlign = TextAlign.Center
             )
-
-            IconButton(
-                onClick = onNextWeek,
-                enabled = currentWeek < 42
-            ) {
-                Icon(
-                    imageVector = Icons.Default.KeyboardArrowRight,
-                    contentDescription = "다음 주차",
-                    tint = if (currentWeek < 42) Color(0xFF333333) else Color(0xFFCCCCCC)
-                )
-            }
         }
 
-        Spacer(modifier = Modifier.weight(1f))
+        // 우측 여백 (균형 맞추기)
+        Spacer(modifier = Modifier.width(48.dp))
     }
 }
 

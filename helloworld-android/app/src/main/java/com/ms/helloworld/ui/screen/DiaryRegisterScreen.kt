@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import com.ms.helloworld.ui.components.CustomTopAppBar
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ms.helloworld.viewmodel.DiaryViewModel
 import com.ms.helloworld.viewmodel.HomeViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -55,7 +56,7 @@ fun DiaryRegisterScreen(
     val backgroundColor = Color(0xFFF5F5F5)
     val currentDiaryType = if (diaryType == "birth") DiaryType.BIRTH else DiaryType.OBSERVATION
 
-    // ViewModels
+    // ViewModels - Activity 레벨에서 동일한 인스턴스 사용
     val diaryViewModel: DiaryViewModel = hiltViewModel()
     val homeViewModel: HomeViewModel = hiltViewModel()
     val diaryState by diaryViewModel.state.collectAsStateWithLifecycle()

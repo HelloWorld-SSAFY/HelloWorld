@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import com.ms.helloworld.navigation.Screen
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ms.helloworld.viewmodel.HomeViewModel
 import com.ms.helloworld.viewmodel.DiaryViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -58,7 +59,7 @@ fun DiaryDetailScreen(
     val menstrualDate by homeViewModel.menstrualDate.collectAsState()
     val currentPregnancyDay by homeViewModel.currentPregnancyDay.collectAsState()
 
-    // DiaryViewModel에서 일별 일기 데이터 가져오기
+    // DiaryViewModel에서 일별 일기 데이터 가져오기 - Activity 레벨에서 동일한 인스턴스 사용
     val diaryViewModel: DiaryViewModel = hiltViewModel()
     val diaryState by diaryViewModel.state.collectAsStateWithLifecycle()
 
@@ -327,13 +328,40 @@ fun DiaryDetailScreen(
                 },
                 onEditClick = {
                     // 출산일기 수정 화면으로 이동
-                    navController.navigate(
-                        Screen.DiaryRegisterScreen.createRoute(
-                            diaryType = "birth",
-                            day = actualDayNumber,
-                            isEdit = true
+                    // DiaryBoardScreen과 동일하게 편집할 일기 데이터를 DiaryViewModel에 설정
+                    Log.d("DiaryDetailScreen", "🚨 출산일기 수정 버튼 클릭!")
+                    Log.d("DiaryDetailScreen", "apiDiaries.size: ${apiDiaries.size}")
+                    Log.d("DiaryDetailScreen", "userId: $userId, userGender: $userGender")
+
+                    apiDiaries.forEachIndexed { index, diary ->
+                        val role = diary.inferAuthorRole(userId, userGender, null, null)
+                        Log.d("DiaryDetailScreen", "Diary[$index]: ID=${diary.diaryId}, authorRole=${diary.authorRole}, inferredRole=$role")
+                    }
+
+                    val birthDiaryData = apiDiaries.find { diary ->
+                        diary.inferAuthorRole(userId, userGender, null, null) == "FEMALE"
+                    }
+                    Log.d("DiaryDetailScreen", "찾은 출산일기: $birthDiaryData")
+
+                    birthDiaryData?.let { diary ->
+                        Log.d("DiaryDetailScreen", "🔍 일기 정보 확인:")
+                        Log.d("DiaryDetailScreen", "  - diaryId: ${diary.diaryId}")
+                        Log.d("DiaryDetailScreen", "  - authorId: ${diary.authorId}")
+                        Log.d("DiaryDetailScreen", "  - authorRole: ${diary.authorRole}")
+                        Log.d("DiaryDetailScreen", "  - 현재 userId: $userId")
+                        Log.d("DiaryDetailScreen", "  - 작성자 일치: ${diary.authorId == userId}")
+
+                        Log.d("DiaryDetailScreen", "setEditingDiary 호출: diaryId=${diary.diaryId}")
+                        diaryViewModel.setEditingDiary(diary)
+
+                        navController.navigate(
+                            Screen.DiaryRegisterScreen.createRoute(
+                                diaryType = "birth",
+                                day = actualDayNumber,
+                                isEdit = true
+                            ) + "?diaryId=${diary.diaryId}"
                         )
-                    )
+                    } ?: Log.w("DiaryDetailScreen", "출산일기를 찾을 수 없습니다!")
                 },
                 onContentClick = {
                     // DiaryBoardScreen으로 이동
@@ -364,13 +392,28 @@ fun DiaryDetailScreen(
                 },
                 onEditClick = {
                     // 관찰일기 수정 화면으로 이동
-                    navController.navigate(
-                        Screen.DiaryRegisterScreen.createRoute(
-                            diaryType = "observation",
-                            day = actualDayNumber,
-                            isEdit = true
+                    // DiaryBoardScreen과 동일하게 편집할 일기 데이터를 DiaryViewModel에 설정
+                    Log.d("DiaryDetailScreen", "🚨 관찰일기 수정 버튼 클릭!")
+                    Log.d("DiaryDetailScreen", "apiDiaries.size: ${apiDiaries.size}")
+                    Log.d("DiaryDetailScreen", "userId: $userId, userGender: $userGender")
+
+                    val observationDiaryData = apiDiaries.find { diary ->
+                        diary.inferAuthorRole(userId, userGender, null, null) == "MALE"
+                    }
+                    Log.d("DiaryDetailScreen", "찾은 관찰일기: $observationDiaryData")
+
+                    observationDiaryData?.let { diary ->
+                        Log.d("DiaryDetailScreen", "setEditingDiary 호출: diaryId=${diary.diaryId}")
+                        diaryViewModel.setEditingDiary(diary)
+
+                        navController.navigate(
+                            Screen.DiaryRegisterScreen.createRoute(
+                                diaryType = "observation",
+                                day = actualDayNumber,
+                                isEdit = true
+                            ) + "?diaryId=${diary.diaryId}"
                         )
-                    )
+                    } ?: Log.w("DiaryDetailScreen", "관찰일기를 찾을 수 없습니다!")
                 },
                 onContentClick = {
                     // DiaryBoardScreen으로 이동

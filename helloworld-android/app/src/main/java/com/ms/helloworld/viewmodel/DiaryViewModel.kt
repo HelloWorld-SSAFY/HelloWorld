@@ -229,16 +229,16 @@ class DiaryViewModel @Inject constructor(
         }
     }
 
-    fun updateDiary(diaryId: Long, title: String, content: String, targetDate: String) {
+    fun updateDiary(diaryId: Long, title: String, content: String, targetDate: String, imageUrl: String = "") {
         viewModelScope.launch {
             try {
                 _state.value = _state.value.copy(isLoading = true, errorMessage = null)
 
                 val request = DiaryUpdateRequest(
+                    entryDate = targetDate,
                     diaryTitle = title,
                     diaryContent = content,
-                    targetDate = targetDate,
-                    updatedAt = java.time.LocalDateTime.now().toString()
+                    imageUrl = imageUrl
                 )
 
                 val result = diaryRepository.updateDiary(diaryId, request)

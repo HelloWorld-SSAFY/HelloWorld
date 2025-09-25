@@ -55,6 +55,13 @@ data class CalendarData(
     val dateKey: String
 )
 
+// 색상 상수 정의 - 성능 최적화
+private val PrimaryColor: Color = Color(0xFFF49699)
+private val PrimaryColorLight: Color = Color(0xFFF49699).copy(alpha = 0.1f)
+private val PrimaryColorMedium: Color = Color(0xFFF49699).copy(alpha = 0.3f)
+private val PrimaryColorDark: Color = Color(0xFFF49699).copy(alpha = 0.6f)
+private val PrimaryColorSemiLight: Color = Color(0xFFF49699).copy(alpha = 0.05f)
+
 @SuppressLint("NewApi")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -270,7 +277,7 @@ fun CalendarScreen(
                 // 섹션 헤더
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF6200EE).copy(alpha = 0.1f)),
+                    colors = CardDefaults.cardColors(containerColor = PrimaryColorLight),
                     shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)
                 ) {
                     Row(
@@ -284,12 +291,12 @@ fun CalendarScreen(
                             text = if (displayDateKey.isNotEmpty()) "${formatDateForDisplay(displayDateKey)} 일정" else "오늘 일정",
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF6200EE)
+                            color = PrimaryColor
                         )
                         val currentEvents = (state.events[displayDateKey] ?: emptyList()).sortedBy { it.orderNo ?: Int.MAX_VALUE }
                         if (currentEvents.isNotEmpty()) {
                             Card(
-                                colors = CardDefaults.cardColors(containerColor = Color(0xFF6200EE)),
+                                colors = CardDefaults.cardColors(containerColor = PrimaryColor),
                                 shape = CircleShape
                             ) {
                                 Text(
@@ -704,7 +711,7 @@ fun CalendarGrid(
                                             modifier = Modifier
                                                 .size(4.dp)
                                                 .background(
-                                                    if (isSelected) Color.White else Color.Blue,
+                                                    if (isSelected) Color.White else PrimaryColor,
                                                     CircleShape
                                                 )
                                         )
@@ -766,8 +773,8 @@ fun EventCard(
             },
         colors = CardDefaults.cardColors(
             containerColor = when {
-                isDragging -> Color(0xFF6200EE).copy(alpha = 0.1f)
-                isLongPressed -> Color(0xFF6200EE).copy(alpha = 0.05f)
+                isDragging -> PrimaryColorLight
+                isLongPressed -> PrimaryColorSemiLight
                 else -> Color(0xFFF8F9FA)
             }
         ),
@@ -775,7 +782,7 @@ fun EventCard(
             defaultElevation = if (isDragging) 16.dp else 2.dp
         ),
         shape = RoundedCornerShape(12.dp),
-        border = if (isDragging) BorderStroke(2.dp, Color(0xFF6200EE).copy(alpha = 0.3f)) else null
+        border = if (isDragging) BorderStroke(2.dp, PrimaryColorMedium) else null
     ) {
         Column(
             modifier = Modifier
@@ -797,7 +804,7 @@ fun EventCard(
                                 modifier = Modifier
                                     .size(width = 3.dp, height = 12.dp)
                                     .background(
-                                        Color(0xFF6200EE).copy(alpha = 0.6f),
+                                        PrimaryColorDark,
                                         RoundedCornerShape(2.dp)
                                     )
                             )
@@ -835,7 +842,7 @@ fun EventCard(
                             imageVector = Icons.Default.DateRange,
                             contentDescription = "시간",
                             modifier = Modifier.size(14.dp),
-                            tint = Color(0xFF6200EE)
+                            tint = PrimaryColor
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         val timeFormat = try {
@@ -856,7 +863,7 @@ fun EventCard(
                         if (isDragging) {
                             Spacer(modifier = Modifier.width(12.dp))
                             Card(
-                                colors = CardDefaults.cardColors(containerColor = Color(0xFF6200EE)),
+                                colors = CardDefaults.cardColors(containerColor = PrimaryColor),
                                 shape = CircleShape
                             ) {
                                 Text(
@@ -877,14 +884,14 @@ fun EventCard(
             if (isLongPressed && !isDragging) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF6200EE).copy(alpha = 0.1f)),
+                    colors = CardDefaults.cardColors(containerColor = PrimaryColorLight),
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Text(
                         text = "↕️ 위아래로 드래그하여 순서를 변경하세요",
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                         fontSize = 11.sp,
-                        color = Color(0xFF6200EE),
+                        color = PrimaryColor,
                         fontWeight = FontWeight.Medium,
                         textAlign = TextAlign.Center
                     )

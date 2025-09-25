@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.collectAsState
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.ms.helloworld.viewmodel.HomeViewModel
 import androidx.compose.ui.Modifier
@@ -33,7 +32,6 @@ import com.ms.helloworld.ui.screen.HealthRegisterScreen
 import com.ms.helloworld.ui.screen.DiaryBoardScreen
 import com.ms.helloworld.ui.screen.NotificationScreen
 import com.ms.helloworld.ui.screen.SplashScreen
-import com.ms.helloworld.ui.screen.WeeklyRecommendationScreen
 import com.ms.helloworld.ui.screen.WeeklyDietScreen
 import com.ms.helloworld.ui.screen.WeeklyWorkoutScreen
 import com.ms.helloworld.ui.screen.WeeklyInfoScreen
@@ -212,31 +210,6 @@ fun MainNavigation(
 
             composable(Screen.WearableRecommendedScreen.route){
                 WearableRecommendedScreen(navController)
-            }
-
-            composable(
-                route = "weekly_recommendation/{week}",
-                arguments = listOf(navArgument("week") {
-                    type = NavType.IntType
-                    defaultValue = 1
-                })
-            ) { backStackEntry ->
-                val week = backStackEntry.arguments?.getInt("week") ?: 1
-                WeeklyRecommendationScreen(
-                    initialWeek = week,
-                    onBackClick = {
-                        navController.popBackStack()
-                    },
-                    onDietClick = { currentWeek ->
-                        navController.navigate("weekly_diet/$currentWeek")
-                    },
-                    onWorkoutClick = { currentWeek ->
-                        navController.navigate("weekly_workout/$currentWeek")
-                    },
-                    onInfoClick = { currentWeek ->
-                        navController.navigate("weekly_info/$currentWeek")
-                    }
-                )
             }
 
             composable(

@@ -29,6 +29,7 @@ import com.ms.helloworld.dto.response.MomProfile
 import com.ms.helloworld.ui.components.CustomTopAppBar
 import com.ms.helloworld.viewmodel.DiaryViewModel
 import com.ms.helloworld.viewmodel.HomeViewModel
+import com.ms.helloworld.viewmodel.HealthViewModel
 
 // 데이터 클래스들
 data class PregnancyWeek(
@@ -50,6 +51,7 @@ data class MomHealthData(
     val bloodSugar: Int       // 혈당 (mg/dL)
 )
 
+
 enum class DiaryState {
     NONE,      // 아무것도 안 씀 - 회색
     MOM_ONLY,  // 산모만 씀 - F49699
@@ -62,7 +64,8 @@ enum class DiaryState {
 fun DiaryScreen(
     navController: NavHostController,
     viewModel: DiaryViewModel = hiltViewModel(),
-    homeViewModel: HomeViewModel = hiltViewModel()
+    homeViewModel: HomeViewModel = hiltViewModel(),
+    healthViewModel: HealthViewModel = hiltViewModel()
 ) {
 
     val backgroundColor = Color(0xFFF5F5F5)
@@ -70,12 +73,14 @@ fun DiaryScreen(
     val homeState by homeViewModel.momProfile.collectAsState()
     val currentPregnancyDay by homeViewModel.currentPregnancyDay.collectAsState()
     val menstrualDate by homeViewModel.menstrualDate.collectAsState()
+    val healthState by healthViewModel.state.collectAsStateWithLifecycle()
 
-    // 스크린이 시작될 때 HomeViewModel 데이터 로딩
+    // 스크린이 시작될 때 HomeViewModel과 HealthViewModel 데이터 로딩
     LaunchedEffect(Unit) {
         homeViewModel.forceRefreshProfile()
         homeViewModel.refreshProfile()
         homeViewModel.refreshCalendarEvents()
+        healthViewModel.loadHealthHistory()
     }
 
     // 실제 임신 정보 사용 (currentPregnancyDay를 우선 사용)
@@ -133,13 +138,113 @@ fun DiaryScreen(
             DiaryStatus(7, false, false)
         )
 
-        // 산모 건강 데이터 (임시 - 추후 HealthData API와 연동)
+        // 현재 주차의 건강 데이터 계산 (HealthStatusScreen 로직 참고)
+        val weekStartDay = if (actualCurrentWeek.week > 0) {
+            (actualCurrentWeek.week - 1) * 7 + 1
+        } else {
+            if (currentPregnancyDay > 1) {
+                val currentWeek = ((currentPregnancyDay - 1) / 7) + 1
+                (currentWeek - 1) * 7 + 1
+            } else 1
+        }
+        val weekEndDay = weekStartDay + 6
+
+        // 건강 데이터를 HealthStatusScreen과 동일한 방식으로 변환
+        val healthDataList = if (menstrualDate == null) {
+            emptyList()
+        } else {
+            val historyDataMap = mutableMapOf<String, com.ms.helloworld.dto.response.MaternalHealthItem>()
+            val todayDataMap = mutableMapOf<String, com.ms.helloworld.dto.response.MaternalHealthGetResponse>()
+
+            healthState.healthHistory.forEach { item ->
+                historyDataMap[item.recordDate] = item
+            }
+
+            healthState.todayHealthData?.let { todayData ->
+                todayDataMap[todayData.recordDate] = todayData
+            }
+
+            val weeklyData = mutableListOf<com.ms.helloworld.ui.screen.HealthData>()
+            for (day in weekStartDay..weekEndDay) {
+                val targetDate = try {
+                    val lmpDate = java.time.LocalDate.parse(menstrualDate)
+                    lmpDate.plusDays((day - 1).toLong())
+                } catch (e: Exception) {
+                    null
+                }
+
+                val targetDateString = targetDate?.toString()
+                val historyData = targetDateString?.let { historyDataMap[it] }
+                val todayData = targetDateString?.let { todayDataMap[it] }
+
+                when {
+                    historyData != null -> {
+                        val bloodPressure = healthViewModel.parseBloodPressure(historyData.bloodPressure)
+                        weeklyData.add(com.ms.helloworld.ui.screen.HealthData(
+                            day = ((day - weekStartDay) % 7) + 1,
+                            weight = historyData.weight.toFloat(),
+                            bloodPressureHigh = bloodPressure?.first?.toFloat(),
+                            bloodPressureLow = bloodPressure?.second?.toFloat(),
+                            bloodSugar = historyData.bloodSugar.toFloat(),
+                            recordDate = historyData.recordDate
+                        ))
+                    }
+                    todayData != null -> {
+                        val bloodPressure = healthViewModel.parseBloodPressure(todayData.bloodPressure)
+                        weeklyData.add(com.ms.helloworld.ui.screen.HealthData(
+                            day = ((day - weekStartDay) % 7) + 1,
+                            weight = todayData.weight.toFloat(),
+                            bloodPressureHigh = bloodPressure?.first?.toFloat(),
+                            bloodPressureLow = bloodPressure?.second?.toFloat(),
+                            bloodSugar = todayData.bloodSugar.toFloat(),
+                            recordDate = todayData.recordDate
+                        ))
+                    }
+                    else -> {
+                        weeklyData.add(com.ms.helloworld.ui.screen.HealthData(
+                            day = ((day - weekStartDay) % 7) + 1,
+                            weight = null,
+                            bloodPressureHigh = null,
+                            bloodPressureLow = null,
+                            bloodSugar = null,
+                            recordDate = targetDateString
+                        ))
+                    }
+                }
+            }
+            weeklyData.toList()
+        }
+
+        // 건강 데이터 평균값 계산 (HealthStatusScreen의 calculateAverage 함수 사용)
+        val avgWeight = healthDataList.mapNotNull { it.weight }.let { weights ->
+            if (weights.isNotEmpty()) weights.average().toFloat() else 62f
+        }
+        val avgBloodPressureSystolic = healthDataList.mapNotNull { it.bloodPressureHigh }.let { pressures ->
+            if (pressures.isNotEmpty()) pressures.average().toInt() else 120
+        }
+        val avgBloodPressureDiastolic = healthDataList.mapNotNull { it.bloodPressureLow }.let { pressures ->
+            if (pressures.isNotEmpty()) pressures.average().toInt() else 80
+        }
+        val avgBloodSugar = healthDataList.mapNotNull { it.bloodSugar }.let { sugars ->
+            if (sugars.isNotEmpty()) sugars.average().toInt() else 95
+        }
+
+        // 체중 변화 계산 (첫 번째 데이터 대비 최신 데이터)
+        val weightChange = healthDataList.mapNotNull { it.weight }.let { weights ->
+            if (weights.size >= 2) {
+                weights.last() - weights.first()
+            } else {
+                0f
+            }
+        }
+
+        // 산모 건강 데이터 (실제 데이터 기반)
         val momHealthData = MomHealthData(
-            weight = 62f,
-            weightChange = 8f,
-            bloodPressureSystolic = 120,
-            bloodPressureDiastolic = 80,
-            bloodSugar = 95
+            weight = avgWeight,
+            weightChange = weightChange,
+            bloodPressureSystolic = avgBloodPressureSystolic,
+            bloodPressureDiastolic = avgBloodPressureDiastolic,
+            bloodSugar = avgBloodSugar
         )
 
         // HomeViewModel의 실제 데이터를 DiaryViewModel에 전달
@@ -359,7 +464,7 @@ fun DiaryStatusCircle(
         DiaryState.NONE -> Color(0xFFE0E0E0)      // 회색
         DiaryState.MOM_ONLY -> Color(0xFFF49699)  // 산모만
         DiaryState.DAD_ONLY -> Color(0xFF88A9F8)  // 남편만
-        DiaryState.BOTH -> Color(0xFFBCFF8F)      // 둘 다
+        DiaryState.BOTH -> Color(0xFF26E936)      // 둘 다
     }
 
     Box(
@@ -436,12 +541,12 @@ fun MomDataSummaryCard(
             // 체중
             DataSummaryItem(
                 icon = Icons.Default.Person,
-                iconColor = Color(0xFFFF9800),
+                iconColor = Color(0xFF26E936),
                 title = "체중",
                 value = "${momHealthData.weight.toInt()}kg",
-                subtitle = "+${momHealthData.weightChange.toInt()}kg",
-                progress = momHealthData.weight / 100f, // 100kg 기준으로 진행률 계산
-                progressColor = Color(0xFFFF9800)
+                subtitle = "",
+                progress = momHealthData.weight / 150, // 200kg 기준으로 진행률 계산
+                progressColor = Color(0xFF26E936)
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -449,12 +554,12 @@ fun MomDataSummaryCard(
             // 혈압
             DataSummaryItem(
                 icon = Icons.Default.Favorite,
-                iconColor = Color(0xFFE91E63),
+                iconColor = Color(0xFFF49699),
                 title = "혈압",
-                value = "${momHealthData.bloodPressureSystolic}/${momHealthData.bloodPressureDiastolic}",
-                subtitle = "mmHg",
+                value = "${momHealthData.bloodPressureSystolic}/${momHealthData.bloodPressureDiastolic}mmHg",
+                subtitle = "",
                 progress = momHealthData.bloodPressureSystolic / 200f, // 200mmHg 기준으로 진행률 계산
-                progressColor = Color(0xFFE91E63)
+                progressColor = Color(0xFFF49699)
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -462,12 +567,12 @@ fun MomDataSummaryCard(
             // 혈당
             DataSummaryItem(
                 icon = Icons.Default.Face,
-                iconColor = Color(0xFF2196F3),
+                iconColor = Color(0xFF88A9F8),
                 title = "혈당",
                 value = "${momHealthData.bloodSugar}mg/dL",
-                subtitle = "정상범위 70-140",
-                progress = momHealthData.bloodSugar / 200f, // 200mg/dL 기준으로 진행률 계산
-                progressColor = Color(0xFF2196F3)
+                subtitle = "",
+                progress = momHealthData.bloodSugar/ 200f, // 200mg/dL 기준으로 진행률 계산
+                progressColor = Color(0xFF88A9F8)
             )
         }
     }
@@ -539,15 +644,21 @@ fun DataSummaryItem(
             // 진행률 바 (컨디션 제외)
             if (progress > 0f) {
                 Spacer(modifier = Modifier.height(8.dp))
-                LinearProgressIndicator(
-                    progress = progress,
+                // LinearProgressIndicator 대신 커스텀 프로그래스 바 사용
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(6.dp)
-                        .clip(RoundedCornerShape(3.dp)),
-                    color = progressColor,
-                    trackColor = Color(0xFFE0E0E0)
-                )
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(Color(0xFFE0E0E0))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .fillMaxWidth(progress)
+                            .background(progressColor)
+                    )
+                }
             }
         }
     }

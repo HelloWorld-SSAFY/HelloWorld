@@ -112,12 +112,52 @@ class DiaryRepository @Inject constructor(
 
     suspend fun updateDiary(diaryId: Long, request: DiaryUpdateRequest): Result<DiaryResponse> {
         return try {
-            Log.d(TAG, "📝 일기 수정 - diaryId: $diaryId, title: ${request.diaryTitle}")
+            Log.d(TAG, "📝 일기 수정 시작")
+            Log.d(TAG, "📋 Request 정보:")
+            Log.d(TAG, "  - diaryId: $diaryId")
+            Log.d(TAG, "  - entryDate: ${request.entryDate}")
+            Log.d(TAG, "  - diaryTitle: ${request.diaryTitle}")
+            Log.d(TAG, "  - diaryContent: ${request.diaryContent}")
+            Log.d(TAG, "  - imageUrl: ${request.imageUrl}")
+            Log.d(TAG, "🌐 API 호출: PUT calendar/diary/$diaryId")
+
             val response = diaryApi.updateDiary(diaryId, request)
-            Log.d(TAG, "✅ 일기 수정 성공")
+
+            Log.d(TAG, "✅ 일기 수정 성공!")
+            Log.d(TAG, "📋 Response 정보:")
+            Log.d(TAG, "  - diaryId: ${response.diaryId}")
+            Log.d(TAG, "  - diaryTitle: ${response.diaryTitle}")
+            Log.d(TAG, "  - authorRole: ${response.authorRole}")
+            Log.d(TAG, "  - targetDate: ${response.targetDate}")
+
             Result.success(response)
         } catch (e: Exception) {
-            Log.e(TAG, "❌ 일기 수정 실패: ${e.message}", e)
+            Log.e(TAG, "❌ 일기 수정 실패")
+            Log.e(TAG, "Exception type: ${e.javaClass.simpleName}")
+            Log.e(TAG, "Exception message: ${e.message}")
+
+            if (e is retrofit2.HttpException) {
+                try {
+                    val errorCode = e.code()
+                    val errorBody = e.response()?.errorBody()?.string()
+                    Log.e(TAG, "🚨 HTTP Error Details:")
+                    Log.e(TAG, "  - Status Code: $errorCode")
+                    Log.e(TAG, "  - Error Body: $errorBody")
+                    Log.e(TAG, "  - Response Headers: ${e.response()?.headers()}")
+
+                    // Request 정보도 다시 로그
+                    Log.e(TAG, "🔄 Failed Request Details:")
+                    Log.e(TAG, "  - diaryId: $diaryId")
+                    Log.e(TAG, "  - diaryTitle: ${request.diaryTitle}")
+                    Log.e(TAG, "  - diaryContent: ${request.diaryContent}")
+                    Log.e(TAG, "  - entryDate: ${request.entryDate}")
+                    Log.e(TAG, "  - imageUrl: ${request.imageUrl}")
+                } catch (ioException: Exception) {
+                    Log.e(TAG, "Failed to read error body: ${ioException.message}")
+                }
+            }
+
+            Log.e(TAG, "Stack trace:", e)
             Result.failure(e)
         }
     }

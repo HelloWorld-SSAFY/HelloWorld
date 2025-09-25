@@ -1,8 +1,8 @@
 package com.ms.helloworld.dto.request
 
 data class DiaryUpdateRequest(
+    val entryDate: String,
     val diaryTitle: String,
     val diaryContent: String,
-    val targetDate: String, // "yyyy-MM-dd" format
-    val updatedAt: String
+    val imageUrl: String
 )
