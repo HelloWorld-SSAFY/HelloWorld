@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.Optional;
 import java.sql.Timestamp;
 import java.util.List;
@@ -17,6 +18,12 @@ public interface DeviceTokenRepository extends JpaRepository<DeviceToken, Long> 
     Optional<DeviceToken> findFirstByUserIdAndIsActiveTrueOrderByLastSeenAtDescCreatedAtDesc(Long userId);
 
     Optional<DeviceToken> findByUserIdAndToken(Long userId, String token);
+
+    // 플랫폼이 여러 별칭 중 하나인 최신 활성 토큰 1개
+    Optional<DeviceToken>
+    findFirstByUserIdAndPlatformInAndIsActiveTrueOrderByLastSeenAtDescCreatedAtDesc(
+            Long userId, Collection<String> platforms
+    );
 
 
     @Transactional

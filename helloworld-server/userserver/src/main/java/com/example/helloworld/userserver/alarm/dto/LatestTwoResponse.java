@@ -9,8 +9,8 @@ import lombok.NoArgsConstructor;
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
-public class FcmTokenResponse {
+public class LatestTwoResponse {
     private Long userId;
-    private String token;       // 최신 활성 토큰
+    private String mobileToken; // MOBILE 최신 1개
+    private String wearToken;   // WEAR_OS 최신 1개
 }
-
