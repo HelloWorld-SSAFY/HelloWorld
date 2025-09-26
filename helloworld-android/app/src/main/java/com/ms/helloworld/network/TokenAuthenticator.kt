@@ -16,6 +16,7 @@ import javax.inject.Provider
 import javax.inject.Singleton
 
 private const val TAG = "싸피_TokenAuthenticator"
+
 @Singleton
 class TokenAuthenticator @Inject constructor(
     private val tokenManager: TokenManager,
@@ -25,66 +26,85 @@ class TokenAuthenticator @Inject constructor(
     private val refreshMutex = Mutex()
 
     override fun authenticate(route: Route?, response: Response): Request? {
+        // 401 Unauthorized가 아니면 처리하지 않음
+        if (response.code != 401) {
+            return null
+        }
 
         return runBlocking {
             refreshMutex.withLock {
-                val refreshToken = tokenManager.getRefreshToken()
+                // 이미 Authorization 헤더가 갱신된 요청인지 확인
+                val currentToken = tokenManager.getAccessTokenSuspend()
+                val requestToken = response.request.header("Authorization")?.removePrefix("Bearer ")
+
+                // 현재 저장된 토큰과 요청에 사용된 토큰이 다르다면 이미 갱신됨
+                if (currentToken != null && currentToken != requestToken) {
+                    Log.d(TAG, "토큰이 이미 갱신됨. 새 토큰으로 재시도")
+                    return@withLock response.request.newBuilder()
+                        .header("Authorization", "Bearer $currentToken")
+                        .build()
+                }
+
+                val refreshToken = tokenManager.getRefreshTokenSuspend()
 
                 if (refreshToken.isNullOrBlank()) {
-                    Log.e(TAG, "RefreshToken 없음")
+                    Log.e(TAG, "RefreshToken 없음 - 로그아웃 처리")
+                    tokenManager.clearTokens()
+                    return@withLock null
+                }
+
+                // RefreshToken도 만료되었는지 확인
+                if (tokenManager.isTokenExpired(refreshToken)) {
+                    Log.e(TAG, "RefreshToken 만료됨 - 로그아웃 처리")
+                    tokenManager.clearTokens()
                     return@withLock null
                 }
 
                 try {
+                    Log.d(TAG, "토큰 갱신 시도 중...")
 
                     val refreshResponse = authApiProvider.get().refreshToken(
                         RefreshTokenRequest(refreshToken)
                     )
 
-                    // Response가 성공적인지 확인
                     if (refreshResponse.isSuccessful) {
                         val tokenResponse = refreshResponse.body()
 
-                        if (tokenResponse != null) {
+                        if (tokenResponse != null && !tokenResponse.accessToken.isNullOrBlank()) {
                             // 새 토큰 저장
                             tokenManager.saveTokens(
                                 tokenResponse.accessToken,
-                                tokenResponse.refreshToken ?: refreshToken // 새 리프레시 토큰이 없으면 기존 것 유지
+                                tokenResponse.refreshToken ?: refreshToken
                             )
 
                             Log.d(TAG, "토큰 갱신 성공")
-                            Log.d(TAG, "New Access Token: ${tokenResponse.accessToken}")
-                            Log.d(TAG, "New Refresh Token: ${tokenResponse.refreshToken ?: refreshToken}")
 
                             // 실패한 요청을 새 토큰으로 재시도
-                            response.request.newBuilder()
+                            return@withLock response.request.newBuilder()
                                 .header("Authorization", "Bearer ${tokenResponse.accessToken}")
                                 .build()
                         } else {
-                            Log.e(TAG, "토큰 갱신 응답 본문이 null")
-//                            tokenManager.clearTokens()
-                            Log.d(TAG, "🗑토큰 삭제됨 - 재로그인 필요")
-                            null
+                            Log.e(TAG, "토큰 갱신 응답이 유효하지 않음")
+                            tokenManager.clearTokens()
+                            return@withLock null
                         }
                     } else {
-                        Log.e(TAG, "토큰 갱신 실패: ${refreshResponse.code()}")
-//                        tokenManager.clearTokens()
-                        Log.d(TAG, "토큰 삭제됨 - 재로그인 필요")
-                        null
+                        Log.e(TAG, "토큰 갱신 실패: ${refreshResponse.code()} - ${refreshResponse.message()}")
+
+                        // 401이나 403이면 RefreshToken이 유효하지 않음
+                        if (refreshResponse.code() == 401 || refreshResponse.code() == 403) {
+                            Log.e(TAG, "RefreshToken 유효하지 않음 - 로그아웃 처리")
+                            tokenManager.clearTokens()
+                        }
+                        return@withLock null
                     }
 
                 } catch (e: Exception) {
-                    Log.e(TAG, "토큰 갱신 실패: ${e.message}")
+                    Log.e(TAG, "토큰 갱신 중 예외 발생: ${e.message}", e)
 
-                    // 갱신 실패 시 토큰 삭제 (로그아웃 처리)
-                    try {
-//                        tokenManager.clearTokens()
-                        Log.d(TAG, "토큰 삭제됨 - 재로그인 필요")
-                    } catch (clearException: Exception) {
-                        Log.e(TAG, "토큰 삭제 실패", clearException)
-                    }
-
-                    null
+                    // 네트워크 오류 등의 경우 토큰을 삭제하지 않음
+                    // 단, 인증 관련 오류라면 토큰 삭제
+                    return@withLock null
                 }
             }
         }

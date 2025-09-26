@@ -154,7 +154,10 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        installSplashScreen()
+        // 시스템 스플래시 제거
+        val splashScreen = installSplashScreen()
+        splashScreen.setKeepOnScreenCondition { false }
+
         super.onCreate(savedInstanceState)
 
         sharedPreferences = getSharedPreferences("heart_rate_prefs", Context.MODE_PRIVATE)
@@ -173,7 +176,19 @@ class MainActivity : ComponentActivity() {
 
 
         setContent {
-            AppContent()
+            var showSplash by remember { mutableStateOf(true) }
+
+            LaunchedEffect(Unit) {
+                // 2초 후 스플래시 화면 숨김
+                delay(2000)
+                showSplash = false
+            }
+
+            if (showSplash) {
+                CustomSplashScreen() // 여기서 사용
+            } else {
+                AppContent() // 메인 앱 화면
+            }
         }
 
         // 토큰 상태 로깅 시작

@@ -162,7 +162,6 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             action = "FCM_NOTIFICATION_$type"
             putExtra("notification_timestamp", System.currentTimeMillis())
             putExtra("notification_type", type)
-            putExtra("coupleId", coupleId) // 커플 ID 전달
 
             // 앱이 이미 실행 중일 때 새 액티비티를 생성하지 않고 기존 액티비티로 이동
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
