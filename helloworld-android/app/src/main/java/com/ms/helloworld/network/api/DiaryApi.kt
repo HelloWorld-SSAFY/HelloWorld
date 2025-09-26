@@ -1,9 +1,13 @@
 package com.ms.helloworld.network.api
 
 import com.ms.helloworld.dto.request.DiaryCreateRequest
+import com.ms.helloworld.dto.request.DiaryCreateWithFilesRequest
 import com.ms.helloworld.dto.request.DiaryUpdateRequest
 import com.ms.helloworld.dto.response.DiaryResponse
 import com.ms.helloworld.dto.response.DiaryListResponse
+import com.ms.helloworld.dto.response.FileUploadResponse
+import okhttp3.MultipartBody
+import okhttp3.RequestBody
 import retrofit2.Response
 import retrofit2.http.*
 
@@ -26,6 +30,15 @@ interface DiaryApi {
     suspend fun createDiary(
         @Body request: DiaryCreateRequest
     ): DiaryResponse
+
+    // 백엔드 API에 맞는 Multipart 요청
+    @Multipart
+    @POST("calendar/diary")
+    suspend fun createDiaryWithFiles(
+        @Part("payload") payload: RequestBody, // JSON 문자열
+        @Part files: List<MultipartBody.Part>, // 파일들
+        @Query("ultrasounds") ultrasounds: List<Boolean> // Query 파라미터로 전송
+    ): Map<String, Any>
 
     @PUT("calendar/diary/{diaryId}")
     suspend fun updateDiary(

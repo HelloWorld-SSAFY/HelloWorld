@@ -1,11 +1,23 @@
 package com.ms.helloworld.repository
 
+import android.content.Context
+import android.net.Uri
+import android.provider.MediaStore
 import android.util.Log
+import com.google.gson.Gson
 import com.ms.helloworld.dto.request.DiaryCreateRequest
+import com.ms.helloworld.dto.request.DiaryCreateWithFilesRequest
 import com.ms.helloworld.dto.request.DiaryUpdateRequest
 import com.ms.helloworld.dto.response.DiaryResponse
 import com.ms.helloworld.dto.response.DiaryListResponse
 import com.ms.helloworld.network.api.DiaryApi
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.asRequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.File
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -32,7 +44,8 @@ class DiaryRepository @Inject constructor(
                     Log.d(TAG, "  [$index] ID: ${diary.diaryId}")
                     Log.d(TAG, "       제목: ${diary.diaryTitle}")
                     Log.d(TAG, "       역할: ${diary.authorRole}")
-                    Log.d(TAG, "       targetDate: ${diary.targetDate}")
+                    Log.d(TAG, "       원본 targetDate: ${diary.targetDate}")
+                    Log.d(TAG, "       보정된 targetDate: ${diary.getCorrectedTargetDate()}")
                     Log.d(TAG, "       coupleId: ${diary.coupleId}")
                     Log.d(TAG, "       authorId: ${diary.authorId}")
                 }
@@ -107,6 +120,151 @@ class DiaryRepository @Inject constructor(
 
             Log.e(TAG, "Stack trace:", e)
             Result.failure(e)
+        }
+    }
+
+    suspend fun createDiaryWithFiles(
+        context: Context,
+        entryDate: String,
+        diaryTitle: String,
+        diaryContent: String,
+        targetDate: String,
+        authorRole: String,
+        authorId: Long,
+        imageUris: List<Uri>,
+        ultrasounds: List<Boolean>
+    ): Result<DiaryResponse> {
+        return try {
+            Log.d(TAG, "📎 백엔드 API 맞춤 일기 생성 시작")
+            Log.d(TAG, "📝 Parameters:")
+            Log.d(TAG, "  - entryDate: $entryDate")
+            Log.d(TAG, "  - diaryTitle: $diaryTitle")
+            Log.d(TAG, "  - targetDate: $targetDate")
+            Log.d(TAG, "  - authorRole: $authorRole")
+            Log.d(TAG, "  - authorId: $authorId")
+            Log.d(TAG, "  - imageUris count: ${imageUris.size}")
+            Log.d(TAG, "  - ultrasounds: $ultrasounds")
+
+            // 1. JSON payload 생성
+            val now = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+            val requestData = mapOf(
+                "entryDate" to entryDate,
+                "diaryTitle" to diaryTitle,
+                "diaryContent" to diaryContent,
+                "imageUrl" to "", // 빈 문자열로 설정
+                "coupleId" to 0L, // TODO: 실제 coupleId 필요
+                "authorId" to authorId,
+                "authorRole" to authorRole,
+                "targetDate" to targetDate,
+                "createdAt" to now,
+                "updatedAt" to now
+            )
+
+            val jsonPayload = Gson().toJson(requestData)
+            val payloadBody = jsonPayload.toRequestBody("application/json".toMediaType())
+
+            Log.d(TAG, "📋 JSON Payload: $jsonPayload")
+
+            // 2. 파일 Parts 생성
+            val fileParts = mutableListOf<MultipartBody.Part>()
+            imageUris.forEachIndexed { index, uri ->
+                try {
+                    val file = getFileFromUri(context, uri)
+                    if (file != null && file.exists()) {
+                        val requestFile = file.asRequestBody("image/*".toMediaType())
+                        val part = MultipartBody.Part.createFormData("files", file.name, requestFile)
+                        fileParts.add(part)
+                        Log.d(TAG, "📎 파일[$index] 추가: ${file.name}, 크기: ${file.length()} bytes")
+                    } else {
+                        Log.w(TAG, "⚠️ 파일[$index] 생성 실패: URI=$uri")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "❌ 파일[$index] 처리 실패: ${e.message}", e)
+                }
+            }
+
+            Log.d(TAG, "🌐 API 호출: POST calendar/diary (Multipart with payload)")
+            val response = diaryApi.createDiaryWithFiles(
+                payload = payloadBody,
+                files = fileParts,
+                ultrasounds = ultrasounds
+            )
+
+            Log.d(TAG, "✅ 일기 생성 성공!")
+            Log.d(TAG, "📋 Response: $response")
+
+            // Map에서 diaryId 추출하여 DiaryResponse 생성
+            val diaryId = (response["diaryId"] as? Number)?.toLong() ?: 0L
+            val mockDiaryResponse = DiaryResponse(
+                diaryId = diaryId,
+                coupleId = 0L,
+                authorId = authorId,
+                authorRole = authorRole,
+                diaryTitle = diaryTitle,
+                diaryTitleAlt = null,
+                diaryContent = diaryContent,
+                diaryContentAlt = null,
+                thumbnailUrl = "",
+                entryDate = entryDate,
+                targetDate = targetDate,
+                createdAt = now,
+                updatedAt = now
+            )
+
+            Result.success(mockDiaryResponse)
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ 일기 생성 실패")
+            Log.e(TAG, "Exception type: ${e.javaClass.simpleName}")
+            Log.e(TAG, "Exception message: ${e.message}")
+
+            if (e is retrofit2.HttpException) {
+                try {
+                    val errorCode = e.code()
+                    val errorBody = e.response()?.errorBody()?.string()
+                    Log.e(TAG, "🚨 HTTP Error Details:")
+                    Log.e(TAG, "  - Status Code: $errorCode")
+                    Log.e(TAG, "  - Error Body: $errorBody")
+                } catch (ioException: Exception) {
+                    Log.e(TAG, "Failed to read error body: ${ioException.message}")
+                }
+            }
+
+            Log.e(TAG, "Stack trace:", e)
+            Result.failure(e)
+        }
+    }
+
+    private fun getFileFromUri(context: Context, uri: Uri): File? {
+        return try {
+            val contentResolver = context.contentResolver
+            val cursor = contentResolver.query(uri, null, null, null, null)
+            cursor?.use {
+                if (it.moveToFirst()) {
+                    val displayNameIndex = it.getColumnIndex(MediaStore.Images.Media.DISPLAY_NAME)
+                    val displayName = if (displayNameIndex >= 0) {
+                        it.getString(displayNameIndex)
+                    } else {
+                        "image_${System.currentTimeMillis()}.jpg"
+                    }
+
+                    // 임시 파일 생성
+                    val tempFile = File(context.cacheDir, displayName)
+                    contentResolver.openInputStream(uri)?.use { input ->
+                        tempFile.outputStream().use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                    return@use tempFile // 명시적으로 반환값 지정
+                } else {
+                    null
+                }
+            } ?: run {
+                Log.w(TAG, "Cursor is null for URI: $uri")
+                null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to create file from URI: $uri", e)
+            null
         }
     }
 
@@ -258,7 +416,9 @@ class DiaryRepository @Inject constructor(
             if (actualContent != null && actualContent.isNotEmpty()) {
                 Log.d(TAG, "📋 조회된 일기 목록:")
                 actualContent.forEachIndexed { index, diary ->
-                    Log.d(TAG, "  [$index] ID: ${diary.diaryId}, 제목: ${diary.diaryTitle}, 역할: ${diary.authorRole}, 날짜: ${diary.targetDate}")
+                    Log.d(TAG, "  [$index] ID: ${diary.diaryId}, 제목: ${diary.diaryTitle}, 역할: ${diary.authorRole}")
+                    Log.d(TAG, "       원본 날짜: ${diary.targetDate}")
+                    Log.d(TAG, "       보정된 날짜: ${diary.getCorrectedTargetDate()}")
                 }
             } else {
                 Log.d(TAG, "📋 해당 날짜에 등록된 일기가 없습니다")

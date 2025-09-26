@@ -133,7 +133,7 @@ fun HealthStatusScreen(
                 // 임신 일수를 날짜로 변환
                 val targetDate = try {
                     val lmpDate = LocalDate.parse(menstrualDate)
-                    lmpDate.plusDays((day - 1).toLong())
+                    lmpDate.plusDays(day.toLong())
                 } catch (e: Exception) {
                     Log.e("HealthStatusScreen", "날짜 계산 오류: ${e.message}")
                     null
