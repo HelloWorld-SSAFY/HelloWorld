@@ -11,11 +11,20 @@ import org.apache.hc.client5.http.impl.classic.HttpClients;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.BufferingClientHttpRequestFactory;
+import org.springframework.http.client.ClientHttpRequestExecution;
+import org.springframework.http.client.ClientHttpRequestInterceptor;
+import org.springframework.http.client.ClientHttpRequestFactory;
+import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StreamUtils;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -35,8 +44,10 @@ public class GmsDalleClient implements GmsImageGenClient {
     @Value("${app.gms.size:1024x1024}")
     private String size;
 
+    private static final int MAX_LOG_BODY = 2048; // 2KB
+
     private RestClient client() {
-        // 1) Apache 클라이언트 옵션 (전송 안정화)
+        // 1) Apache 클라이언트 옵션
         RequestConfig reqCfg = RequestConfig.custom()
                 .setConnectTimeout(10, TimeUnit.SECONDS)
                 .setResponseTimeout(180, TimeUnit.SECONDS)
@@ -46,15 +57,88 @@ public class GmsDalleClient implements GmsImageGenClient {
                 .setDefaultRequestConfig(reqCfg)
                 .build();
 
-        // 2) Buffering 래퍼 제거 → 바로 Apache factory 사용
-        var rf = new HttpComponentsClientHttpRequestFactory(apache);
+        // 2) 요청/응답 바디를 여러 번 읽기 위해 Buffering 팩토리 사용
+        ClientHttpRequestFactory base = new HttpComponentsClientHttpRequestFactory(apache);
+        BufferingClientHttpRequestFactory buffering = new BufferingClientHttpRequestFactory(base);
 
-        // 3) RestClient
+        // 3) RestClient + 로깅 인터셉터
         return RestClient.builder()
-                .requestFactory(rf)
+                .requestFactory(buffering)
                 .baseUrl(baseUrl)
+                .requestInterceptor(loggingInterceptor())
                 .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
                 .build();
+    }
+
+    private ClientHttpRequestInterceptor loggingInterceptor() {
+        return (request, body, execution) -> {
+            // --- 요청 로그 ---
+            log.info(">>> [{}] {}", request.getMethod(), request.getURI());
+            request.getHeaders().forEach((k, v) -> log.info(">>> {}: {}", k, redactHeader(k, v)));
+            if (body != null && body.length > 0) {
+                String bodyStr = truncate(new String(body, StandardCharsets.UTF_8));
+                log.info(">>> body: {}", bodyStr);
+            }
+
+            // 실행
+            ClientHttpResponse response = null;
+            try {
+                response = execution.execute(request, body);
+            } catch (RestClientResponseException e) {
+                // 예외형 응답도 이미 상위에서 잡지만, 여기서도 원시 상태를 기록
+                log.warn("xxx RestClientResponseException during execution: status={} {}", e.getStatusCode(), e.getResponseBodyAsString());
+                throw e;
+            }
+
+            // --- 응답 로그 ---
+            try {
+                byte[] respBytes = StreamUtils.copyToByteArray(response.getBody());
+                String respBodyStr = truncate(new String(respBytes, StandardCharsets.UTF_8));
+
+                log.info("<<< {} {}", response.getStatusCode().value(), response.getStatusText());
+                response.getHeaders().forEach((k, v) -> log.info("<<< {}: {}", k, v));
+                if (!respBodyStr.isEmpty()) {
+                    log.info("<<< body: {}", respBodyStr);
+                }
+
+                // 응답 바디를 다시 읽을 수 있게 래핑해서 반환
+                return new ReReadableClientHttpResponse(response, respBytes);
+            } catch (IOException io) {
+                log.warn("<<< (failed to read response body) {}", io.toString());
+                return response; // 바디 로그만 포기
+            }
+        };
+    }
+
+    // Authorization 등 민감정보 마스킹
+    private List<String> redactHeader(String key, List<String> values) {
+        if (HttpHeaders.AUTHORIZATION.equalsIgnoreCase(key)) {
+            return List.of("Bearer ***");
+        }
+        return values;
+    }
+
+    private String truncate(String s) {
+        if (s == null) return "";
+        if (s.length() <= MAX_LOG_BODY) return s;
+        return s.substring(0, MAX_LOG_BODY) + "...(truncated)";
+    }
+
+    // 응답을 재사용 가능하게 만드는 래퍼
+    static class ReReadableClientHttpResponse implements ClientHttpResponse {
+        private final ClientHttpResponse delegate;
+        private final byte[] body;
+
+        ReReadableClientHttpResponse(ClientHttpResponse delegate, byte[] body) {
+            this.delegate = delegate;
+            this.body = body != null ? body : new byte[0];
+        }
+
+        @Override public org.springframework.http.HttpStatusCode getStatusCode() throws IOException { return delegate.getStatusCode(); }
+        @Override public String getStatusText() throws IOException { return delegate.getStatusText(); }
+        @Override public void close() { delegate.close(); }
+        @Override public HttpHeaders getHeaders() { return delegate.getHeaders(); }
+        @Override public java.io.InputStream getBody() { return new ByteArrayInputStream(body); }
     }
 
     @Override
@@ -63,12 +147,9 @@ public class GmsDalleClient implements GmsImageGenClient {
     }
 
     public byte[] generateCaricatureWithPrompt(String prompt) {
-        // 프롬프트 검증 및 정제
         if (prompt == null || prompt.trim().isEmpty()) {
             throw new IllegalArgumentException("Prompt cannot be null or empty");
         }
-
-        // 프롬프트 길이 제한 (DALL-E 3는 4000자 제한)
         if (prompt.length() > 4000) {
             log.warn("Prompt too long ({}), truncating to 4000 chars", prompt.length());
             prompt = prompt.substring(0, 4000);
@@ -84,12 +165,11 @@ public class GmsDalleClient implements GmsImageGenClient {
                 "response_format", "b64_json"
         );
 
-        // 요청 페이로드 로깅
-        log.debug("Request payload: {}", payload);
+        log.debug("Request payload(map): {}", payload);
 
         try {
             GmsResponse resp = client().post()
-                    .uri("/api.openai.com/v1/images/generations")
+                    .uri("/api.openai.com/v1/images/generations") // << 요청하신 대로 그대로 둠
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(payload)
                     .retrieve()
@@ -105,19 +185,16 @@ public class GmsDalleClient implements GmsImageGenClient {
 
         } catch (RestClientResponseException e) {
             String body = e.getResponseBodyAsString();
-
-            // 상세한 에러 로깅
             log.error("GMS API Error - Status: {}, Headers: {}", e.getStatusCode(), e.getResponseHeaders());
             log.error("GMS API Error - Response Body: {}", body);
             log.error("Request details - Model: {}, Size: {}, Prompt length: {}", model, size, prompt.length());
 
-            // 특정 에러 케이스 처리
             if (e.getStatusCode().value() == 400) {
-                if (body.contains("cloudflare")) {
+                if (body != null && body.contains("cloudflare")) {
                     throw new IllegalStateException("Request blocked by Cloudflare. Check request format and content.", e);
-                } else if (body.contains("content_policy_violation")) {
+                } else if (body != null && body.contains("content_policy_violation")) {
                     throw new IllegalStateException("Content policy violation. Please modify your prompt.", e);
-                } else if (body.contains("invalid_request")) {
+                } else if (body != null && body.contains("invalid_request")) {
                     throw new IllegalStateException("Invalid request format. Check API parameters.", e);
                 }
             }
@@ -129,13 +206,13 @@ public class GmsDalleClient implements GmsImageGenClient {
         }
     }
 
-@JsonIgnoreProperties(ignoreUnknown = true)
-static class GmsResponse { public List<Item> data; }
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    static class GmsResponse { public List<Item> data; }
 
-@JsonIgnoreProperties(ignoreUnknown = true)
-static class Item {
-    @JsonProperty("b64_json")
-    public String b64;
-    public String url;
-}
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    static class Item {
+        @JsonProperty("b64_json")
+        public String b64;
+        public String url;
+    }
 }
