@@ -82,7 +82,7 @@ def _assert_app_token(request: HttpRequest):
     return None
 
 def _user_ref_from_request(request: HttpRequest, fallback: Optional[str]) -> Optional[str]:
-    """헤더 X-Couple-Id가 있으면 그것을 user_ref로 사용, 없으면 바디/쿼리 값 사용"""
+    """헤더 X-Couple-Id가 있으면 그것을 user_ref로 사용, 없으면 바디/쿼리 값 사용 (미사용 보조 유틸)"""
     cid = request.headers.get("X-Couple-Id") or request.META.get("HTTP_X_COUPLE_ID")
     return (str(cid).strip() if cid else fallback)
 
@@ -110,25 +110,43 @@ def _access_token_from_request(request: HttpRequest) -> Optional[str]:
 
 def _require_user_ref(request: HttpRequest, fallback: Optional[str] = None) -> Tuple[str, Optional[Response]]:
     """
-    내부 헤더(request.user_id / request.couple_id) 우선 → 외부/fallback → body/query 순.
-    호출부와 맞추어 (user_ref, missing_response) 형태로 반환.
+    내부 헤더(request.user_id / request.couple_id) 우선 → (헤더 X-Internal-Couple-Id/X-Couple-Id) → 외부/fallback → body/query 순.
+    user_ref 규칙: 커플 기준이면 "c{couple_id}", 유저 기준이면 "u{user_id}"
     """
     # 1) 미들웨어가 채운 값 우선
     user_id = getattr(request, "user_id", None)
-    couple_id = getattr(request, "couple_id", None)
+    couple_id_attr = getattr(request, "couple_id", None)
     if user_id:
         return f"u{user_id}", None
-    if couple_id is not None:
-        return f"c{couple_id}", None
+    if couple_id_attr is not None:
+        try:
+            return f"c{int(couple_id_attr)}", None
+        except Exception:
+            pass
 
-    # 2) fallback(검증 데이터) → body → query
-    ref = (fallback
-           or ((getattr(request, "data", {}) or {}).get("user_ref"))
-           or (getattr(request, "query_params", {}).get("user_ref")))
+    # 2) 헤더에서 couple_id 추출
+    hdr_cid = (
+        request.headers.get("X-Internal-Couple-Id")
+        or request.headers.get("X-Couple-Id")
+        or request.META.get("HTTP_X_COUPLE_ID")
+    )
+    if hdr_cid:
+        try:
+            cid = int(str(hdr_cid).strip().strip('"').strip("'"))
+            return f"c{cid}", None
+        except Exception:
+            pass
+
+    # 3) fallback(검증 데이터) → body → query
+    ref = (
+        fallback
+        or ((getattr(request, "data", {}) or {}).get("user_ref"))
+        or (getattr(request, "query_params", {}).get("user_ref"))
+    )
     if ref:
         return str(ref), None
 
-    # 3) 실패
+    # 4) 실패
     return "", Response({"ok": False, "error": "missing user_ref / couple_id"}, status=400)
 
 def _now_kst() -> datetime:
