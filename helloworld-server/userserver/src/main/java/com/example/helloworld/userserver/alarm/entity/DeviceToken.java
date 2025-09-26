@@ -23,10 +23,10 @@ public class DeviceToken {
     private boolean isActive;
 
     @Column(name="platform")
-    private Instant platform;
+    private String platform;
 
     @Column(name="created_at", nullable=false)
-    private String  createdAt;
+    private Instant createdAt;
 
     @Column(name="last_seen_at")
     private Instant lastSeenAt;
