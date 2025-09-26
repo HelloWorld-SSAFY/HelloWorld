@@ -407,6 +407,23 @@ class HealthzView(APIView):
 # ──────────────────────────────────────────────────────────────────────────────
 # 유틸
 # ──────────────────────────────────────────────────────────────────────────────
+def _normalize_metrics(raw: dict) -> dict:
+    """클라이언트/게이트웨이에서 들어오는 alias를 hr/stress로 정규화"""
+    if not isinstance(raw, dict):
+        return {}
+    m = {}
+    # HR aliases
+    for k in ("hr", "heartrate", "heart_rate", "bpm"):
+        if raw.get(k) is not None:
+            m["hr"] = raw[k]
+            break
+    # STRESS aliases
+    for k in ("stress", "stress_score", "stresslevel"):
+        if raw.get(k) is not None:
+            m["stress"] = raw[k]
+            break
+    return m
+
 def _serialize_categories(cats: List[Dict[str, Any]], reason: Optional[str] = None) -> List[Dict[str, Any]]:
     cats_sorted = sorted(cats, key=lambda x: x.get("priority", 999))
     out = []
@@ -785,7 +802,7 @@ class TelemetryView(APIView):
             "워치에서 10초 간격으로 들어오는 HR/스트레스 등 텔레메트리를 받아 즉시 판단합니다.\n"
             "- 기준선: user_tod_stats_daily(4h 버킷)\n"
             "- 연속 조건: 10초 Z-score 3회 연속\n"
-            "- 응급 룰: |Z|≥5 또는 HR≥150/≤45 for 120s\n"
+            "- 응급 룰: |Z|≥5 또는 HR 임계\n"
             "- restrict 시 trigger_category_policy로 카테고리 도출\n"
             "- ⚠ 트리거 발생 시 내부에서 바로 추천 실행하고 recommend_delivery에 저장(응답엔 미포함)"
         ),
@@ -796,7 +813,14 @@ class TelemetryView(APIView):
         if bad:
             return bad
 
-        ser = TelemetryIn(data=request.data)
+        # ★ metrics alias 정규화 선반영
+        data = request.data.copy()
+        try:
+            data["metrics"] = _normalize_metrics((data.get("metrics") or {}))
+        except Exception:
+            data["metrics"] = {}
+
+        ser = TelemetryIn(data=data)
         ser.is_valid(raise_exception=True)
         payload = ser.validated_data
 
@@ -907,7 +931,15 @@ class TelemetryView(APIView):
                 })
 
         elif level == "emergency":
-            action = result.get("action") or {"type": "EMERGENCY_CONTACT", "cooldown_min": 60}
+            # ★ 엔진값 기반 cooldown 표기(하드코딩 60 제거)
+            cd_min = result.get("cooldown_min")
+            if cd_min is None:
+                try:
+                    sec = int(getattr(_detector.cfg, "emergency_cooldown_sec", 60))
+                except Exception:
+                    sec = 60
+                cd_min = max(1, (sec + 59) // 60)
+            action = {"type": "EMERGENCY_CONTACT", "cooldown_min": int(cd_min)}
             resp.update({"reasons": reasons or ["emergency condition"], "action": action, "safe_templates": result.get("safe_templates", [])})
 
         return Response(resp)
