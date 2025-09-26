@@ -57,8 +57,10 @@ public class GmsDalleClient implements GmsImageGenClient {
                 .defaultHeader(HttpHeaders.ACCEPT, "*/*")
                 .defaultHeader(HttpHeaders.ACCEPT_ENCODING, "identity")
                 .defaultHeader(HttpHeaders.USER_AGENT, "curl/8.6.0")
+                .defaultHeader(HttpHeaders.CONNECTION, "close") // (임시) keep-alive 억제
                 .build();
     }
+
 
     @Override
     public byte[] generateCaricature(byte[] ignored) {
