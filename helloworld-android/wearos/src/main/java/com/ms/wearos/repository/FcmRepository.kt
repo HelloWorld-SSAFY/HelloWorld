@@ -17,7 +17,8 @@ class FcmRepository @Inject constructor(
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val t = token ?: FirebaseMessaging.getInstance().token.await()
-                val fcmTokenRequest = FcmRegisterRequest(t)
+                val fcmTokenRequest = FcmRegisterRequest(t, platform)
+                Log.d("FCM", "WearOS 토큰 등록 API 호출 : $fcmTokenRequest")
 
                 val res = api.registerFcmToken(fcmTokenRequest)
                 if (res.isSuccessful) {

@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.health.connect.client.PermissionController
@@ -24,7 +23,6 @@ import androidx.navigation.compose.rememberNavController
 import com.ms.helloworld.navigation.MainNavigation
 import com.ms.helloworld.navigation.Screen
 import com.ms.helloworld.notification.NotificationChannels
-import com.ms.helloworld.notification.NotificationPermissionRequester
 import com.ms.helloworld.repository.FcmRepository
 import com.ms.helloworld.ui.theme.HelloWorldTheme
 import com.ms.helloworld.util.HealthConnectManager
@@ -34,21 +32,8 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 import android.Manifest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Column
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.graphics.Color
 import androidx.health.connect.client.HealthConnectClient
-import com.ms.helloworld.repository.StepsRepository
 import com.ms.helloworld.util.StepsWorkScheduler
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 
 private const val TAG = "싸피_MainActivity"
 @AndroidEntryPoint
@@ -324,13 +309,11 @@ class MainActivity : ComponentActivity() {
         // 타입별 화면으로 이동
         when (deeplinkType) {
             "REMINDER" -> {
-                navController.currentBackStackEntry?.savedStateHandle?.set("coupleId", coupleId)
                 navController.navigate(Screen.CalendarScreen.route) {
                     launchSingleTop = true
                 }
             }
             "EMERGENCY" -> {
-                navController.currentBackStackEntry?.savedStateHandle?.set("coupleId", coupleId)
                 navController.navigate(Screen.WearableRecommendedScreen.route) {
                     launchSingleTop = true
                 }
