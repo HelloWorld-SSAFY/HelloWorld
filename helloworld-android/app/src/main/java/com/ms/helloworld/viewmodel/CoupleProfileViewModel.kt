@@ -163,13 +163,13 @@ class CoupleProfileViewModel @Inject constructor(
                     var calculatedWeek: Int? = null
 
                     if (dueDate != null) {
-                        // 출산예정일로부터 현재 임신주차 계산
+                        // 출산예정일로부터 현재 임신주차 계산 (LMP + (day - 1) 방식과 일관성 유지)
                         val today = LocalDate.now()
                         val daysDifference = java.time.temporal.ChronoUnit.DAYS.between(today, dueDate)
                         val totalPregnancyDays = 280 // 40주 * 7일
                         val currentPregnancyDays = totalPregnancyDays - daysDifference
-                        calculatedWeek = ((currentPregnancyDays / 7).toInt() + 1).coerceIn(1, 42)
-                        println("계산된 임신주차: ${calculatedWeek}주 (오늘: $today, 예정일: $dueDate, 차이: ${daysDifference}일)")
+                        calculatedWeek = ((currentPregnancyDays - 1) / 7 + 1).toInt().coerceIn(1, 42)
+                        println("계산된 임신주차: ${calculatedWeek}주 (오늘: $today, 예정일: $dueDate, 차이: ${daysDifference}일, 임신일수: ${currentPregnancyDays}일)")
                     }
 
                     val coupleUpdateRequest = CoupleUpdateRequest(

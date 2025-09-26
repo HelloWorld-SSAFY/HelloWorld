@@ -1,6 +1,7 @@
 package com.ms.helloworld.ui.screen
 
 import android.annotation.SuppressLint
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -14,11 +15,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import androidx.navigation.NavHostController
 import com.ms.helloworld.navigation.Screen
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -33,7 +36,8 @@ import android.util.Log
 data class DiaryEntry(
     val title: String,
     val content: String,
-    val date: String
+    val date: String,
+    val imageUrl: String? = null
 )
 
 data class DailyDiary(
@@ -67,33 +71,49 @@ fun DiaryDetailScreen(
     val totalDaysInWeek = 7
 
     // 현재 주차의 시작일과 끝일 계산 (UI 표시용)
-    val weekStartDay = if (momProfile!!.pregnancyWeek > 0) {
-        (momProfile!!.pregnancyWeek - 1) * 7 + 1
+    val weekStartDay = if (momProfile?.pregnancyWeek != null && momProfile.pregnancyWeek > 0) {
+        val calculated = (momProfile.pregnancyWeek - 1) * 7 + 1
+        Log.d("DiaryDetailScreen", "weekStartDay 계산 (momProfile 사용): pregnancyWeek=${momProfile.pregnancyWeek} -> $calculated")
+        calculated
     } else {
         // 로딩 중일 때는 currentPregnancyDay 기준으로 계산
         if (currentPregnancyDay > 1) {
             val currentWeek = ((currentPregnancyDay - 1) / 7) + 1
-            (currentWeek - 1) * 7 + 1
-        } else 1
+            val calculated = (currentWeek - 1) * 7 + 1
+            Log.d("DiaryDetailScreen", "weekStartDay 계산 (currentPregnancyDay 사용): currentPregnancyDay=$currentPregnancyDay, currentWeek=$currentWeek -> $calculated")
+            calculated
+        } else {
+            Log.d("DiaryDetailScreen", "weekStartDay 계산: 기본값 1 사용")
+            1
+        }
     }
     val weekEndDay = weekStartDay + 6
+    Log.d("DiaryDetailScreen", "주차 범위: ${weekStartDay}일 ~ ${weekEndDay}일")
 
     // 현재 표시할 일차를 상태로 관리 (네비게이션 없이 내부에서 변경)
     var currentViewingDay by remember { mutableStateOf(
         if (initialDay == -1) {
             // 기본값: 현재 실제 임신 일수 사용, 하지만 현재 주차를 벗어나지 않도록 제한
             if (currentPregnancyDay > 1) {
-                minOf(currentPregnancyDay, weekEndDay)
-            } else weekStartDay
+                val calculated = minOf(currentPregnancyDay, weekEndDay)
+                Log.d("DiaryDetailScreen", "currentViewingDay 계산: initialDay=$initialDay, currentPregnancyDay=$currentPregnancyDay, weekEndDay=$weekEndDay -> $calculated")
+                calculated
+            } else {
+                Log.d("DiaryDetailScreen", "currentViewingDay 계산: weekStartDay=$weekStartDay (currentPregnancyDay=$currentPregnancyDay <= 1)")
+                weekStartDay
+            }
         } else {
             // 특정 일수가 지정된 경우 해당 값 사용
+            Log.d("DiaryDetailScreen", "currentViewingDay 계산: initialDay=$initialDay 사용")
             initialDay
         }
     ) }
 
     // 현재 보고 있는 날짜의 주차 계산
     val viewingWeek = remember(currentViewingDay) {
-        ((currentViewingDay - 1) / 7) + 1
+        val calculatedWeek = ((currentViewingDay - 1) / 7) + 1
+        Log.d("DiaryDetailScreen", "주차 계산: currentViewingDay=$currentViewingDay -> ${calculatedWeek}주차")
+        calculatedWeek
     }
 
     // actualDayNumber는 currentViewingDay를 사용
@@ -154,6 +174,21 @@ fun DiaryDetailScreen(
         Log.d("DiaryDetailScreen", "  - menstrualDate: $menstrualDate (not null: ${menstrualDate != null})")
 
         if (actualDayNumber >= 1 && coupleId != null && menstrualDate != null) {
+            // 날짜 계산 디버깅 추가
+            val lmpDateString = getLmpDate()
+            try {
+                val lmpDate = java.time.LocalDate.parse(lmpDateString)
+                val calculatedDate = lmpDate.plusDays(actualDayNumber.toLong())
+                Log.d("DiaryDetailScreen", "날짜 계산 확인:")
+                Log.d("DiaryDetailScreen", "  - LMP: $lmpDateString")
+                Log.d("DiaryDetailScreen", "  - 임신일수: ${actualDayNumber}일차")
+                Log.d("DiaryDetailScreen", "  - 계산식: LMP + ${actualDayNumber}일 (수정됨)")
+                Log.d("DiaryDetailScreen", "  - 계산된 날짜: $calculatedDate")
+                Log.d("DiaryDetailScreen", "  - 오늘 날짜: ${java.time.LocalDate.now()}")
+            } catch (e: Exception) {
+                Log.e("DiaryDetailScreen", "날짜 계산 오류: ${e.message}")
+            }
+
             Log.d("DiaryDetailScreen", "API 호출 시작: ${actualDayNumber}일차")
             diaryViewModel.loadDiariesByDay(
                 day = actualDayNumber,
@@ -202,21 +237,33 @@ fun DiaryDetailScreen(
         val birthDiary = apiDiaries.find {
             diary -> diary.inferAuthorRole(userId, userGender, null, null) == "FEMALE"  // TODO: 커플 정보 전달 필요
         }?.let { diary ->
-            println("✅ 출산일기 찾음: ${diary.diaryTitle}")
+            val correctedDate = diary.getCorrectedTargetDate()
+            Log.d("DiaryDetailScreen", "✅ 출산일기 찾음:")
+            Log.d("DiaryDetailScreen", "  - 제목: ${diary.diaryTitle}")
+            Log.d("DiaryDetailScreen", "  - 원본 targetDate: ${diary.targetDate}")
+            Log.d("DiaryDetailScreen", "  - 보정된 targetDate: $correctedDate")
+            Log.d("DiaryDetailScreen", "  - 요청한 임신일수: ${actualDayNumber}일차")
             DiaryEntry(
                 title = diary.diaryTitle ?: "",
                 content = diary.diaryContent ?: "",
-                date = diary.targetDate
+                date = correctedDate,
+                imageUrl = diary.thumbnailUrl
             )
         }
         val observationDiary = apiDiaries.find {
             diary -> diary.inferAuthorRole(userId, userGender, null, null) == "MALE"  // TODO: 커플 정보 전달 필요
         }?.let { diary ->
-            println("✅ 관찰일기 찾음: ${diary.diaryTitle}")
+            val correctedDate = diary.getCorrectedTargetDate()
+            Log.d("DiaryDetailScreen", "✅ 관찰일기 찾음:")
+            Log.d("DiaryDetailScreen", "  - 제목: ${diary.diaryTitle}")
+            Log.d("DiaryDetailScreen", "  - 원본 targetDate: ${diary.targetDate}")
+            Log.d("DiaryDetailScreen", "  - 보정된 targetDate: $correctedDate")
+            Log.d("DiaryDetailScreen", "  - 요청한 임신일수: ${actualDayNumber}일차")
             DiaryEntry(
                 title = diary.diaryTitle ?: "",
                 content = diary.diaryContent ?: "",
-                date = diary.targetDate
+                date = correctedDate,
+                imageUrl = diary.thumbnailUrl
             )
         }
         DailyDiary(
@@ -574,6 +621,37 @@ fun DiaryContent(
             .fillMaxSize()
             .clickable { onClick() }
     ) {
+        // 썸네일 공간 - 실제 이미지 또는 placeholder
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(80.dp)
+                .background(
+                    Color.Gray.copy(alpha = 0.1f),
+                    RoundedCornerShape(8.dp)
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            if (diary.imageUrl != null && diary.imageUrl.isNotEmpty()) {
+                AsyncImage(
+                    model = diary.imageUrl,
+                    contentDescription = "일기 썸네일",
+                    modifier = Modifier
+                        .height(60.dp)
+                        .fillMaxWidth(0.3f),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Text(
+                    text = "📸 썸네일",
+                    fontSize = 12.sp,
+                    color = Color.Gray
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
         // 일기 제목
         if (diary.title.isNotEmpty()) {
             Text(

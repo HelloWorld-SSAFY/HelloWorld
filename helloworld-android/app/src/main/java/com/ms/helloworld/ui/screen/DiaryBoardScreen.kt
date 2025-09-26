@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import coil.compose.AsyncImage
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -81,8 +82,9 @@ fun DiaryBoardScreen(
     // 현재 날짜 계산 (마지막 생리일 + day)
     val currentDate = try {
         val lmpDate = LocalDate.parse(actualMenstrualDate)
-        lmpDate.plusDays((actualPregnancyDay - 1).toLong())
-            .format(DateTimeFormatter.ISO_LOCAL_DATE)
+        val calculatedDate = lmpDate.plusDays((actualPregnancyDay - 1).toLong())
+        Log.d("DiaryBoardScreen", "날짜 계산: LMP=$actualMenstrualDate, 임신일수=$actualPregnancyDay, 계산결과=$calculatedDate")
+        calculatedDate.format(DateTimeFormatter.ISO_LOCAL_DATE)
     } catch (e: Exception) {
         LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
     }
@@ -107,7 +109,7 @@ fun DiaryBoardScreen(
         diaryViewModel.setUserInfo(userId, userGender)
     }
 
-    // 일기 데이터 로드
+    // 일기 데이터 로드 - 먼저 일별 조회로 일기 목록을 가져온 다음 개별 조회
     LaunchedEffect(actualPregnancyDay, menstrualDate) {
         val currentMenstrualDate = menstrualDate
         Log.d("DiaryBoardScreen", "일기 데이터 로드 시도:")
@@ -127,7 +129,35 @@ fun DiaryBoardScreen(
     // API에서 로드된 일기 데이터 중 현재 타입에 맞는 일기 찾기
     val currentDiary = diaryState.diaries.find { diary ->
         val expectedRole = if (diaryType == "birth") "FEMALE" else "MALE"
-        diary.inferAuthorRole(userId, userGender) == expectedRole
+        val actualRole = diary.inferAuthorRole(userId, userGender)
+        actualRole?.uppercase() == expectedRole
+    }
+
+    // 일기를 찾았지만 images가 비어있다면 개별 조회로 상세 데이터 가져오기
+    LaunchedEffect(currentDiary) {
+        if (currentDiary != null && (currentDiary.images == null || currentDiary.images.isEmpty())) {
+            Log.d("DiaryBoardScreen", "일기를 찾았지만 images가 비어있음. 개별 조회 시작: diaryId=${currentDiary.diaryId}")
+            diaryViewModel.loadDiary(currentDiary.diaryId)
+        }
+    }
+
+    // 이미지 데이터 로그 출력
+    LaunchedEffect(currentDiary) {
+        if (currentDiary != null) {
+            Log.d("DiaryBoardScreen", "📸 이미지 데이터 확인:")
+            Log.d("DiaryBoardScreen", "  - thumbnailUrl: ${currentDiary.thumbnailUrl}")
+            val images = currentDiary.images
+            if (images != null) {
+                Log.d("DiaryBoardScreen", "  - images 배열 크기: ${images.size}")
+                images.forEachIndexed { index, image ->
+                    Log.d("DiaryBoardScreen", "  - images[$index]: ${image.imageUrl} (초음파: ${image.isUltrasound})")
+                }
+            } else {
+                Log.d("DiaryBoardScreen", "  - images 배열이 null입니다")
+            }
+        } else {
+            Log.d("DiaryBoardScreen", "📸 currentDiary가 null입니다")
+        }
     }
 
     // 일기 데이터 확인 로그
@@ -138,21 +168,35 @@ fun DiaryBoardScreen(
 
         diaryState.diaries.forEachIndexed { index, diary ->
             val inferredRole = diary.inferAuthorRole(userId, userGender)
-            Log.d("DiaryBoardScreen", "  [$index] ID=${diary.diaryId}, 제목='${diary.diaryTitle}', authorRole=${diary.authorRole}, inferredRole=$inferredRole")
+            val actualTitle = diary.getActualTitle()
+            val actualContent = diary.getActualContent()
+            Log.d("DiaryBoardScreen", "  [$index] ID=${diary.diaryId}")
+            Log.d("DiaryBoardScreen", "       title 필드: '${diary.diaryTitle}'")
+            Log.d("DiaryBoardScreen", "       diaryTitle 필드: '${diary.diaryTitleAlt}'")
+            Log.d("DiaryBoardScreen", "       실제 제목: '${actualTitle ?: "(제목 없음)"}'")
+            Log.d("DiaryBoardScreen", "       content 필드: '${diary.diaryContent?.take(50)}'")
+            Log.d("DiaryBoardScreen", "       diaryContent 필드: '${diary.diaryContentAlt?.take(50)}'")
+            Log.d("DiaryBoardScreen", "       실제 내용: '${actualContent?.take(50) ?: "(내용 없음)"}'")
+            Log.d("DiaryBoardScreen", "       authorRole=${diary.authorRole}, inferredRole=$inferredRole")
+            Log.d("DiaryBoardScreen", "  [$index] 이미지 데이터: thumbnailUrl=${diary.thumbnailUrl}, images size=${diary.images?.size ?: "null"}")
         }
 
         val expectedRole = if (diaryType == "birth") "FEMALE" else "MALE"
         Log.d("DiaryBoardScreen", "  - 찾는 역할: $expectedRole")
-        Log.d("DiaryBoardScreen", "  - 찾은 일기: ${if (currentDiary != null) "있음(${currentDiary.diaryTitle})" else "없음"}")
+        Log.d("DiaryBoardScreen", "  - 찾은 일기: ${if (currentDiary != null) "있음(${currentDiary.getActualTitle() ?: "(제목 없음)"})" else "없음"}")
     }
 
     // DiaryBoardData로 변환 (API 데이터가 없으면 더미 데이터 사용)
     val diaryData = if (currentDiary != null) {
+        val defaultTitle = if (diaryType == "birth") "출산일기" else "관찰일기"
+        val actualTitle = currentDiary.getActualTitle()
+        val actualContent = currentDiary.getActualContent()
+        val correctedDate = currentDiary.getCorrectedTargetDate()
         DiaryBoardData(
-            title = currentDiary.diaryTitle ?: "",
-            content = currentDiary.diaryContent ?: "",
+            title = actualTitle?.takeIf { it.isNotBlank() } ?: defaultTitle,
+            content = actualContent ?: "",
             photos = emptyList(), // 현재 API에서 사진 데이터는 제공하지 않음
-            date = currentDiary.targetDate,
+            date = correctedDate,
             diaryType = diaryType
         )
     } else {
@@ -320,7 +364,9 @@ fun DiaryBoardScreen(
                 } else {
                     TextContentSection(
                         title = diaryData.title,
-                        content = diaryData.content
+                        content = diaryData.content,
+                        imageUrl = currentDiary?.thumbnailUrl,
+                        images = currentDiary?.images
                     )
                 }
             }
@@ -418,7 +464,9 @@ fun PhotoItem(
 @Composable
 fun TextContentSection(
     title: String,
-    content: String
+    content: String,
+    imageUrl: String? = null,
+    images: List<com.ms.helloworld.dto.response.DiaryImage>? = null
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -431,6 +479,75 @@ fun TextContentSection(
                 .fillMaxWidth()
                 .padding(20.dp)
         ) {
+            // 사진 공간 - images 배열의 이미지들 표시
+            if (images != null && images.isNotEmpty()) {
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(vertical = 8.dp)
+                ) {
+                    items(images) { image ->
+                        AsyncImage(
+                            model = image.imageUrl,
+                            contentDescription = if (image.isUltrasound) "초음파 사진" else "일기 사진",
+                            modifier = Modifier
+                                .width(250.dp)
+                                .height(180.dp)
+                                .background(
+                                    Color.Gray.copy(alpha = 0.1f),
+                                    RoundedCornerShape(8.dp)
+                                ),
+                            contentScale = ContentScale.Fit
+                        )
+                    }
+                }
+            } else if (!imageUrl.isNullOrEmpty()) {
+                // 백업용: 단일 imageUrl이 있는 경우
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp)
+                        .background(
+                            Color.Gray.copy(alpha = 0.1f),
+                            RoundedCornerShape(8.dp)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    AsyncImage(
+                        model = imageUrl,
+                        contentDescription = "일기 사진",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(180.dp)
+                            .background(
+                                Color.Gray.copy(alpha = 0.1f),
+                                RoundedCornerShape(8.dp)
+                            ),
+                        contentScale = ContentScale.Fit
+                    )
+                }
+            } else {
+                // placeholder
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(120.dp)
+                        .background(
+                            Color.Gray.copy(alpha = 0.1f),
+                            RoundedCornerShape(8.dp)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "📷 사진 영역",
+                        fontSize = 14.sp,
+                        color = Color.Gray
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             // 제목
             if (title.isNotEmpty()) {
                 Text(

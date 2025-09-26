@@ -3,7 +3,6 @@ package com.ms.helloworld.ui.components
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,16 +14,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import java.text.SimpleDateFormat
 import java.util.*
-import kotlin.math.abs
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -50,25 +45,14 @@ fun AddCalendarEventDialog(
     var showStartTimePicker by remember { mutableStateOf(false) }
     var showEndTimePicker by remember { mutableStateOf(false) }
 
-    // TimePickerState 생성 함수
-    fun createTimePickerState(timeString: String): TimePickerState {
-        val parts = timeString.split(":")
-        val hour = if (parts.size >= 2) parts[0].toIntOrNull() ?: 9 else 9
-        val minute = if (parts.size >= 2) parts[1].toIntOrNull() ?: 0 else 0
-        return TimePickerState(
-            initialHour = hour,
-            initialMinute = minute,
-            is24Hour = true
-        )
-    }
-    
+
     // 등장 애니메이션
     var isVisible by remember { mutableStateOf(false) }
-    
+
     LaunchedEffect(Unit) {
         isVisible = true
     }
-    
+
     Dialog(onDismissRequest = onDismiss) {
         AnimatedVisibility(
             visible = isVisible,
@@ -110,7 +94,7 @@ fun AddCalendarEventDialog(
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold
                         )
-                        
+
                         IconButton(
                             onClick = onDismiss,
                             modifier = Modifier.size(24.dp)
@@ -122,9 +106,9 @@ fun AddCalendarEventDialog(
                             )
                         }
                     }
-                    
+
                     Spacer(modifier = Modifier.height(20.dp))
-                    
+
                     // 제목 입력
                     OutlinedTextField(
                         value = title,
@@ -137,9 +121,9 @@ fun AddCalendarEventDialog(
                             focusedLabelColor = Color.Black
                         )
                     )
-                    
+
                     Spacer(modifier = Modifier.height(16.dp))
-                    
+
                     // 시간 설정
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -189,9 +173,9 @@ fun AddCalendarEventDialog(
                             )
                         )
                     }
-                    
+
                     Spacer(modifier = Modifier.height(16.dp))
-                    
+
                     // 메모 입력
                     OutlinedTextField(
                         value = content,
@@ -206,10 +190,10 @@ fun AddCalendarEventDialog(
                             focusedLabelColor = Color.Black
                         )
                     )
-                    
-                    
+
+
                     Spacer(modifier = Modifier.height(16.dp))
-                    
+
                     // 리마인드 설정
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -221,7 +205,7 @@ fun AddCalendarEventDialog(
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Medium
                         )
-                        
+
                         Switch(
                             checked = isRemind,
                             onCheckedChange = { isRemind = it },
@@ -233,9 +217,9 @@ fun AddCalendarEventDialog(
                             )
                         )
                     }
-                    
+
                     Spacer(modifier = Modifier.height(24.dp))
-                    
+
                     // 버튼
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -250,7 +234,7 @@ fun AddCalendarEventDialog(
                         ) {
                             Text("취소", fontSize = 14.sp)
                         }
-                        
+
                         Button(
                             onClick = {
                                 if (title.isNotEmpty()) {
@@ -279,66 +263,26 @@ fun AddCalendarEventDialog(
         }
     }
 
-    // 시작 시간 TimePicker Dialog
+    // 시작 시간 커스텀 TimePicker Dialog
     if (showStartTimePicker) {
-        val timePickerState = remember { createTimePickerState(startTime) }
-
-        AlertDialog(
-            onDismissRequest = { showStartTimePicker = false },
-            title = { Text("시작 시간 선택") },
-            text = {
-                TimePicker(
-                    state = timePickerState
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        startTime = String.format("%02d:%02d", timePickerState.hour, timePickerState.minute)
-                        showStartTimePicker = false
-                    }
-                ) {
-                    Text("확인")
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { showStartTimePicker = false }
-                ) {
-                    Text("취소")
-                }
+        CustomTimePickerDialog(
+            initialTime = startTime,
+            onDismiss = { showStartTimePicker = false },
+            onTimeSelected = { selectedTime ->
+                startTime = selectedTime
+                showStartTimePicker = false
             }
         )
     }
 
-    // 종료 시간 TimePicker Dialog
+    // 종료 시간 커스텀 TimePicker Dialog
     if (showEndTimePicker) {
-        val timePickerState = remember { createTimePickerState(endTime) }
-
-        AlertDialog(
-            onDismissRequest = { showEndTimePicker = false },
-            title = { Text("종료 시간 선택") },
-            text = {
-                TimePicker(
-                    state = timePickerState
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        endTime = String.format("%02d:%02d", timePickerState.hour, timePickerState.minute)
-                        showEndTimePicker = false
-                    }
-                ) {
-                    Text("확인")
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { showEndTimePicker = false }
-                ) {
-                    Text("취소")
-                }
+        CustomTimePickerDialog(
+            initialTime = endTime,
+            onDismiss = { showEndTimePicker = false },
+            onTimeSelected = { selectedTime ->
+                endTime = selectedTime
+                showEndTimePicker = false
             }
         )
     }
