@@ -23,7 +23,7 @@ public class DeviceToken {
     private boolean isActive;
 
     @Column(name="platform")
-    private Instant platForm;
+    private Instant platform;
 
     @Column(name="created_at", nullable=false)
     private Instant createdAt;

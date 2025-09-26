@@ -22,7 +22,7 @@ public interface DeviceTokenRepository extends JpaRepository<DeviceToken, Long> 
     // 플랫폼이 여러 별칭 중 하나인 최신 활성 토큰 1개
     Optional<DeviceToken>
     findFirstByUserIdAndPlatformInAndIsActiveTrueOrderByLastSeenAtDescCreatedAtDesc(
-            Long userId, Collection<String> platforms
+            Long userId, Collection<String> platform
     );
 
 
