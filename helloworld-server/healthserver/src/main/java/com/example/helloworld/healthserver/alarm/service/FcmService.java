@@ -11,119 +11,58 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-
+// package com.example.helloworld.healthserver.alarm.service;
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class FcmService {
 
-    private final UserServerClient userServerClient;
+    private final UserServerClient userClient;
 
     @Async
     public void sendEmergencyNotification(Long currentUserId, Integer heartrate) {
         try {
-            // 1. user-server에서 내 커플 상세 정보 조회
-            UserServerClient.CoupleDetailResponse coupleDetail = userServerClient.getCoupleDetail();
-            if (coupleDetail == null || coupleDetail.couple() == null) {
-                log.warn("Could not retrieve couple details for user {}", currentUserId);
+            var resp = userClient.partnerLatest(currentUserId);
+            if (resp == null || !resp.getStatusCode().is2xxSuccessful() || resp.getBody() == null
+                    || resp.getBody().token() == null || resp.getBody().token().isBlank()) {
+                log.warn("[FCM-EMERGENCY] no partner token. user={}", currentUserId);
                 return;
             }
+            String token = resp.getBody().token();
 
-            // 2. 파트너 ID 결정 (가독성을 위한 헬퍼 메소드 사용)
-            Long partnerId = findPartnerId(currentUserId, coupleDetail);
-            if (partnerId == null) {
-                log.warn("Partner not found for user {}. Cannot send notification.", currentUserId);
-                return;
-            }
-
-            // 3. 파트너의 FCM 토큰 목록 조회
-            List<String> tokens = userServerClient.getFcmTokens(partnerId).tokens();
-            if (tokens == null || tokens.isEmpty()) {
-                log.warn("No active FCM tokens found for partner {}", partnerId);
-                return;
-            }
-
-            // 4. 메시지 생성 및 전송
-            String title = "심박수 이상 감지";
-            String body = String.format("현재 심박수가 %dBPM을 초과했습니다. 상태를 확인해주세요.", heartrate);
-            Map<String, String> dataPayload = Map.of("type", "EMERGENCY", "title", title, "body", body);
-
-            for (String token : tokens) {
-                Message message = Message.builder().putAllData(dataPayload).setToken(token).build();
-                String response = FirebaseMessaging.getInstance().send(message);
-                log.info("Successfully sent FCM message to partner {}: {}", partnerId, response);
-            }
+            var data = Map.of(
+                    "type",  "EMERGENCY",
+                    "title", "심박수 이상 감지",
+                    "body",  String.format("현재 심박수가 %dBPM을 초과했습니다. 상태를 확인해주세요.", heartrate)
+            );
+            var message = Message.builder().putAllData(data).setToken(token).build();
+            String result = FirebaseMessaging.getInstance().send(message);
+            log.info("[FCM-EMERGENCY] sent. user={} result={}", currentUserId, result);
 
         } catch (Exception e) {
-            log.error("Failed to send FCM emergency notification for user {}", currentUserId, e);
+            log.error("[FCM-EMERGENCY] fail. user={}", currentUserId, e);
         }
     }
-    /**
-     * 커플 상세 정보에서 파트너의 ID를 추출합니다.
-     * @return 파트너의 사용자 ID, 찾지 못하면 null
-     */
-    private Long findPartnerId(Long currentUserId, UserServerClient.CoupleDetailResponse coupleDetail) {
-        if (coupleDetail == null || coupleDetail.couple() == null) {
-            return null;
-        }
-        Long userAId = coupleDetail.couple().user_a_id();
-        Long userBId = coupleDetail.couple().user_b_id();
 
-        if (Objects.equals(currentUserId, userAId)) {
-            return userBId;
-        }
-
-        if (coupleDetail == null || coupleDetail.couple() == null) {
-            return null;
-        }
-
-        if (Objects.equals(currentUserId, userAId)) {
-            return userBId;
-        }
-        if (Objects.equals(currentUserId, userBId)) {
-            return userAId;
-        }
-        return null;
-    }
-
-    /**
-     * 예약된 일정 알림을 보냅니다.
-     * @param userId 알림을 받을 사용자의 ID
-     * @param title 알림 제목
-     * @param body 알림 내용
-     */
     @Async
     public void sendReminderNotification(Long userId, String title, String body) {
         try {
-            // 1. user-server에서 사용자의 FCM 토큰 목록 조회
-            UserServerClient.FcmTokenResponse tokenResponse = userServerClient.getFcmTokens(userId);
-            List<String> tokens = (tokenResponse != null) ? tokenResponse.tokens() : null;
-
-            if (tokens == null || tokens.isEmpty()) {
-                log.warn("[FCM-REMINDER] No active FCM tokens found for user {}. Cannot send reminder.", userId);
+            var resp = userClient.latestOfUser(userId);
+            if (resp == null || !resp.getStatusCode().is2xxSuccessful() || resp.getBody() == null
+                    || resp.getBody().token() == null || resp.getBody().token().isBlank()) {
+                log.warn("[FCM-REMINDER] no token. user={}", userId);
                 return;
             }
+            String token = resp.getBody().token();
 
-            // 2. 요구사항에 맞는 데이터 페이로드 생성
-            Map<String, String> dataPayload = Map.of(
-                    "type", "REMINDER",
-                    "title", title,
-                    "body", body
-            );
-
-            // 3. 각 토큰에 메시지 전송
-            for (String token : tokens) {
-                Message message = Message.builder()
-                        .putAllData(dataPayload)
-                        .setToken(token)
-                        .build();
-                String response = FirebaseMessaging.getInstance().send(message);
-                log.info("[FCM-REMINDER] Successfully sent FCM reminder to user {}: {}", userId, response);
-            }
+            var data = Map.of("type","REMINDER","title",title,"body",body);
+            var message = Message.builder().putAllData(data).setToken(token).build();
+            String result = FirebaseMessaging.getInstance().send(message);
+            log.info("[FCM-REMINDER] sent. user={} result={}", userId, result);
 
         } catch (Exception e) {
-            log.error("[FCM-REMINDER] Failed to send FCM reminder notification for user {}", userId, e);
+            log.error("[FCM-REMINDER] fail. user={}", userId, e);
         }
     }
-
 }
+

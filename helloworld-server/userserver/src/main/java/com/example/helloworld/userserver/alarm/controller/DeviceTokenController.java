@@ -49,19 +49,4 @@ public class DeviceTokenController {
         repo.deactivate(auth.memberId(), body.token()); // 2. principal에서 사용자 ID 사용
         return ResponseEntity.noContent().build();
     }
-
-    @GetMapping("/{userId}/fcm-tokens")
-    public ResponseEntity<FcmTokenResponse> getFcmToken(@PathVariable Long userId) {
-        var opt = repo.findFirstByUserIdAndIsActiveTrueOrderByLastSeenAtDescCreatedAtDesc(userId);
-        if (opt.isEmpty()) {
-            return ResponseEntity.noContent().build(); // 204: 활성 토큰 없음
-        }
-        return ResponseEntity.ok(
-                FcmTokenResponse.builder()
-                        .userId(userId)
-                        .token(opt.get().getToken())
-                        .build()
-        );
-    }
-
 }

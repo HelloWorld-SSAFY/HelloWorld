@@ -1,38 +1,31 @@
 package com.example.helloworld.healthserver.client;
 
 import com.example.helloworld.healthserver.config.FeignAuthConfig;
+import com.example.helloworld.healthserver.config.UserServerFeignConfig;
 import org.springframework.cloud.openfeign.FeignClient;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 
 import java.util.List;
-
 @FeignClient(
         name = "user-server",
         url = "${userserver.base-url}",
-        configuration = FeignAuthConfig.class
+        configuration = UserServerFeignConfig.class
 )
 public interface UserServerClient {
 
-    /**
-     * 내 커플 상세 정보 조회 (user-server API)
-     * 이 API는 요청을 보내는 사용자의 토큰을 기반으로 커플 정보를 반환합니다.
-     */
-    @GetMapping("/api/couples/me/detail")
-    CoupleDetailResponse getCoupleDetail();
+    @GetMapping("/api/internal/fcm/couples/{userId}/partner-latest")
+    ResponseEntity<PartnerFcmResponse> partnerLatest(@PathVariable("userId") Long userId);
 
+    @GetMapping("/api/internal/fcm/users/{userId}/latest")
+    ResponseEntity<FcmTokenResponse> latestOfUser(@PathVariable("userId") Long userId);
 
-    // ✨ 사용자의 FCM 토큰 목록을 조회하는 API (user-server에 구현 필요)
-    @GetMapping("/api/fcm/{userId}/fcm-tokens")
-    FcmTokenResponse getFcmTokens(@PathVariable("userId") Long userId);
+    @GetMapping("/api/internal/fcm/couples/{userId}/both-latest")
+    ResponseEntity<CoupleTokensResponse> bothLatest(@PathVariable("userId") Long userId);
 
-
-
-    record CoupleDetailResponse(CoupleInfo couple, UserInfo userA, UserInfo userB) {}
-
-    record CoupleInfo(long couple_id, Long user_a_id, Long user_b_id) {}
-
-    record UserInfo(long id, String nickname) {}
-
-    record FcmTokenResponse(List<String> tokens) {}
+    // DTO records
+    record FcmTokenResponse(Long userId, String token) {}
+    record PartnerFcmResponse(Long partnerId, String token) {}
+    record CoupleTokensResponse(Long userId, String userToken, Long partnerId, String partnerToken) {}
 }
