@@ -1,7 +1,6 @@
 // service/gen/GmsDalleClient.java
 package com.example.helloworld.calendar_diary_server.service.gen;
 
-import com.example.helloworld.calendar_diary_server.logging.HttpWireLogging;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.RequiredArgsConstructor;
@@ -11,15 +10,11 @@ import org.apache.hc.client5.http.impl.classic.HttpClients;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
-import org.springframework.http.client.BufferingClientHttpRequestFactory;
 import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
-import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
-import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClientResponseException;
 
-import java.net.http.HttpClient;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -38,26 +33,23 @@ public class GmsDalleClient implements GmsImageGenClient {
     @Value("${app.gms.size:1024x1024}")
     private String size;
 
-
     private RestClient client() {
-        // 1) Apache 클라이언트 옵션 (전송 안정화 핵심)
+        // 1) Apache 클라이언트 옵션 (전송 안정화)
         RequestConfig reqCfg = RequestConfig.custom()
                 .setConnectTimeout(10, TimeUnit.SECONDS)
-                .setResponseTimeout(180, TimeUnit.SECONDS)  // 생성 길면 넉넉히
-                .setExpectContinueEnabled(false)            // 100-continue 비활성화
+                .setResponseTimeout(180, TimeUnit.SECONDS)
+                .setExpectContinueEnabled(false)
                 .build();
 
         CloseableHttpClient apache = HttpClients.custom()
                 .setDefaultRequestConfig(reqCfg)
-                .disableContentCompression()                // gzip 비활성화(중간 프록시 이슈 회피)
+                .disableContentCompression() // gzip 비활성화
                 .build();
 
-        // 2) Spring RequestFactory 교체 (+바디 재읽기용 Buffering)
-        var rf = new BufferingClientHttpRequestFactory(
-                new HttpComponentsClientHttpRequestFactory(apache)
-        );
+        // 2) Buffering 래퍼 제거 → 바로 Apache factory 사용
+        var rf = new HttpComponentsClientHttpRequestFactory(apache);
 
-        // 3) 기존 기본헤더/베이스URL 유지
+        // 3) RestClient
         return RestClient.builder()
                 .requestFactory(rf)
                 .baseUrl("https://gms.ssafy.io")
@@ -65,10 +57,8 @@ public class GmsDalleClient implements GmsImageGenClient {
                 .defaultHeader(HttpHeaders.ACCEPT, "*/*")
                 .defaultHeader(HttpHeaders.ACCEPT_ENCODING, "identity")
                 .defaultHeader(HttpHeaders.USER_AGENT, "curl/8.6.0")
-                .defaultHeader(HttpHeaders.CONNECTION, "close") // (임시) keep-alive 억제
                 .build();
     }
-
 
     @Override
     public byte[] generateCaricature(byte[] ignored) {
@@ -77,7 +67,7 @@ public class GmsDalleClient implements GmsImageGenClient {
 
     public byte[] generateCaricatureWithPrompt(String prompt) {
         Map<String, Object> payload = Map.of(
-                "model", model,                 // dall-e-3 또는 gpt-image-1
+                "model", model,
                 "prompt", prompt,
                 "size", size,
                 "n", 1,
@@ -86,12 +76,11 @@ public class GmsDalleClient implements GmsImageGenClient {
 
         try {
             GmsResponse resp = client().post()
-                    .uri("/gmsapi/api.openai.com/v1/images/generations")  //풀 경로
+                    .uri("/gmsapi/api.openai.com/v1/images/generations")
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(payload)
                     .retrieve()
                     .body(GmsResponse.class);
-
 
             if (resp == null || resp.data == null || resp.data.isEmpty() || resp.data.get(0).b64 == null) {
                 throw new IllegalStateException("GMS image generation failed or empty response");
@@ -99,12 +88,10 @@ public class GmsDalleClient implements GmsImageGenClient {
             return Base64.getDecoder().decode(resp.data.get(0).b64);
 
         } catch (RestClientResponseException e) {
-            // ⬇원문 바디를 그대로 남겨야 원인 파악 가능
             String body = e.getResponseBodyAsString();
             throw new IllegalStateException("GMS/OpenAI 4xx/5xx. status=" + e.getStatusCode() + " body=" + body, e);
         }
     }
-
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     static class GmsResponse { public List<Item> data; }
