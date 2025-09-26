@@ -15,6 +15,7 @@ public class WeeklyQueryService {
     private final WeeklyInfoRepo infoRepo;
     private final WeeklyWorkoutRepo workoutRepo;
     private final DietPlanRepo dietRepo;
+    private final S3UrlService s3url;
 
     public WeeklyInfoRes getInfo(int weekNo) {
         var info = infoRepo.findById((weekNo))
@@ -41,7 +42,7 @@ public class WeeklyQueryService {
         int f = (from==null) ? 1 : from;
         int t = (to==null) ? 7 : to;
         var list = dietRepo.findWeekRange(weekNo, f, t).stream()
-                .map(d -> new DietDayRes(d.getDayInWeek(), d.getDayNo(), d.getFood(), d.getDetail(), d.getImgUrl()))
+                .map(d -> new DietDayRes(d.getDayInWeek(), d.getDayNo(), d.getFood(), d.getDetail(),  s3url.presignGet(d.getImgUrl(), java.time.Duration.ofMinutes(10))))
                 .toList();
         return new WeeklyDietsRes(weekNo, f, t, list);
     }
