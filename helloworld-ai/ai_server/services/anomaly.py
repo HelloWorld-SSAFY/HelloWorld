@@ -146,6 +146,12 @@ class AnomalyDetector:
     def evaluate(self, *, user_ref: str, ts_utc: datetime, metrics: Dict[str, float]) -> AnomalyResult:
         S = self._users.setdefault(user_ref, UserState())
 
+        # ── (−1) 쿨다운 만료 정규화: 여기서 먼저 정리해 두면 이후에 "갑자기 cooldown" 방지
+        if S.emergency_until and (S.emergency_until - ts_utc).total_seconds() <= 0:
+            S.emergency_until = None
+        if S.restrict_until and (S.restrict_until - ts_utc).total_seconds() <= 0:
+            S.restrict_until = None
+
         # 0) emergency 쿨다운 (잔여시간 > 0일 때만 cooldown)
         if S.emergency_until:
             remain = (S.emergency_until - ts_utc).total_seconds()
@@ -157,8 +163,7 @@ class AnomalyDetector:
                     cooldown_min=cd_min, cooldown_source="emergency", cooldown_until=S.emergency_until
                 )
             else:
-                # 만료 → 해제 후 진행
-                S.emergency_until = None
+                S.emergency_until = None  # 안전망 (이론상 도달 X)
 
         present = [m for m in self.cfg.supported_metrics if m in metrics]
         if not present:
@@ -173,8 +178,7 @@ class AnomalyDetector:
                         cooldown_min=cd_min, cooldown_source="restrict", cooldown_until=S.restrict_until
                     )
                 else:
-                    # 만료 → 해제 후 정상 진행
-                    S.restrict_until = None
+                    S.restrict_until = None  # 안전망
             return AnomalyResult(True, False, "low", "normal", ("no_supported_metrics",))
 
         # 1) 버킷/날짜
@@ -226,8 +230,6 @@ class AnomalyDetector:
             mu_s, sd_s = (stats_s or (None, None))
 
             # 🔧 스케일 자동 정합(양방향)
-            # μ/σ가 0~1대인데 s가 1.5 이상이면 → 0~100 입력으로 판단 → /100
-            # μ/σ가 5 이상(대략 10~100 스케일)인데 s가 1.5 이하이면 → 0~1 입력으로 판단 → ×100
             if (mu_s is not None and sd_s is not None and s is not None):
                 if (mu_s <= 1.5 and sd_s <= 1.5 and s > 1.5):
                     s = s / 100.0
@@ -298,8 +300,7 @@ class AnomalyDetector:
                     cooldown_min=cd_min, cooldown_source="restrict", cooldown_until=S.restrict_until
                 )
             else:
-                # 만료 → 해제 후 진행
-                S.restrict_until = None
+                S.restrict_until = None  # 만료 즉시 해제
 
         # 7) RESTRICT: HR Z/절대값 or STRESS Z — 3틱
         if S.res_hr_high_c >= self.cfg.consecutive_required:
