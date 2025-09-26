@@ -1,12 +1,15 @@
 // service/gen/GmsDalleClient.java
 package com.example.helloworld.calendar_diary_server.service.gen;
 
+import com.example.helloworld.calendar_diary_server.logging.HttpWireLogging;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.BufferingClientHttpRequestFactory;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.HttpClientErrorException;
@@ -29,12 +32,17 @@ public class GmsDalleClient implements GmsImageGenClient {
     @Value("${app.gms.size:1024x1024}")
     private String size;
 
+
     private RestClient client() {
+        var reqFactory = new BufferingClientHttpRequestFactory(new JdkClientHttpRequestFactory());
         return RestClient.builder()
-                .baseUrl("https://gms.ssafy.io")                 // 도메인만
+                .requestFactory(reqFactory)                 // 요청 바디 재읽기 가능
+                .requestInterceptor(new HttpWireLogging())  // ← 와이어 로그
+                .baseUrl("https://gms.ssafy.io")
                 .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
-                // .defaultHeader(HttpHeaders.ACCEPT, "application/json") // 굳이 안 넣음(curl 도 안보냄)
-                .defaultHeader(HttpHeaders.USER_AGENT, "curl/8.6.0")     // curl과 동일하게 맞춤(Cloudflare 회피용)
+                .defaultHeader(HttpHeaders.ACCEPT, "*/*")
+                .defaultHeader(HttpHeaders.ACCEPT_ENCODING, "identity")
+                .defaultHeader(HttpHeaders.USER_AGENT, "curl/8.6.0") // (임시) curl과 동일
                 .build();
     }
 

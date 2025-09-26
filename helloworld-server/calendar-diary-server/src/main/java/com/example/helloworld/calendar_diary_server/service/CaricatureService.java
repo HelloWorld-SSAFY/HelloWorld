@@ -44,8 +44,11 @@ public class CaricatureService {
 
         // 2) 프롬프트 구성 (게이트웨이/운영팀 가이드에 맞춰 문구 조절)
         String prompt = """
-                a red apple
-                """;
+                Create a cute, heartwarming caricature of a baby derived from this ultrasound image:
+                %s
+                Style: clean line art, high contrast, soft shading, gentle smile.
+                Background: simple, warm tone. Output as a single centered character.
+                """.formatted(srcUrl);
 
         // 3) GMS 호출 (텍스트→이미지)
         byte[] out = gms.generateCaricatureWithPrompt(prompt);
