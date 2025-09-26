@@ -1,5 +1,6 @@
 package com.example.helloworld.healthserver.service;
 
+import com.example.helloworld.healthserver.alarm.repository.NotificationRepository;
 import com.example.helloworld.healthserver.client.AiServerClient;
 import com.example.helloworld.healthserver.alarm.service.FcmService;
 import com.example.helloworld.healthserver.config.UserPrincipal;
@@ -25,7 +26,7 @@ import java.util.*;
 public class HealthDataService {
 
     private final HealthDataRepository repo;
-
+    private final NotificationRepository notificationRepository;
     private final AiServerClient aiServerClient;
     private final FcmService fcmService;
 
@@ -69,9 +70,30 @@ public class HealthDataService {
 
         // 4) 이상 징후면 FCM (총 3건: 본인 ANDROID 1, 본인 WATCH 1, 파트너 ANDROID 1)
         if (resp != null && resp.mode() != null && ANOMALY_MODES.contains(resp.mode().toUpperCase())) {
-            log.debug("AI server reported anomaly mode '{}'. Triggering FCM triple notification.", resp.mode());
-            fcmService.sendEmergencyTriple(user.getUserId(), req.heartrate());
-        } else {
+            String title = "심박수 이상 감지";
+            String body  = String.format("현재 심박수가 %dBPM을 초과했습니다. 상태를 확인해주세요.",
+                    Optional.ofNullable(req.heartrate()).orElse(0));
+
+            var notif = com.example.helloworld.healthserver.alarm.entity.Notification.builder()
+                    .alarmType(com.example.helloworld.healthserver.alarm.domain.AlarmType.EMERGENCY) // import 주의
+                    .coupleId(user.getCoupleId())
+                    .alarmTitle(title)
+                    .alarmMsg(body)
+                    .createdAt(java.sql.Timestamp.from(Instant.now()))
+                    .build();
+
+            notif = notificationRepository.save(notif);     // ★ DB insert
+            Long alarmId = notif.getAlarmId();              // ★ 여기서 얻음
+
+            // FCM 3건 발송 + 유저서버 recipients 업서트
+            fcmService.sendEmergencyTripleAndRecord(
+                    alarmId,
+                    user.getUserId(),
+                    Optional.ofNullable(req.heartrate()).orElse(0), // int로 넘김
+                    title,
+                    body
+            );
+        }else {
             String mode = (resp != null && resp.mode() != null) ? resp.mode() : "normal or null";
             log.debug("AI server reported mode '{}'. No FCM notification is needed.", mode);
         }
