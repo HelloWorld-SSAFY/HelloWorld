@@ -5,10 +5,14 @@ import com.example.helloworld.calendar_diary_server.logging.HttpWireLogging;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.RequiredArgsConstructor;
+import org.apache.hc.client5.http.config.RequestConfig;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
+import org.apache.hc.client5.http.impl.classic.HttpClients;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.BufferingClientHttpRequestFactory;
+import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -19,6 +23,7 @@ import java.net.http.HttpClient;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 @Component
 @RequiredArgsConstructor
@@ -35,19 +40,32 @@ public class GmsDalleClient implements GmsImageGenClient {
 
 
     private RestClient client() {
-        var jdk = HttpClient.newBuilder()
-                .version(HttpClient.Version.HTTP_1_1) // ★ HTTP/1.1 강제
+        // 1) Apache 클라이언트 옵션 (전송 안정화 핵심)
+        RequestConfig reqCfg = RequestConfig.custom()
+                .setConnectTimeout(10, TimeUnit.SECONDS)
+                .setResponseTimeout(180, TimeUnit.SECONDS)  // 생성 길면 넉넉히
+                .setExpectContinueEnabled(false)            // 100-continue 비활성화
                 .build();
 
-        var rf = new BufferingClientHttpRequestFactory(new JdkClientHttpRequestFactory(jdk));
+        CloseableHttpClient apache = HttpClients.custom()
+                .setDefaultRequestConfig(reqCfg)
+                .disableContentCompression()                // gzip 비활성화(중간 프록시 이슈 회피)
+                .build();
+
+        // 2) Spring RequestFactory 교체 (+바디 재읽기용 Buffering)
+        var rf = new BufferingClientHttpRequestFactory(
+                new HttpComponentsClientHttpRequestFactory(apache)
+        );
+
+        // 3) 기존 기본헤더/베이스URL 유지
         return RestClient.builder()
                 .requestFactory(rf)
                 .baseUrl("https://gms.ssafy.io")
-                .defaultHeader("Authorization", "Bearer " + apiKey)
-                .defaultHeader("Accept", "*/*")
-                .defaultHeader("Accept-Encoding", "identity")
-                .defaultHeader("Connection", "close") // (임시) 커넥션 재사용 억제
-                .defaultHeader("User-Agent", "curl/8.6.0")
+                .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
+                .defaultHeader(HttpHeaders.ACCEPT, "*/*")
+                .defaultHeader(HttpHeaders.ACCEPT_ENCODING, "identity")
+                .defaultHeader(HttpHeaders.USER_AGENT, "curl/8.6.0")
+                .defaultHeader(HttpHeaders.CONNECTION, "close") // (임시) keep-alive 억제
                 .build();
     }
 

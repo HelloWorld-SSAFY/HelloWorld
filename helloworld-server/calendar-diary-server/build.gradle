@@ -60,6 +60,8 @@ dependencies {
     implementation "io.awspring.cloud:spring-cloud-aws-starter-s3:3.1.1"
 
 	implementation 'org.springframework.cloud:spring-cloud-starter-openfeign'
+
+    implementation 'org.apache.httpcomponents.client5:httpclient5:5.3.1'
 }
 
 dependencyManagement {
