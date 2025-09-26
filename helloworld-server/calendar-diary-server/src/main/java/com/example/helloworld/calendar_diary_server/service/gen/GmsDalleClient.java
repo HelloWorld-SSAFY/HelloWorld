@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -30,12 +31,13 @@ public class GmsDalleClient implements GmsImageGenClient {
 
     private RestClient client() {
         return RestClient.builder()
-                .baseUrl(baseUrl)
-                .defaultHeader("Authorization", "Bearer " + apiKey)
-//                .defaultHeader("Accept", "application/json")
-//                .defaultHeader("Host", "api.openai.com")
+                .baseUrl("https://gms.ssafy.io")                 // 도메인만
+                .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
+                // .defaultHeader(HttpHeaders.ACCEPT, "application/json") // 굳이 안 넣음(curl 도 안보냄)
+                .defaultHeader(HttpHeaders.USER_AGENT, "curl/8.6.0")     // curl과 동일하게 맞춤(Cloudflare 회피용)
                 .build();
     }
+
 
     @Override
     public byte[] generateCaricature(byte[] ignored) {
@@ -53,11 +55,12 @@ public class GmsDalleClient implements GmsImageGenClient {
 
         try {
             GmsResponse resp = client().post()
-                    .uri("/api.openai.com/v1/images/generations")
+                    .uri("/gmsapi/api.openai.com/v1/images/generations")  //풀 경로
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(payload)
                     .retrieve()
                     .body(GmsResponse.class);
+
 
             if (resp == null || resp.data == null || resp.data.isEmpty() || resp.data.get(0).b64 == null) {
                 throw new IllegalStateException("GMS image generation failed or empty response");
