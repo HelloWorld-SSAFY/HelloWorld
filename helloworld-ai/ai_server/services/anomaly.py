@@ -1,11 +1,11 @@
-# services/anomaly.py
 from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta, date
 from typing import Dict, Tuple, Protocol, Optional, runtime_checkable
 import uuid
 import math
-import os, logging
+import os
+import logging
 
 # ──────────────────────────────────────────────────────────────────────────────
 # KST / 버킷
@@ -146,27 +146,35 @@ class AnomalyDetector:
     def evaluate(self, *, user_ref: str, ts_utc: datetime, metrics: Dict[str, float]) -> AnomalyResult:
         S = self._users.setdefault(user_ref, UserState())
 
-        # 0) emergency 쿨다운
-        if S.emergency_until and ts_utc <= S.emergency_until:
-            remain = max(0, int((S.emergency_until - ts_utc).total_seconds()))
-            cd_min = max(1, math.ceil(remain / 60)) if remain > 0 else 1
-            return AnomalyResult(
-                ok=True, anomaly=True, risk_level="critical", mode="cooldown",
-                reasons=(f"emergency_cooldown_until={S.emergency_until.isoformat()}",),
-                cooldown_min=cd_min, cooldown_source="emergency", cooldown_until=S.emergency_until
-            )
+        # 0) emergency 쿨다운 (잔여시간 > 0일 때만 cooldown)
+        if S.emergency_until:
+            remain = (S.emergency_until - ts_utc).total_seconds()
+            if remain > 0:
+                cd_min = max(1, math.ceil(remain / 60))
+                return AnomalyResult(
+                    ok=True, anomaly=True, risk_level="critical", mode="cooldown",
+                    reasons=(f"emergency_cooldown_until={S.emergency_until.isoformat()}",),
+                    cooldown_min=cd_min, cooldown_source="emergency", cooldown_until=S.emergency_until
+                )
+            else:
+                # 만료 → 해제 후 진행
+                S.emergency_until = None
 
         present = [m for m in self.cfg.supported_metrics if m in metrics]
         if not present:
-            # metric이 없어도 restrict 쿨다운이면 cooldown
-            if S.restrict_until and ts_utc <= S.restrict_until:
-                remain = max(0, int((S.restrict_until - ts_utc).total_seconds()))
-                cd_min = max(1, math.ceil(remain / 60)) if remain > 0 else 1
-                return AnomalyResult(
-                    True, True, "high", "cooldown",
-                    (f"restrict_cooldown_until={S.restrict_until.isoformat()}",),
-                    cooldown_min=cd_min, cooldown_source="restrict", cooldown_until=S.restrict_until
-                )
+            # metric이 없어도 restrict 쿨다운 확인 (잔여시간 > 0일 때만 cooldown)
+            if S.restrict_until:
+                remain = (S.restrict_until - ts_utc).total_seconds()
+                if remain > 0:
+                    cd_min = max(1, math.ceil(remain / 60))
+                    return AnomalyResult(
+                        True, True, "high", "cooldown",
+                        (f"restrict_cooldown_until={S.restrict_until.isoformat()}",),
+                        cooldown_min=cd_min, cooldown_source="restrict", cooldown_until=S.restrict_until
+                    )
+                else:
+                    # 만료 → 해제 후 정상 진행
+                    S.restrict_until = None
             return AnomalyResult(True, False, "low", "normal", ("no_supported_metrics",))
 
         # 1) 버킷/날짜
@@ -279,15 +287,19 @@ class AnomalyDetector:
             res.cooldown_until = S.emergency_until
             return res
 
-        # 6) RESTRICT 쿨다운
-        if S.restrict_until and ts_utc <= S.restrict_until:
-            remain = max(0, int((S.restrict_until - ts_utc).total_seconds()))
-            cd_min = max(1, math.ceil(remain / 60)) if remain > 0 else 1
-            return AnomalyResult(
-                True, True, "high", "cooldown",
-                (f"restrict_cooldown_until={S.restrict_until.isoformat()}",),
-                cooldown_min=cd_min, cooldown_source="restrict", cooldown_until=S.restrict_until
-            )
+        # 6) RESTRICT 쿨다운 (잔여시간 > 0일 때만 cooldown)
+        if S.restrict_until:
+            remain = (S.restrict_until - ts_utc).total_seconds()
+            if remain > 0:
+                cd_min = max(1, math.ceil(remain / 60))
+                return AnomalyResult(
+                    True, True, "high", "cooldown",
+                    (f"restrict_cooldown_until={S.restrict_until.isoformat()}",),
+                    cooldown_min=cd_min, cooldown_source="restrict", cooldown_until=S.restrict_until
+                )
+            else:
+                # 만료 → 해제 후 진행
+                S.restrict_until = None
 
         # 7) RESTRICT: HR Z/절대값 or STRESS Z — 3틱
         if S.res_hr_high_c >= self.cfg.consecutive_required:
