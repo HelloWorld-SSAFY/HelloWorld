@@ -2,6 +2,9 @@ package com.example.helloworld.userserver.alarm.persistence;
 
 import com.example.helloworld.userserver.alarm.entity.DeviceToken;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
@@ -26,32 +29,29 @@ public interface DeviceTokenRepository extends JpaRepository<DeviceToken, Long> 
     );
 
 
+    @Modifying
     @Transactional
-    default void upsert(Long userId, String token) {
-        var now = Instant.now();
-        
-        this.findByUserIdAndToken(userId, token)
-                .ifPresentOrElse(
-                        // 토큰이 이미 존재하면 activate만 호출 (lastSeenAt 업데이트)
-                        DeviceToken::activate,
-                        // 토큰이 없으면 새로 생성하여 저장
-                        () -> {
-                            this.save(DeviceToken.builder()
-                                    .userId(userId)
-                                    .token(token)
-                                    .isActive(true)
-                                    .createdAt(now) // 이제 타입이 Instant로 일치합니다.
-                                    .lastSeenAt(now)  // 이제 타입이 Instant로 일치합니다.
-                                    .build());
-                        }
-                );
-    }
+    @Query(value = """
+        INSERT INTO device_tokens(user_id, token, platform, is_active, created_at, last_seen_at)
+        VALUES (:userId, :token, :platform, TRUE, now(), now())
+        ON CONFLICT ON CONSTRAINT ux_device_token
+        DO UPDATE SET
+          is_active = TRUE,
+          platform = EXCLUDED.platform,
+          last_seen_at = now()
+        """, nativeQuery = true)
+    void upsert(@Param("userId") Long userId,
+                @Param("token") String token,
+                @Param("platform") String platform);
+
+    @Modifying
     @Transactional
-    default void deactivate(Long userId, String token) {
-        // 훨씬 간결하고 효율적으로 수정
-        this.findByUserIdAndToken(userId, token)
-                .ifPresent(DeviceToken::deactivate);
-    }
+    @Query(value = """
+        UPDATE device_tokens
+           SET is_active = FALSE, last_seen_at = now()
+         WHERE user_id = :userId AND token = :token
+        """, nativeQuery = true)
+    void deactivate(@Param("userId") Long userId, @Param("token") String token);
 
 
 //    @Transactional

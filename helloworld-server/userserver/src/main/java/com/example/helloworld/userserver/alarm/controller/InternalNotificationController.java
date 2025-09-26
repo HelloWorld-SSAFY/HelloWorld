@@ -4,6 +4,7 @@ import com.example.helloworld.userserver.alarm.entity.NotificationRecipient;
 import com.example.helloworld.userserver.alarm.persistence.NotificationRecipientRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -19,6 +20,7 @@ public class InternalNotificationController {
     public record UpsertReq(Long alarmId, Long userId, String status, String messageId, String failReason) {}
 
     @PostMapping("/recipients/upsert")
+    @Transactional
     public ResponseEntity<Void> upsertRecipient(@RequestBody UpsertReq req) {
         var rec = repo.findByAlarmIdAndRecipientUserId(req.alarmId(), req.userId())
                 .orElseGet(() -> NotificationRecipient.builder()
