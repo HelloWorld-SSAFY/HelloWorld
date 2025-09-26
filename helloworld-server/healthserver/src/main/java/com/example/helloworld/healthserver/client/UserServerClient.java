@@ -4,9 +4,7 @@ import com.example.helloworld.healthserver.config.FeignAuthConfig;
 import com.example.helloworld.healthserver.config.UserServerFeignConfig;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 @FeignClient(name="user-server",
@@ -25,7 +23,14 @@ public interface UserServerClient {
     ResponseEntity<FcmTokenResponse> latestByPlatform(@PathVariable("userId") Long userId,
                                                       @RequestParam("platform") String platform);
 
-    record PartnerIdResponse(Long partnerId) {}
+    // ★ 수신자 상태 업서트
+    @PostMapping("/api/internal/notifications/recipients/upsert")
+    ResponseEntity<Void> upsertRecipient(@RequestBody UpsertReq req);
+
+    // DTOs
+
     record LatestTwoResponse(Long userId, String androidToken, String watchToken) {}
+    record UpsertReq(Long alarmId, Long userId, String status, String messageId, String failReason) {}
+    record PartnerIdResponse(Long partnerId) {}
     record FcmTokenResponse(Long userId, String platform, String token) {}
 }
