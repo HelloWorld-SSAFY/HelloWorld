@@ -47,7 +47,6 @@ public class DeviceTokenController {
         return switch (p.trim().toUpperCase()) {
             case "MOBILE", "ANDROID" -> "ANDROID";
             case "WATCH", "WEAROS", "WEAR_OS" -> "WATCH";
-            case "IOS", "IPHONE" -> "IOS";
             default -> p.trim().toUpperCase();
         };
     }
