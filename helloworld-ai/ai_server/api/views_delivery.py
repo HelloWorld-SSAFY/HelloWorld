@@ -29,7 +29,7 @@ from api.models import RecommendationDelivery as RecommendDelivery
 # 공용 인증/헤더 유틸 재사용
 from api.views import (
     _assert_app_token,
-    _require_user_ref,           # ← (fallback) 헤더 X-Couple-Id → "c{cid}"
+    _require_user_ref,           # ← (최종 fallback) 헤더/쿼리에서 user_ref 보장
     _access_token_from_request,  # ← Authorization / X-Access-Token 추출
     APP_TOKEN_PARAM,
     COUPLE_ID_PARAM,             # ← Swagger에 X-Couple-Id 노출
@@ -78,7 +78,6 @@ def _has_field(model_cls, name: str) -> bool:
 # ───────────── Access Token → coupleId/userId 추출 ─────────────
 def _b64url_decode(b: str) -> Optional[bytes]:
     try:
-        # base64url padding
         rem = len(b) % 4
         if rem:
             b += "=" * (4 - rem)
@@ -87,10 +86,7 @@ def _b64url_decode(b: str) -> Optional[bytes]:
         return None
 
 def _try_extract_ids_from_jwt(token: str) -> Tuple[Optional[int], Optional[int]]:
-    """
-    JWT payload를 서명검증 없이 로컬 decode해서 coupleId/userId 추출.
-    반환: (couple_id, user_id)
-    """
+    """JWT payload 서명검증 없이 decode → (couple_id, user_id)"""
     try:
         parts = token.split(".")
         if len(parts) < 2:
@@ -107,16 +103,13 @@ def _try_extract_ids_from_jwt(token: str) -> Tuple[Optional[int], Optional[int]]
             v = d.get(k)
             if isinstance(v, int):
                 return v
-            # 문자열 정수 처리
             if isinstance(v, str) and v.isdigit():
                 return int(v)
         return None
 
-    # 흔한 키 후보
     couple_id = _pick_int(payload, ["coupleId", "couple_id", "cid"])
     user_id = _pick_int(payload, ["userId", "user_id", "uid"])
 
-    # sub에 정수 id가 오는 케이스 보완
     if user_id is None:
         sub = payload.get("sub")
         if isinstance(sub, str) and sub.isdigit():
@@ -135,75 +128,60 @@ def _http_get_json(url: str, token: str, timeout: float = 3.0) -> Optional[Dict[
     return None
 
 def _extract_ids_from_whoami_payload(data: Dict[str, Any]) -> Tuple[Optional[int], Optional[int]]:
-    """
-    다양한 whoami 응답 스키마를 관대하게 파싱.
-    반환: (couple_id, user_id)
-    """
-    keys = ["coupleId", "couple_id", "cid", "couple"]
-    for k in keys:
+    """다양한 whoami 스키마 관대 파싱 → (couple_id, user_id)"""
+    # couple
+    c = None
+    for k in ["coupleId", "couple_id", "cid", "couple"]:
         v = data.get(k)
         if isinstance(v, int):
-            c = v
-            break
+            c = v; break
         if isinstance(v, str) and v.isdigit():
-            c = int(v)
-            break
+            c = int(v); break
         if isinstance(v, dict):
-            # {"couple": {"id": 10}}
-            cv = v.get("id")
+            cv = v.get("id") or v.get("coupleId") or v.get("couple_id")
             if isinstance(cv, int):
-                c = cv
-                break
+                c = cv; break
             if isinstance(cv, str) and cv.isdigit():
-                c = int(cv)
-                break
-    else:
-        c = None
+                c = int(cv); break
 
-    # userId 후보
+    # user
     u = None
     for k in ["userId", "user_id", "uid", "id"]:
         v = data.get(k)
         if isinstance(v, int):
-            u = v
-            break
+            u = v; break
         if isinstance(v, str) and v.isdigit():
-            u = int(v)
-            break
+            u = int(v); break
 
-    # 중첩 후보: data["user"]["id"], data["account"]["id"]
     if u is None:
         for p in ["user", "account", "profile"]:
             node = data.get(p)
             if isinstance(node, dict):
-                iv = node.get("id")
+                iv = node.get("id") or node.get("userId") or node.get("user_id")
                 if isinstance(iv, int):
-                    u = iv
-                    break
+                    u = iv; break
                 if isinstance(iv, str) and iv.isdigit():
-                    u = int(iv)
-                    break
+                    u = int(iv); break
 
     return (c, u)
 
 def _resolve_user_refs_from_token(request) -> Tuple[Optional[str], Optional[str]]:
     """
-    Access Token(Authorization/X-Access-Token)로부터 user_ref 후보를 도출.
-    우선순위: coupleId → 'c{cid}', 없으면 userId → 'u{uid}'.
-    반환: (c_ref, u_ref)
+    Access Token(Authorization/X-Access-Token)로부터 user_ref 후보 도출.
+    반환: (c_ref, u_ref)  # 'c{cid}', 'u{uid}'
     """
     token = _access_token_from_request(request)
     if not token:
         return (None, None)
 
-    # 1) JWT 로컬 decode 시도
+    # 1) JWT 로컬 decode
     cid, uid = _try_extract_ids_from_jwt(token)
     if cid is not None or uid is not None:
         return (_first(f"c{cid}" if cid is not None else None, None),
                 _first(f"u{uid}" if uid is not None else None, None))
 
-    # 2) whoami 보조 호출(환경변수로 endpoint 유연화)
-    base = os.getenv("MAIN_WHOAMI_URL")  # 완전한 URL이면 이것만 사용
+    # 2) whoami 호출
+    base = os.getenv("MAIN_WHOAMI_URL")
     candidates: List[str] = []
     if base:
         candidates.append(base)
@@ -257,20 +235,18 @@ class DeliveryItem(serializers.Serializer):
 class DeliveryOut(serializers.Serializer):
     ok = serializers.BooleanField()
     category = serializers.CharField()
-    session_id = serializers.CharField(required=False, allow_null=True)  # ✅ null 허용
-    has_delivery = serializers.BooleanField()  # ✅
+    session_id = serializers.CharField(required=False, allow_null=True)
+    has_delivery = serializers.BooleanField()
     count = serializers.IntegerField()
     deliveries = DeliveryItem(many=True)
-    message = serializers.CharField(required=False, allow_blank=True)  # ✅
+    message = serializers.CharField(required=False, allow_blank=True)
 
 
 def _serialize_media_from_recommend(items):
-    """ MUSIC / MEDITATION / YOGA → recommend_delivery에서 바로 직렬화 """
     out = []
     for i, r in enumerate(items, start=1):
-        c = getattr(r, "content", None)            # 있으면 사용
-        snap = getattr(r, "snapshot", None) or {}  # 추천 시 스냅샷 저장했다면 사용
-
+        c = getattr(r, "content", None)
+        snap = getattr(r, "snapshot", None) or {}
         out.append({
             "delivery_id": _first(getattr(r, "external_id", None), f"content:{r.id}"),
             "content_id":  _first(getattr(r, "content_id", None), getattr(c, "id", None)),
@@ -281,7 +257,6 @@ def _serialize_media_from_recommend(items):
                 getattr(c, "url", None), getattr(c, "watch_url", None), getattr(c, "external_url", None),
                 snap.get("url")
             ),
-            # 응답키는 thumbnail 고정(소스는 r.* / c.* / snapshot.*)
             "thumbnail": _first(
                 getattr(r, "thumbnail_url", None), getattr(r, "thumbnail", None),
                 getattr(c, "thumbnail_url", None), getattr(c, "thumbnail", None),
@@ -300,15 +275,12 @@ def _serialize_media_from_recommend(items):
         })
     return out
 
-
 def _serialize_outing_from_recommend(items):
-    """ OUTING → recommend_delivery에서만 직렬화 (조인/다른 테이블 전혀 안 씀) """
     out = []
     for i, r in enumerate(items, start=1):
-        c = getattr(r, "content", None)            # 있을 수도 있음
+        c = getattr(r, "content", None)
         snap = getattr(r, "snapshot", None) or {}
 
-        # place/위치 계열 필드는 r → c → snapshot 순으로 관대하게 매핑
         place_id = _first(getattr(r, "place_id", None),
                           getattr(r, "content_id", None),
                           getattr(c, "id", None),
@@ -368,7 +340,7 @@ class _RecommendDeliveryBase(APIView):
         """
         if c_ref:
             sess = (RecommendDelivery.objects
-                    .filter(user_ref=c_ref, category=self.CATEGORY)
+                    .filter(user_ref=c_ref, category__iexact=self.CATEGORY)  # ← iexact
                     .order_by("-created_at")
                     .values_list("session_id", flat=True)
                     .first())
@@ -377,7 +349,7 @@ class _RecommendDeliveryBase(APIView):
 
         if u_ref:
             sess = (RecommendDelivery.objects
-                    .filter(user_ref=u_ref, category=self.CATEGORY)
+                    .filter(user_ref=u_ref, category__iexact=self.CATEGORY)  # ← iexact
                     .order_by("-created_at")
                     .values_list("session_id", flat=True)
                     .first())
@@ -390,7 +362,7 @@ class _RecommendDeliveryBase(APIView):
         parameters=[
             AUTHZ_PARAM,         # ← Authorization 헤더 (JWT에서 coupleId/userId 추출)
             APP_TOKEN_PARAM,
-            COUPLE_ID_PARAM,     # ← (fallback) 헤더로 couple id 전달 가능
+            COUPLE_ID_PARAM,     # ← 헤더로 couple id 전달 가능(이제 최우선)
             ACCESS_TOKEN_PARAM,  # ← (대안) X-Access-Token
             OpenApiParameter(
                 "user_ref", OpenApiTypes.STR, OpenApiParameter.QUERY, required=False,
@@ -420,18 +392,31 @@ class _RecommendDeliveryBase(APIView):
         if bad:
             return bad
 
-        # ── 1) Access Token에서 user_ref 후보(cN/uM) 추출 ──
-        c_ref, u_ref = _resolve_user_refs_from_token(request)
+        # ── 0) 헤더 X-Couple-Id 최우선 ──
+        c_ref = None
+        u_ref = None
+        cid_hdr = request.headers.get("X-Couple-Id")
+        if cid_hdr and str(cid_hdr).strip().isdigit():
+            c_ref = f"c{int(str(cid_hdr).strip())}"
 
-        # ── 2) 그래도 없으면: X-Couple-Id → 'c{cid}' / 마지막으로 ?user_ref ──
+        # ── 1) 헤더가 없을 때만: Access Token에서 c/u 후보 추출 ──
+        if not c_ref:
+            c_ref, u_ref = _resolve_user_refs_from_token(request)
+
+        # ── 2) 그래도 없으면: ?user_ref 또는 _require_user_ref로 보장 ──
         if not (c_ref or u_ref):
             user_ref_qs = request.query_params.get("user_ref")
             header_ref, missing = _require_user_ref(request, user_ref_qs)
             if missing:
                 return missing
-            # header_ref는 이미 c{cid} 형태로 정규화됨
-            c_ref = header_ref if header_ref and header_ref.startswith("c") else None
-            u_ref = header_ref if header_ref and header_ref.startswith("u") else None
+            if header_ref.startswith("c"):
+                c_ref = header_ref
+            elif header_ref.startswith("u"):
+                u_ref = header_ref
+
+        # 디버그
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("[delivery.get] cat=%s cid_hdr=%s c_ref=%s u_ref=%s", self.CATEGORY, cid_hdr, c_ref, u_ref)
 
         # 안전 파싱/클램핑
         try:
@@ -448,11 +433,8 @@ class _RecommendDeliveryBase(APIView):
 
         # ── 3) 세션 결정 (우선 c_ref → 없으면 u_ref) ──
         if session_id:
-            # session_id가 주어지면 어떤 ref에서 나온 건지 알 수 없으므로,
-            # 우선 c_ref가 있으면 그걸로, 없으면 u_ref로 조회 시도
             chosen_user_ref = _first(c_ref, u_ref)
             if not chosen_user_ref:
-                # 이 경우는 거의 없지만, user_ref 전혀 없으면 실패
                 return Response({"ok": False, "error": "user_ref not resolved"}, status=status.HTTP_400_BAD_REQUEST)
             chosen_session_id = session_id
         else:
@@ -462,9 +444,8 @@ class _RecommendDeliveryBase(APIView):
 
         # ── 4) 세션 + 카테고리 고정 조회 ──
         qs = (RecommendDelivery.objects
-              .filter(user_ref=chosen_user_ref, session_id=chosen_session_id, category=self.CATEGORY))
+              .filter(user_ref=chosen_user_ref, session_id=chosen_session_id, category__iexact=self.CATEGORY))  # ← iexact
 
-        # content FK가 실제로 있으면 N+1 예방
         if _has_field(RecommendDelivery, "content"):
             qs = qs.select_related("content")
 
@@ -483,6 +464,9 @@ class _RecommendDeliveryBase(APIView):
         items = list(qs.order_by(*order_by)[:limit])
         if not items:
             return _ok_empty(self.CATEGORY, chosen_session_id, "no delivery for category")
+
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("[delivery.get] chosen_ref=%s session=%s count=%d", chosen_user_ref, chosen_session_id, len(items))
 
         return Response({
             "ok": True,
