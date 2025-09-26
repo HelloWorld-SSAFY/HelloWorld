@@ -21,7 +21,7 @@ public class DeviceTokenController {
 
     private final DeviceTokenRepository repo;
 
-    public record RegisterReq(String token) {}
+    public record RegisterReq(String token,String platform) {}
     public record UnregisterReq(String token) {}
 
     // 인증된 사용자 정보가 없을 경우 예외를 던지는 헬퍼 메소드
@@ -37,8 +37,19 @@ public class DeviceTokenController {
             @AuthenticationPrincipal InternalPrincipal principal, // 1. @AuthenticationPrincipal 사용
             @RequestBody RegisterReq body) {
         var auth = requireAuth(principal);
-        repo.upsert(auth.memberId(), body.token()); // 2. principal에서 사용자 ID 사용
+        String pf = normalize(body.platform());
+        repo.upsert(auth.memberId(), body.token(),pf); // 2. principal에서 사용자 ID 사용
         return ResponseEntity.noContent().build();
+    }
+
+    private String normalize(String p) {
+        if (p == null) return "ANDROID"; // 기본값 혹은 400으로 처리해도 됨
+        return switch (p.trim().toUpperCase()) {
+            case "MOBILE", "ANDROID" -> "ANDROID";
+            case "WATCH", "WEAROS", "WEAR_OS" -> "WATCH";
+            case "IOS", "IPHONE" -> "IOS";
+            default -> p.trim().toUpperCase();
+        };
     }
 
     @PostMapping("/unregister")
