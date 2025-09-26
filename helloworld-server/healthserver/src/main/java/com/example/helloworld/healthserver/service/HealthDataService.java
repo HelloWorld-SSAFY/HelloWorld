@@ -52,12 +52,10 @@ public class HealthDataService {
         String isoTimestamp = timestamp.atZone(ZoneId.of("Asia/Seoul"))
                 .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
 
-        AiServerClient.Metrics metrics =
-                new AiServerClient.Metrics(req.heartrate(), req.stress());
-        AiServerClient.TelemetryRequest telemetryRequest =
-                new AiServerClient.TelemetryRequest(userRef, isoTimestamp, metrics);
+        AiServerClient.Metrics metrics = new AiServerClient.Metrics(req.heartrate(), req.stress());
+        AiServerClient.TelemetryRequest telemetryRequest = new AiServerClient.TelemetryRequest(userRef, isoTimestamp, metrics);
 
-        // 3) AI 서버 호출 (헤더: X-App-Token은 Feign 인터셉터, X-Internal-Couple-Id는 메서드 인자)
+        // 3) AI 서버 호출
         AiServerClient.AnomalyResponse resp;
         try {
             resp = aiServerClient.checkTelemetry(user.getCoupleId(), telemetryRequest);
@@ -69,16 +67,14 @@ public class HealthDataService {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "AI server error");
         }
 
-        // 4) 이상 징후면 FCM
-        if (resp != null && resp.mode() != null
-                && ANOMALY_MODES.contains(resp.mode().toUpperCase())) {
-            log.debug("AI server reported anomaly mode '{}'. Triggering FCM notification.", resp.mode());
-            fcmService.sendEmergencyNotification(user.getUserId(), req.heartrate());
+        // 4) 이상 징후면 FCM (총 3건: 본인 ANDROID 1, 본인 WATCH 1, 파트너 ANDROID 1)
+        if (resp != null && resp.mode() != null && ANOMALY_MODES.contains(resp.mode().toUpperCase())) {
+            log.debug("AI server reported anomaly mode '{}'. Triggering FCM triple notification.", resp.mode());
+            fcmService.sendEmergencyTriple(user.getUserId(), req.heartrate());
         } else {
             String mode = (resp != null && resp.mode() != null) ? resp.mode() : "normal or null";
             log.debug("AI server reported mode '{}'. No FCM notification is needed.", mode);
         }
-
 
         return resp;
     }

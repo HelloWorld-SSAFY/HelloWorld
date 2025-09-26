@@ -5,11 +5,10 @@ import com.example.helloworld.userserver.member.persistence.CoupleRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
+
+import java.util.List;
 
 // user-server
 @RestController
@@ -17,61 +16,45 @@ import org.springframework.web.server.ResponseStatusException;
 @RequiredArgsConstructor
 public class InternalFcmController {
 
-    private final DeviceTokenRepository tokenRepo;
-    private final CoupleRepository coupleRepo; // 사용자→커플/파트너 조회용
+    private final DeviceTokenRepository repo;
 
-    public record FcmTokenResponse(Long userId, String token) {}
-    public record PartnerFcmResponse(Long partnerId, String token) {}
-    public record CoupleTokensResponse(Long userId, String userToken,
-                                       Long partnerId, String partnerToken) {}
+    public record LatestTwoResponse(Long userId, String androidToken, String watchToken) {}
+    public record FcmTokenResponse(Long userId, String platform, String token) {}
+
+    // 별칭 매핑 (조회시에만 사용)
+    private static List<String> aliases(String key) {
+        if (key == null) return List.of();
+        String k = key.trim().toUpperCase();
+        return switch (k) {
+            case "ANDROID", "MOBILE" -> List.of("ANDROID", "MOBILE");
+            case "WATCH", "WEAR_OS", "WEAROS" -> List.of("WATCH", "WEAR_OS", "WEAROS");
+            // 필요시 IOS 등 추가
+            case "IOS", "IPHONE" -> List.of("IOS", "IPHONE");
+            default -> List.of(k); // 알 수 없는 값은 그대로 1개 리스트
+        };
+    }
+
+    @GetMapping("/users/{userId}/latest-two")
+    public ResponseEntity<LatestTwoResponse> latestTwo(@PathVariable Long userId) {
+        var a = repo.findFirstByUserIdAndPlatformInAndIsActiveTrueOrderByLastSeenAtDescCreatedAtDesc(
+                userId, aliases("ANDROID")).orElse(null);
+        var w = repo.findFirstByUserIdAndPlatformInAndIsActiveTrueOrderByLastSeenAtDescCreatedAtDesc(
+                userId, aliases("WATCH")).orElse(null);
+
+        if (a == null && w == null) return ResponseEntity.noContent().build();
+        return ResponseEntity.ok(new LatestTwoResponse(
+                userId,
+                a != null ? a.getToken() : null,
+                w != null ? w.getToken() : null
+        ));
+    }
 
     @GetMapping("/users/{userId}/latest")
-    public ResponseEntity<FcmTokenResponse> latestOfUser(@PathVariable Long userId) {
-        var opt = tokenRepo.findFirstByUserIdAndIsActiveTrueOrderByLastSeenAtDescCreatedAtDesc(userId);
-        return opt.map(dt -> ResponseEntity.ok(new FcmTokenResponse(userId, dt.getToken())))
+    public ResponseEntity<FcmTokenResponse> latestByPlatform(@PathVariable Long userId,
+                                                             @RequestParam String platform) {
+        var t = repo.findFirstByUserIdAndPlatformInAndIsActiveTrueOrderByLastSeenAtDescCreatedAtDesc(
+                userId, aliases(platform));
+        return t.map(dt -> ResponseEntity.ok(new FcmTokenResponse(userId, platform.toUpperCase(), dt.getToken())))
                 .orElseGet(() -> ResponseEntity.noContent().build());
-    }
-
-    @GetMapping("/couples/{userId}/partner-latest")
-    public ResponseEntity<PartnerFcmResponse> partnerLatest(@PathVariable Long userId) {
-        var c = coupleRepo.findByUserId(userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "couple not found"));
-
-        Long aId = c.getUserA() != null ? c.getUserA().getId() : null;       // ManyToOne → id
-        Long bId = c.getUserB() != null ? c.getUserB().getId() : null;       // userB는 null 가능
-
-        Long partnerId = userId.equals(aId) ? bId
-                : (bId != null && userId.equals(bId) ? aId : null);
-
-        if (partnerId == null)
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "user not in couple");
-
-        var opt = tokenRepo.findFirstByUserIdAndIsActiveTrueOrderByLastSeenAtDescCreatedAtDesc(partnerId);
-        return opt.map(dt -> ResponseEntity.ok(new PartnerFcmResponse(partnerId, dt.getToken())))
-                .orElseGet(() -> ResponseEntity.noContent().build());
-    }
-
-    @GetMapping("/couples/{userId}/both-latest")
-    public ResponseEntity<CoupleTokensResponse> bothLatest(@PathVariable Long userId) {
-        var c = coupleRepo.findByUserId(userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "couple not found"));
-
-        Long aId = c.getUserA() != null ? c.getUserA().getId() : null;
-        Long bId = c.getUserB() != null ? c.getUserB().getId() : null;
-
-        Long partnerId = userId.equals(aId) ? bId
-                : (bId != null && userId.equals(bId) ? aId : null);
-
-        if (partnerId == null)
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "user not in couple");
-
-        var u = tokenRepo.findFirstByUserIdAndIsActiveTrueOrderByLastSeenAtDescCreatedAtDesc(userId).orElse(null);
-        var p = tokenRepo.findFirstByUserIdAndIsActiveTrueOrderByLastSeenAtDescCreatedAtDesc(partnerId).orElse(null);
-
-        if (u == null && p == null) return ResponseEntity.noContent().build();
-        return ResponseEntity.ok(new CoupleTokensResponse(
-                userId,    u != null ? u.getToken() : null,
-                partnerId, p != null ? p.getToken() : null
-        ));
     }
 }

@@ -6,26 +6,26 @@ import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
 
 import java.util.List;
-@FeignClient(
-        name = "user-server",
-        url = "${userserver.base-url}",
-        configuration = UserServerFeignConfig.class
-)
-public interface UserServerClient {
+@FeignClient(name="user-server",
+        url="${userserver.base-url}",
+        configuration=UserServerFeignConfig.class)
 
-    @GetMapping("/api/internal/fcm/couples/{userId}/partner-latest")
-    ResponseEntity<PartnerFcmResponse> partnerLatest(@PathVariable("userId") Long userId);
+
+public interface UserServerClient {
+    @GetMapping("/api/internal/couples/{userId}/partner-id")
+    ResponseEntity<PartnerIdResponse> partnerId(@PathVariable("userId") Long userId);
+
+    @GetMapping("/api/internal/fcm/users/{userId}/latest-two")
+    ResponseEntity<LatestTwoResponse> latestTwo(@PathVariable("userId") Long userId);
 
     @GetMapping("/api/internal/fcm/users/{userId}/latest")
-    ResponseEntity<FcmTokenResponse> latestOfUser(@PathVariable("userId") Long userId);
+    ResponseEntity<FcmTokenResponse> latestByPlatform(@PathVariable("userId") Long userId,
+                                                      @RequestParam("platform") String platform);
 
-    @GetMapping("/api/internal/fcm/couples/{userId}/both-latest")
-    ResponseEntity<CoupleTokensResponse> bothLatest(@PathVariable("userId") Long userId);
-
-    // DTO records
-    record FcmTokenResponse(Long userId, String token) {}
-    record PartnerFcmResponse(Long partnerId, String token) {}
-    record CoupleTokensResponse(Long userId, String userToken, Long partnerId, String partnerToken) {}
+    record PartnerIdResponse(Long partnerId) {}
+    record LatestTwoResponse(Long userId, String androidToken, String watchToken) {}
+    record FcmTokenResponse(Long userId, String platform, String token) {}
 }
