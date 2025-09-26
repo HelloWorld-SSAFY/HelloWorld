@@ -40,12 +40,10 @@ public class GmsDalleClient implements GmsImageGenClient {
         RequestConfig reqCfg = RequestConfig.custom()
                 .setConnectTimeout(10, TimeUnit.SECONDS)
                 .setResponseTimeout(180, TimeUnit.SECONDS)
-                .setExpectContinueEnabled(false)
                 .build();
 
         CloseableHttpClient apache = HttpClients.custom()
                 .setDefaultRequestConfig(reqCfg)
-                .disableContentCompression() // gzip 비활성화
                 .build();
 
         // 2) Buffering 래퍼 제거 → 바로 Apache factory 사용
@@ -54,12 +52,8 @@ public class GmsDalleClient implements GmsImageGenClient {
         // 3) RestClient
         return RestClient.builder()
                 .requestFactory(rf)
-                .baseUrl("https://gms.ssafy.io")
+                .baseUrl(baseUrl)
                 .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
-                .defaultHeader(HttpHeaders.ACCEPT, "*/*")
-                .defaultHeader(HttpHeaders.ACCEPT_ENCODING, "identity")
-                .defaultHeader(HttpHeaders.USER_AGENT, "curl/8.6.0")
-                .defaultHeader(HttpHeaders.CONNECTION, "close") // (임시) keep-alive 억제
                 .build();
     }
 
@@ -87,7 +81,6 @@ public class GmsDalleClient implements GmsImageGenClient {
                 "model", model,
                 "prompt", prompt.trim(),
                 "size", size,
-                "n", 1,
                 "response_format", "b64_json"
         );
 
@@ -96,7 +89,7 @@ public class GmsDalleClient implements GmsImageGenClient {
 
         try {
             GmsResponse resp = client().post()
-                    .uri("/gmsapi/api.openai.com/v1/images/generations")
+                    .uri("/api.openai.com/v1/images/generations")
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(payload)
                     .retrieve()
