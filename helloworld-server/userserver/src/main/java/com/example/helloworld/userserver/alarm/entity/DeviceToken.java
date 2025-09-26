@@ -26,7 +26,7 @@ public class DeviceToken {
     private Instant platform;
 
     @Column(name="created_at", nullable=false)
-    private Instant createdAt;
+    private String  createdAt;
 
     @Column(name="last_seen_at")
     private Instant lastSeenAt;
