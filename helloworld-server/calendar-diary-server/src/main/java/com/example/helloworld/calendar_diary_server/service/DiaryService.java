@@ -52,8 +52,8 @@ public class DiaryService {
         int startDay = (week - 1) * 7 + 1;
         int endDay   = week * 7;
 
-        LocalDate startDate = lmpDate.plusDays(startDay - 1L);
-        LocalDate endDate   = lmpDate.plusDays(endDay - 1L);
+        LocalDate startDate = lmpDate.plusDays(startDay);
+        LocalDate endDate   = lmpDate.plusDays(endDay);
 
         List<DiaryResponse> items = diaryRepository
                 .findByCoupleIdAndTargetDateBetweenOrderByTargetDateAscDiaryIdAsc(coupleId, startDate, endDate)
