@@ -134,23 +134,34 @@ fun RecordDetailScreen(
     val dailyFetalData = convertToDaily(fetalMovements)
 
     val contractionData = remember(contractions) {
-        ContractionData(
-            totalRecent  = contractions.size,
-            averageInterval = calculateAverageInterval(contractions),
-            timelineData = contractions.mapNotNull { session ->
-                try {
-                    if (session.startTime.isNotBlank() && session.endTime.isNotBlank()) {
+        // 12시간 전 시간 계산
+        val currentTime = System.currentTimeMillis()
+        val twelveHoursAgo = currentTime - (12 * 60 * 60 * 1000)
+
+        // 12시간 내 데이터만 필터링해서 timelineData 생성
+        val filteredTimelineData = contractions.mapNotNull { session ->
+            try {
+                if (session.startTime.isNotBlank() && session.endTime.isNotBlank()) {
+                    val startTime = parseISOToMillis(session.startTime)
+                    // 12시간 내 데이터만 포함
+                    if (startTime >= twelveHoursAgo && startTime <= currentTime) {
                         ContractionEvent(
-                            createAt = parseISOToMillis(session.startTime),
+                            createAt = startTime,
                             stop = parseISOToMillis(session.endTime)
                         )
-                    } else {
-                        null
-                    }
-                } catch (e: Exception) {
-                    null // 파싱 실패 시 해당 세션 제외
+                    } else null
+                } else {
+                    null
                 }
-            },
+            } catch (e: Exception) {
+                null // 파싱 실패 시 해당 세션 제외
+            }
+        }
+
+        ContractionData(
+            totalRecent = filteredTimelineData.size, // 필터링된 데이터 개수
+            averageInterval = 0, // 이 값은 사용하지 않으므로 0
+            timelineData = filteredTimelineData, // 12시간 내 데이터만
             dailyMessage = "진통 간격이 짧아지면 병원에 가보세요"
         )
     }
@@ -622,12 +633,12 @@ fun ContractionTimeline(
         val sortedEvents = events.sortedBy { it.createAt }
         val intervals = mutableListOf<Long>()
         for (i in 1 until sortedEvents.size) {
-            val intervalMs = sortedEvents[i].createAt - sortedEvents[i - 1].stop
-            intervals.add(intervalMs / 1000 / 60) // 분 단위로 변환
+            val intervalMs = sortedEvents[i].createAt - sortedEvents[i-1].stop
+            intervals.add(intervalMs / 1000 / 60)
         }
-        if (intervals.isNotEmpty()) intervals.average().toInt() else averageInterval
+        if (intervals.isNotEmpty()) intervals.average().toInt() else 0
     } else {
-        averageInterval
+        0
     }
     Column(
         modifier = Modifier.fillMaxWidth()
@@ -768,7 +779,7 @@ fun ContractionScatterChart(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             for (i in 0..maxX step 2) {
-                                val timeLabel = if (i == 0) "현재" else "${i}시간전"
+                                val timeLabel = if (i == maxX) "현재" else "${maxX - i}시간전"  // 순서 반대로
                                 Text(
                                     text = timeLabel,
                                     fontSize = 10.sp,
@@ -785,29 +796,43 @@ fun ContractionScatterChart(
                                 .offset(x = 50.dp, y = 20.dp)
                                 .background(Color(0xFFFAFAFA))
                         ) {
-                            // 세로선 (2시간 단위)
-                            for (i in 0..maxX step 2) {
-                                Box(
-                                    modifier = Modifier
-                                        .width(1.dp)
-                                        .fillMaxHeight()
-                                        .background(
-                                            if (i == 0) Color(0xFFFF6B9D).copy(alpha = 0.5f) // 현재 시간선(맨 왼쪽) 강조
-                                            else Color(0xFFE0E0E0)
-                                        )
-                                        .offset(x = (i * chartWidth.value / maxX).dp)
+                            // Canvas를 사용해서 점선 격자 그리기
+                            Canvas(modifier = Modifier.fillMaxSize()) {
+                                val dashEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(
+                                    floatArrayOf(5f, 5f), 0f
                                 )
-                            }
 
-                            // 가로선 (20초 단위)
-                            for (i in 0..((maxY - minY) / 20)) {
-                                Box(
-                                    modifier = Modifier
-                                        .height(1.dp)
-                                        .fillMaxWidth()
-                                        .background(Color(0xFFE0E0E0))
-                                        .offset(y = (i * chartHeight.value / ((maxY - minY) / 20)).dp)
+                                // 세로선 (2시간 단위) - 점선으로 그리기
+                                for (i in 0..maxX-2 step 2) { // 현재시간(맨 오른쪽)은 제외하고
+                                    val xPos = (i * size.width / maxX).toFloat()
+                                    drawLine(
+                                        color = Color(0xFFE0E0E0),
+                                        start = androidx.compose.ui.geometry.Offset(xPos, 0f),
+                                        end = androidx.compose.ui.geometry.Offset(xPos, size.height),
+                                        strokeWidth = 1.dp.toPx(),
+                                        pathEffect = dashEffect
+                                    )
+                                }
+
+                                // 현재 시간선(맨 오른쪽)만 실선으로 강조
+                                drawLine(
+                                    color = Color(0xFFFF6B9D).copy(alpha = 0.5f),
+                                    start = androidx.compose.ui.geometry.Offset(size.width, 0f),  // 맨 오른쪽으로 변경
+                                    end = androidx.compose.ui.geometry.Offset(size.width, size.height),
+                                    strokeWidth = 2.dp.toPx()
                                 )
+
+                                // 가로선은 그대로 유지
+                                for (seconds in 20..maxY step 20) {
+                                    val yPos = ((maxY - seconds).toFloat() / (maxY - minY) * size.height)
+                                    drawLine(
+                                        color = Color(0xFFE0E0E0),
+                                        start = androidx.compose.ui.geometry.Offset(0f, yPos),
+                                        end = androidx.compose.ui.geometry.Offset(size.width, yPos),
+                                        strokeWidth = 1.dp.toPx(),
+                                        pathEffect = dashEffect
+                                    )
+                                }
                             }
 
                             // 점들을 이어주는 선 그리기
@@ -819,9 +844,9 @@ fun ContractionScatterChart(
                                     val path = Path()
 
                                     sortedEvents.forEachIndexed { index, event ->
-                                        // 현재 시간을 기준점(0)으로 하여 과거로 갈수록 오른쪽으로 이동
-                                        val timeFromCurrent = (currentTime - event.createAt).toFloat()
-                                        val xPos = (timeFromCurrent / twelveHoursInMs) * size.width
+                                        // 12시간전을 기준점(0)으로 하여 현재로 갈수록 오른쪽으로 이동
+                                        val timeFromStart = (event.createAt - (currentTime - twelveHoursInMs)).toFloat()
+                                        val xPos = (timeFromStart / twelveHoursInMs) * size.width
 
                                         val durationSeconds = (event.stop - event.createAt) / 1000
                                         val yPos = (maxY - durationSeconds).toFloat() / (maxY - minY) * size.height
@@ -845,17 +870,18 @@ fun ContractionScatterChart(
                             if (filteredEvents.size > 1) {
                                 val sortedEvents = filteredEvents.sortedBy { it.createAt }
                                 val twelveHoursInMs = 12 * 60 * 60 * 1000f
+                                val startTime = currentTime - twelveHoursInMs
 
                                 for (i in 1 until sortedEvents.size) {
                                     val prevEvent = sortedEvents[i - 1]
                                     val currentEvent = sortedEvents[i]
 
-                                    // 현재 시간 기준으로 위치 계산 (과거일수록 오른쪽)
-                                    val prevTimeFromCurrent = (currentTime - prevEvent.createAt).toFloat()
-                                    val currentTimeFromCurrent = (currentTime - currentEvent.createAt).toFloat()
+                                    // 12시간전 기준으로 위치 계산 (현재로 갈수록 오른쪽)
+                                    val prevTimeFromStart = (prevEvent.createAt - startTime).toFloat()
+                                    val currentTimeFromStart = (currentEvent.createAt - startTime).toFloat()
 
-                                    val prevXPos = ((prevTimeFromCurrent / twelveHoursInMs) * chartWidth.value).dp
-                                    val currentXPos = ((currentTimeFromCurrent / twelveHoursInMs) * chartWidth.value).dp
+                                    val prevXPos = ((prevTimeFromStart / twelveHoursInMs) * chartWidth.value).dp
+                                    val currentXPos = ((currentTimeFromStart / twelveHoursInMs) * chartWidth.value).dp
 
                                     val prevDurationSeconds = (prevEvent.stop - prevEvent.createAt) / 1000
                                     val currentDurationSeconds = (currentEvent.stop - currentEvent.createAt) / 1000
@@ -891,11 +917,12 @@ fun ContractionScatterChart(
 
                             // 데이터 점들
                             val twelveHoursInMs = 12 * 60 * 60 * 1000f
+                            val startTime = currentTime - twelveHoursInMs
 
                             filteredEvents.forEachIndexed { index, event ->
-                                // x축: 현재 시간을 기준점으로 한 상대적 위치 (과거일수록 오른쪽)
-                                val timeFromCurrent = (currentTime - event.createAt).toFloat()
-                                val xPosition = ((timeFromCurrent / twelveHoursInMs) * chartWidth.value).dp
+                                // x축: 12시간전을 기준점으로 한 상대적 위치 (현재로 갈수록 오른쪽)
+                                val timeFromStart = (event.createAt - startTime).toFloat()
+                                val xPosition = ((timeFromStart / twelveHoursInMs) * chartWidth.value).dp
 
                                 // y축: 지속시간 계산 (초 단위)
                                 val durationSeconds = (event.stop - event.createAt) / 1000
@@ -903,34 +930,119 @@ fun ContractionScatterChart(
 
                                 // 점이 차트 범위 내에 있는지 확인
                                 if (xPosition >= 0.dp && xPosition <= chartWidth) {
+                                    // 선택된 점의 툴팁 정보 계산
+                                    val hoursAgo = (currentTime - event.createAt) / 1000 / 60 / 60
+                                    val timeText = when {
+                                        hoursAgo < 1 -> "${((currentTime - event.createAt) / 1000 / 60).toInt()}분 전"
+                                        hoursAgo < 24 -> "${hoursAgo.toInt()}시간 전"
+                                        else -> "${(hoursAgo / 24).toInt()}일 전"
+                                    }
+
+                                    val sortedEvents = filteredEvents.sortedBy { it.createAt }
+                                    val currentIndex = sortedEvents.indexOf(event)
+                                    val intervalText = if (currentIndex > 0) {
+                                        val previousEvent = sortedEvents[currentIndex - 1]
+                                        val intervalMinutes = (event.createAt - previousEvent.stop) / 1000 / 60
+                                        "${intervalMinutes}분 간격"
+                                    } else {
+                                        "첫 번째 진통"
+                                    }
+
                                     Box(
                                         modifier = Modifier
-                                            .size(16.dp)
                                             .offset(x = xPosition - 8.dp, y = yPosition - 8.dp)
-                                            .clickable { onPointSelected(event) }
-                                            .clip(CircleShape)
                                     ) {
-                                        // 선택된 점은 더 크게 표시
-                                        val pointSize = if (selectedPoint == event) 10.dp else 8.dp
-                                        val pointColor = if (selectedPoint == event) Color(0xFFFF1744) else Color(0xFFFF6B9D)
-
+                                        // 점 클릭 영역
                                         Box(
                                             modifier = Modifier
-                                                .size(pointSize)
-                                                .align(Alignment.Center)
+                                                .size(16.dp)
+                                                .clickable { onPointSelected(if (selectedPoint == event) null else event) }
                                                 .clip(CircleShape)
-                                                .background(pointColor)
-                                        )
+                                        ) {
+                                            // 선택된 점은 더 크게 표시
+                                            val pointSize = if (selectedPoint == event) 10.dp else 8.dp
+                                            val pointColor = if (selectedPoint == event) Color(0xFFFF1744) else Color(0xFFFF6B9D)
 
-                                        // 선택된 점 주변에 효과 추가
-                                        if (selectedPoint == event) {
                                             Box(
                                                 modifier = Modifier
-                                                    .size(16.dp)
+                                                    .size(pointSize)
                                                     .align(Alignment.Center)
                                                     .clip(CircleShape)
-                                                    .background(Color(0xFFFF1744).copy(alpha = 0.2f))
+                                                    .background(pointColor)
                                             )
+
+                                            // 선택된 점 주변에 효과 추가
+                                            if (selectedPoint == event) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(16.dp)
+                                                        .align(Alignment.Center)
+                                                        .clip(CircleShape)
+                                                        .background(Color(0xFFFF1744).copy(alpha = 0.2f))
+                                                )
+                                            }
+                                        }
+
+                                        // 선택된 점 위에 작은 툴팁 표시
+                                        if (selectedPoint == event) {
+                                            Card(
+                                                modifier = Modifier
+                                                    .offset(x = -60.dp, y = -110.dp) // 점 위쪽에 배치
+                                                    .width(120.dp),
+                                                colors = CardDefaults.cardColors(containerColor = Color.White),
+                                                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+                                                shape = RoundedCornerShape(8.dp)
+                                            ) {
+                                                Column(
+                                                    modifier = Modifier.padding(8.dp),
+                                                    horizontalAlignment = Alignment.CenterHorizontally
+                                                ) {
+                                                    Text(
+                                                        text = "진통 정보",
+                                                        fontSize = 12.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MainColor
+                                                    )
+                                                    Spacer(modifier = Modifier.height(4.dp))
+
+                                                    Text(
+                                                        text = timeText,
+                                                        fontSize = 10.sp,
+                                                        color = Color.Black,
+                                                        fontWeight = FontWeight.Medium
+                                                    )
+
+                                                    Text(
+                                                        text = "${durationSeconds}초 지속",
+                                                        fontSize = 10.sp,
+                                                        color = Color.Gray
+                                                    )
+
+                                                    Text(
+                                                        text = intervalText,
+                                                        fontSize = 10.sp,
+                                                        color = Color.Gray
+                                                    )
+                                                }
+                                            }
+
+                                            // 툴팁 꼬리 (작은 삼각형)
+                                            Canvas(
+                                                modifier = Modifier
+                                                    .offset(x = -8.dp, y = -20.dp)
+                                                    .size(16.dp, 8.dp)
+                                            ) {
+                                                val trianglePath = Path().apply {
+                                                    moveTo(size.width / 2, size.height)
+                                                    lineTo(size.width / 2 - 8.dp.toPx(), 0f)
+                                                    lineTo(size.width / 2 + 8.dp.toPx(), 0f)
+                                                    close()
+                                                }
+                                                drawPath(
+                                                    path = trianglePath,
+                                                    color = Color.White
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -965,102 +1077,6 @@ fun ContractionScatterChart(
             }
         }
 
-        // 선택된 점의 정보 표시 (차트 밖으로 이동)
-        selectedPoint?.let { point ->
-            val durationSeconds = (point.stop - point.createAt) / 1000
-            val sortedEvents = filteredEvents.sortedBy { it.createAt }
-            val currentIndex = sortedEvents.indexOf(point)
-
-            // 이전 점과의 간격 계산
-            val intervalText = if (currentIndex > 0) {
-                val previousEvent = sortedEvents[currentIndex - 1]
-                val intervalMinutes = (point.createAt - previousEvent.stop) / 1000 / 60
-                "${intervalMinutes}분 간격"
-            } else {
-                "첫 번째 진통"
-            }
-
-            // 발생 시간 표시 (몇 시간 전인지)
-            val hoursAgo = (currentTime - point.createAt) / 1000 / 60 / 60
-            val timeText = when {
-                hoursAgo < 1 -> "${((currentTime - point.createAt) / 1000 / 60).toInt()}분 전"
-                hoursAgo < 24 -> "${hoursAgo.toInt()}시간 전"
-                else -> "${(hoursAgo / 24).toInt()}일 전"
-            }
-
-            // 선택된 점 정보를 차트 아래에 표시
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp)
-                ) {
-                    Text(
-                        text = "진통 정보",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MainColor
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = "발생 시간",
-                            fontSize = 12.sp,
-                            color = Color.Gray
-                        )
-                        Text(
-                            text = timeText,
-                            fontSize = 12.sp,
-                            color = Color.Black,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = "지속 시간",
-                            fontSize = 12.sp,
-                            color = Color.Gray
-                        )
-                        Text(
-                            text = "${durationSeconds}초",
-                            fontSize = 12.sp,
-                            color = Color.Black,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = "간격",
-                            fontSize = 12.sp,
-                            color = Color.Gray
-                        )
-                        Text(
-                            text = intervalText,
-                            fontSize = 12.sp,
-                            color = Color.Black,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
-            }
-        }
-
         // 스크롤 힌트 텍스트 (데이터가 있을 때만 표시)
         if (filteredEvents.isNotEmpty()) {
             Text(
@@ -1075,286 +1091,6 @@ fun ContractionScatterChart(
         }
     }
 }
-
-//@Composable
-//fun ContractionScatterChart(
-//    events: List<ContractionEvent>,
-//    selectedPoint: ContractionEvent?,
-//    onPointSelected: (ContractionEvent?) -> Unit
-//) {
-//    val maxX = 12 // x축 최대값 (12시간)
-//    val minY = 0 // y축 최소값 (0초)
-//    val maxY = 120 // y축 최대값 (120초 = 2분)
-//    val chartWidth = 320.dp // 차트 폭 약간 증가
-//    val chartHeight = 240.dp // 차트 높이 약간 증가
-//
-//    Box(
-//        modifier = Modifier
-//            .fillMaxWidth()
-//            .height(chartHeight + 80.dp)
-//            .background(Color.White),
-//        contentAlignment = Alignment.Center
-//    ) {
-//        Box(
-//            modifier = Modifier.size(chartWidth + 80.dp, chartHeight + 80.dp)
-//        ) {
-//            // y축 눈금 (세로) - 0초부터 120초까지 20초 단위
-//            Column(
-//                modifier = Modifier
-//                    .height(chartHeight)
-//                    .offset(x = 50.dp, y = 20.dp),
-//                verticalArrangement = Arrangement.SpaceBetween
-//            ) {
-//                for (i in maxY downTo minY step 20) {
-//                    Text(
-//                        text = "${i}초",
-//                        fontSize = 11.sp,
-//                        color = Color.Black,
-//                        fontWeight = FontWeight.Medium,
-//                        textAlign = TextAlign.End,
-//                        maxLines = 1,
-//                        modifier = Modifier
-//                            .offset(x = (-40).dp)
-//                            .width(35.dp)
-//                    )
-//                }
-//            }
-//
-//            // x축 눈금 (가로) - 12시간 전부터 현재까지 2시간 단위로 표시
-//            Row(
-//                modifier = Modifier
-//                    .width(chartWidth)
-//                    .align(Alignment.BottomStart)
-//                    .offset(x = 50.dp, y = (-20).dp),
-//                horizontalArrangement = Arrangement.SpaceBetween
-//            ) {
-//                for (i in 0..maxX step 2) {
-//                    Text(
-//                        text = "${maxX - i}시간전", // 12시간전, 10시간전, ... 현재
-//                        fontSize = 10.sp,
-//                        color = Color.Black,
-//                        fontWeight = FontWeight.Medium
-//                    )
-//                }
-//            }
-//
-//            // 격자 영역
-//            Box(
-//                modifier = Modifier
-//                    .size(chartWidth, chartHeight)
-//                    .offset(x = 35.dp, y = 10.dp)
-//                    .background(Color(0xFFFAFAFA))
-//            ) {
-//                // 세로선 (10분 단위)
-//                for (i in 0..maxX step 10) {
-//                    Box(
-//                        modifier = Modifier
-//                            .width(1.dp)
-//                            .fillMaxHeight()
-//                            .background(Color(0xFFE0E0E0))
-//                            .offset(x = (i * chartWidth.value / maxX).dp)
-//                    )
-//                }
-//
-//                // 가로선 (20초 단위)
-//                for (i in 0..((maxY - minY) / 20)) {
-//                    Box(
-//                        modifier = Modifier
-//                            .height(1.dp)
-//                            .fillMaxWidth()
-//                            .background(Color(0xFFE0E0E0))
-//                            .offset(y = (i * chartHeight.value / ((maxY - minY) / 20)).dp)
-//                    )
-//                }
-//
-//                // 점들을 이어주는 선 그리기
-//                if (events.size > 1) {
-//                    val sortedEvents = events.sortedBy { it.createAt }
-//                    val startTime = events.minOf { it.createAt }
-//
-//                    Canvas(modifier = Modifier.fillMaxSize()) {
-//                        val path = Path()
-//
-//                        sortedEvents.forEachIndexed { index, event ->
-//                            val timeFromStart = (event.createAt - startTime) / 1000 / 60
-//                            val xPos = timeFromStart.toFloat() / maxX * size.width
-//                            val durationSeconds = (event.stop - event.createAt) / 1000
-//                            val yPos =
-//                                (maxY - durationSeconds).toFloat() / (maxY - minY) * size.height
-//
-//                            if (index == 0) {
-//                                path.moveTo(xPos, yPos)
-//                            } else {
-//                                path.lineTo(xPos, yPos)
-//                            }
-//                        }
-//
-//                        drawPath(
-//                            path = path,
-//                            color = Color(0xFFFF6B9D),
-//                            style = Stroke(width = 2.dp.toPx())
-//                        )
-//                    }
-//                }
-//
-//                // 선 위에 진통 간격 텍스트 표시
-//                if (events.size > 1) {
-//                    val sortedEvents = events.sortedBy { it.createAt }
-//                    val startTime = events.minOf { it.createAt }
-//
-//                    for (i in 1 until sortedEvents.size) {
-//                        val prevEvent = sortedEvents[i - 1]
-//                        val currentEvent = sortedEvents[i]
-//
-//                        // 이전 점과 현재 점의 위치 계산
-//                        val prevTimeFromStart = (prevEvent.createAt - startTime) / 1000 / 60
-//                        val prevXPos = (prevTimeFromStart.toFloat() / maxX * chartWidth.value).dp
-//                        val prevDurationSeconds = (prevEvent.stop - prevEvent.createAt) / 1000
-//                        val prevYPos =
-//                            ((maxY - prevDurationSeconds).toFloat() / (maxY - minY) * chartHeight.value).dp
-//
-//                        val currentTimeFromStart = (currentEvent.createAt - startTime) / 1000 / 60
-//                        val currentXPos =
-//                            (currentTimeFromStart.toFloat() / maxX * chartWidth.value).dp
-//                        val currentDurationSeconds =
-//                            (currentEvent.stop - currentEvent.createAt) / 1000
-//                        val currentYPos =
-//                            ((maxY - currentDurationSeconds).toFloat() / (maxY - minY) * chartHeight.value).dp
-//
-//                        // 선의 중점에 간격 텍스트 표시
-//                        val midX = (prevXPos + currentXPos) / 2
-//                        val midY = (prevYPos + currentYPos) / 2
-//
-//                        // 진통 간격 계산 (분 단위)
-//                        val intervalMinutes = (currentEvent.createAt - prevEvent.stop) / 1000 / 60
-//
-//                        Box(
-//                            modifier = Modifier
-//                                .offset(x = midX, y = midY - 10.dp)
-//                                .background(
-//                                    MainColor.copy(alpha = 0.2f),
-//                                    RoundedCornerShape(4.dp)
-//                                )
-//                                .padding(horizontal = 4.dp, vertical = 2.dp)
-//                        ) {
-//                            Text(
-//                                text = "${intervalMinutes}분",
-//                                fontSize = 10.sp,
-//                                fontWeight = FontWeight.Medium,
-//                                color = Color.Black
-//                            )
-//                        }
-//                    }
-//                }
-//
-//                // 데이터 점들
-//                events.forEachIndexed { index, event ->
-//                    // x축: 한시간 동안의 절대 시간 위치 계산
-//                    val startTime = events.minOf { it.createAt }
-//                    val timeFromStart = (event.createAt - startTime) / 1000 / 60 // 분 단위
-//                    val xPosition = (timeFromStart.toFloat() / maxX * chartWidth.value).dp
-//
-//                    // y축: 지속시간 계산 (초 단위)
-//                    val durationSeconds = (event.stop - event.createAt) / 1000
-//                    val yPosition =
-//                        ((maxY - durationSeconds).toFloat() / (maxY - minY) * chartHeight.value).dp
-//
-//                    Box(
-//                        modifier = Modifier
-//                            .size(12.dp) // 클릭 영역을 위해 크기 증가
-//                            .offset(x = xPosition - 6.dp, y = yPosition - 6.dp)
-//                            .clickable { onPointSelected(event) }
-//                            .clip(CircleShape)
-//                    ) {
-//                        Box(
-//                            modifier = Modifier
-//                                .size(6.dp)
-//                                .align(Alignment.Center)
-//                                .clip(CircleShape)
-//                                .background(
-//                                    if (selectedPoint == event) Color(0xFFFF1744)
-//                                    else Color(0xFFFF6B9D)
-//                                )
-//                        )
-//                    }
-//                }
-//            }
-//
-//            // 지속시간 라벨 - y축 밑에 세로로 배치
-//            Text(
-//                text = "지속 시간 (초)",
-//                fontSize = 10.sp,
-//                color = Color(0xFFFF1744),
-//                fontWeight = FontWeight.Bold,
-//                modifier = Modifier
-//                    .align(Alignment.CenterStart)
-//                    .offset(x = -35.dp)
-//                    .offset(y = 50.dp)
-//                    .rotate(-90f)
-//            )
-//
-//            // 간격시간 라벨 - x축 밑에 배치
-//            Text(
-//                text = "간격 시간 (분)",
-//                fontSize = 10.sp,
-//                color = Color(0xFFFF1744),
-//                fontWeight = FontWeight.Bold,
-//                modifier = Modifier
-//                    .align(Alignment.BottomCenter)
-//                    .offset(y = 0.dp)
-//                    .offset(x = -105.dp)
-//            )
-//        }
-//
-//        // 선택된 점의 정보 표시
-//        selectedPoint?.let { point ->
-//            val durationSeconds = (point.stop - point.createAt) / 1000
-//            val sortedEvents = events.sortedBy { it.createAt }
-//            val currentIndex = sortedEvents.indexOf(point)
-//
-//            // 이전 점과의 간격 계산
-//            val intervalText = if (currentIndex > 0) {
-//                val previousEvent = sortedEvents[currentIndex - 1]
-//                val intervalMinutes = (point.createAt - previousEvent.stop) / 1000 / 60
-//                "${intervalMinutes}분 간격"
-//            } else {
-//                "첫 번째 진통"
-//            }
-//
-//            Card(
-//                modifier = Modifier
-//                    .align(Alignment.TopStart)
-//                    .offset(x = 20.dp, y = 10.dp),
-//                colors = CardDefaults.cardColors(containerColor = Color.White),
-//                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-//                shape = RoundedCornerShape(8.dp)
-//            ) {
-//                Column(
-//                    modifier = Modifier.padding(8.dp),
-//                    horizontalAlignment = Alignment.Start
-//                ) {
-//                    Text(
-//                        text = "진통 정보",
-//                        fontSize = 11.sp,
-//                        fontWeight = FontWeight.Bold,
-//                        color = Color.Black
-//                    )
-//                    Spacer(modifier = Modifier.height(3.dp))
-//                    Text(
-//                        text = "지속시간: ${durationSeconds}초",
-//                        fontSize = 10.sp,
-//                        color = Color.Black
-//                    )
-//                    Text(
-//                        text = intervalText,
-//                        fontSize = 10.sp,
-//                        color = Color.Gray
-//                    )
-//                }
-//            }
-//        }
-//    }
-//}
 
 @Preview(showBackground = true)
 @Composable
