@@ -147,6 +147,56 @@ public class FcmService {
             return new SendResult(false, null, "EXCEPTION");
         }
     }
+    @Async
+    public void sendEmergencyNotification(Long userId, Integer hr) {
+        sendEmergencyTriple(userId, hr != null ? hr : 0);
+    }
+
+    @Async
+    public void sendEmergencyTriple(Long measuredUserId, int hr) {
+        try {
+            // 1) 본인 ANDROID / WATCH 최신 토큰
+            String androidToken = null, watchToken = null;
+            var twoResp = userClient.latestTwo(measuredUserId);
+            if (twoResp != null && twoResp.getStatusCode().is2xxSuccessful() && twoResp.getBody() != null) {
+                androidToken = twoResp.getBody().androidToken();
+                watchToken   = twoResp.getBody().watchToken();
+            } else {
+                log.warn("[FCM] latestTwo empty user={}", measuredUserId);
+            }
+
+            // 2) 파트너 ANDROID 최신 토큰
+            Long partnerId = null;
+            String partnerAndroidToken = null;
+            var pidResp = userClient.partnerId(measuredUserId);
+            if (pidResp != null && pidResp.getStatusCode().is2xxSuccessful() && pidResp.getBody() != null) {
+                partnerId = pidResp.getBody().partnerId();
+                var pResp = userClient.latestByPlatform(partnerId, "ANDROID");
+                if (pResp != null && pResp.getStatusCode().is2xxSuccessful() && pResp.getBody() != null) {
+                    partnerAndroidToken = pResp.getBody().token();
+                } else {
+                    log.warn("[FCM] partner ANDROID token empty partnerId={}", partnerId);
+                }
+            } else {
+                log.warn("[FCM] partnerId not found for user={}", measuredUserId);
+            }
+
+            // 3) 공통 데이터
+            Map<String,String> data = Map.of(
+                    "type","EMERGENCY",
+                    "title","심박수 이상 감지",
+                    "body", String.format("현재 심박수가 %dBPM을 초과했습니다. 상태를 확인해주세요.", hr)
+            );
+
+            // 4) 3건 발송
+            sendIfPresent(androidToken,        data, measuredUserId, "ANDROID");
+            sendIfPresent(watchToken,          data, measuredUserId, "WATCH");
+            sendIfPresent(partnerAndroidToken, data, partnerId,      "PARTNER_ANDROID");
+
+        } catch (Exception e) {
+            log.error("[FCM] sendEmergencyTriple error user={}", measuredUserId, e);
+        }
+    }
 
     private static String firstNonNull(String... s){ for (var x: s) if (x!=null && !x.isBlank()) return x; return null; }
     private static String reasonIfEmpty(String... tokens){ for (var t: tokens) if (t!=null && !t.isBlank()) return null; return "NO_TOKEN"; }

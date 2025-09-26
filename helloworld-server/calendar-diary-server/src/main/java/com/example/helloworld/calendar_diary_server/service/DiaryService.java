@@ -69,7 +69,7 @@ public class DiaryService {
         validateDay(day);
         if (lmpDate == null) throw new IllegalArgumentException("lmpDate is required");
 
-        LocalDate date = lmpDate.plusDays(day - 1L);
+        LocalDate date = lmpDate.plusDays(day);
         int week = ((day - 1) / 7) + 1;
 
         List<DiaryResponse> items = diaryRepository
