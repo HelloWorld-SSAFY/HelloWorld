@@ -15,6 +15,7 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClientResponseException;
 
+import java.net.http.HttpClient;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -34,15 +35,19 @@ public class GmsDalleClient implements GmsImageGenClient {
 
 
     private RestClient client() {
-        var reqFactory = new BufferingClientHttpRequestFactory(new JdkClientHttpRequestFactory());
+        var jdk = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1) // ★ HTTP/1.1 강제
+                .build();
+
+        var rf = new BufferingClientHttpRequestFactory(new JdkClientHttpRequestFactory(jdk));
         return RestClient.builder()
-                .requestFactory(reqFactory)                 // 요청 바디 재읽기 가능
-                .requestInterceptor(new HttpWireLogging())  // ← 와이어 로그
+                .requestFactory(rf)
                 .baseUrl("https://gms.ssafy.io")
-                .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
-                .defaultHeader(HttpHeaders.ACCEPT, "*/*")
-                .defaultHeader(HttpHeaders.ACCEPT_ENCODING, "identity")
-                .defaultHeader(HttpHeaders.USER_AGENT, "curl/8.6.0") // (임시) curl과 동일
+                .defaultHeader("Authorization", "Bearer " + apiKey)
+                .defaultHeader("Accept", "*/*")
+                .defaultHeader("Accept-Encoding", "identity")
+                .defaultHeader("Connection", "close") // (임시) 커넥션 재사용 억제
+                .defaultHeader("User-Agent", "curl/8.6.0")
                 .build();
     }
 
