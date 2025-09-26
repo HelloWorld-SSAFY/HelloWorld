@@ -98,7 +98,7 @@ class WearMainViewModel @Inject constructor(
         return when {
             !hasToken -> "토큰 없음"
             !isValid -> "토큰 만료됨"
-            accessToken != null -> "토큰 유효 (${accessToken.take(10)}...)"
+            accessToken != null -> "토큰 유효 $accessToken"
             else -> "토큰 상태 불명"
         }
     }

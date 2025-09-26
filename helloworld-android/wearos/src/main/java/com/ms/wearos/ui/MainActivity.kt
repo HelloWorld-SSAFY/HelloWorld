@@ -1,9 +1,11 @@
 package com.ms.wearos.ui
 
 import android.Manifest
+import android.app.ActivityManager
 import android.content.*
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.os.PowerManager
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -74,7 +76,10 @@ class MainActivity : ComponentActivity() {
     // 서비스로부터 심박수 데이터를 받기 위한 브로드캐스트 리시버
     private val healthDataReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            when (intent?.action) {
+            val action = intent?.action
+            Log.d(TAG, "브로드캐스트 수신: $action")
+
+            when (action) {
                 HealthDataService.ACTION_HEART_RATE_UPDATE -> {
                     val heartRate = intent.getDoubleExtra("heart_rate", 0.0)
                     val timestamp = intent.getStringExtra("timestamp") ?: ""
@@ -83,6 +88,7 @@ class MainActivity : ComponentActivity() {
                     lastUpdateTime.value = timestamp
 
                     Log.d(TAG, "심박수: $heartRate BPM")
+                    logCurrentStates("심박수 업데이트")
                 }
 
                 HealthDataService.ACTION_STRESS_UPDATE -> {
@@ -95,20 +101,26 @@ class MainActivity : ComponentActivity() {
                     currentStressLevel.value = stressLevel
                     stressAdvice.value = advice
 
-                    Log.d(TAG, "스트레스 지수: $stressIndex ($stressLevel)")
-                    Log.d(TAG, "스트레스 advice: $advice")
+                    Log.d(TAG, "스트레스 업데이트: $stressIndex ($stressLevel)")
                 }
 
                 HealthDataService.ACTION_SERVICE_STATUS -> {
                     val isRunning = intent.getBooleanExtra("is_running", false)
                     val status = intent.getStringExtra("status") ?: ""
+                    val timestamp = intent.getLongExtra("timestamp", 0L)
+
+
+                    Log.d(TAG, "서비스 상태 수신: isRunning=$isRunning, status=$status, timestamp=$timestamp")
+
+                    val previousToggleState = isToggleEnabled.value
 
                     isToggleEnabled.value = isRunning
                     if (status.isNotEmpty()) {
                         heartStatus.value = status
                     }
 
-                    Log.d(TAG, "서비스 상태 업데이트: $isRunning")
+                    Log.d(TAG, "UI 상태 변경: $previousToggleState -> $isRunning")
+                    logCurrentStates("서비스 상태 업데이트")
                 }
             }
         }
@@ -125,33 +137,39 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-//        lifecycleScope.launch {
-//            delay(1000)
-//            val viewModel: WearMainViewModel = ViewModelProvider(this@MainActivity)[WearMainViewModel::class.java]
-//            // 토큰 상태 확인 및 필요시 핸드폰에 토큰 요청
-//            viewModel.initializeTokenState(this@MainActivity)
-//            // 토큰 상태 확인
-//            val hasToken = viewModel.uiState.value.isAuthenticated
-//            if (!hasToken) {
-//                Log.d(TAG, "토큰 없음 - 폰에 토큰 요청")
-//                viewModel.requestTokenFromPhone(this@MainActivity) // 추가 필요
-//            }
-//
-//            logTokenStatus(viewModel)
-//        }
+    private fun logCurrentStates(context: String) {
+        Log.d(TAG, "=== 상태 로깅 ($context) ===")
+        Log.d(TAG, "UI 토글 상태: ${isToggleEnabled.value}")
+        Log.d(TAG, "심박수 상태: ${heartStatus.value}")
+        Log.d(TAG, "현재 심박수: ${currentHeartRate.value}")
 
+        val savedToggle = sharedPreferences.getBoolean("heart_rate_toggle", false)
+        val serviceWasRunning = sharedPreferences.getBoolean("service_was_running", false)
+        val stateSaved = sharedPreferences.getBoolean("service_state_saved", false)
+
+        Log.d(TAG, "저장된 토글: $savedToggle")
+        Log.d(TAG, "서비스 실행 기록: $serviceWasRunning")
+        Log.d(TAG, "상태 저장 플래그: $stateSaved")
+        Log.d(TAG, "=============================")
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
 
         sharedPreferences = getSharedPreferences("heart_rate_prefs", Context.MODE_PRIVATE)
-        isToggleEnabled.value = sharedPreferences.getBoolean("heart_rate_toggle", false)
+
+        registerBroadcastReceiver()
+
+        checkActualServiceStatus()
 
         requestHealthPermissions()
-        registerBroadcastReceiver()
 
         // 토큰 초기화 - 앱 시작 시 자동으로 토큰 요청
         initializeTokens()
+
+        Log.d(TAG, "onCreate 시작")
+        logCurrentStates("onCreate")
 
 
         setContent {
@@ -160,7 +178,7 @@ class MainActivity : ComponentActivity() {
 
         // 토큰 상태 로깅 시작
         lifecycleScope.launch {
-            delay(1000) // 잠시 대기 후 시작
+            delay(1000)
             val viewModel: WearMainViewModel =
                 ViewModelProvider(this@MainActivity)[WearMainViewModel::class.java]
             logTokenStatus(viewModel)
@@ -174,7 +192,8 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             delay(1000) // 앱 초기화 완료 후 실행
 
-            val viewModel: WearMainViewModel = ViewModelProvider(this@MainActivity)[WearMainViewModel::class.java]
+            val viewModel: WearMainViewModel =
+                ViewModelProvider(this@MainActivity)[WearMainViewModel::class.java]
 
             // 토큰 상태 초기화 및 필요시 핸드폰에 토큰 요청
             viewModel.initializeTokenState(this@MainActivity)
@@ -202,11 +221,227 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        HealthServiceHelper.requestServiceStatus(this)
+        // 1초 지연 후 상태 확인 (브로드캐스트 리시버 등록 완료 대기)
+        lifecycleScope.launch {
+            delay(1000)
+            recheckServiceStatus()
+        }
+    }
+
+    // 새로운 함수: 서비스 상태 재확인
+    private fun recheckServiceStatus() {
+        val savedToggleState = sharedPreferences.getBoolean("heart_rate_toggle", false)
+        val currentUiState = isToggleEnabled.value
+
+        Log.d(TAG, "상태 재확인 - 저장된 상태: $savedToggleState, UI 상태: $currentUiState")
+
+        if (savedToggleState != currentUiState) {
+            Log.w(TAG, "상태 불일치 감지 - 재동기화 필요")
+            checkServiceWithPing()
+        } else if (savedToggleState) {
+            // 저장된 상태가 활성화인 경우 서비스 핑으로 재확인
+            Log.d(TAG, "저장된 상태가 활성화 - 서비스 실제 상태 확인")
+            HealthServiceHelper.requestServiceStatus(this)
+        }
+    }
+
+    private fun checkActualServiceStatus() {
+        val savedToggleState = sharedPreferences.getBoolean("heart_rate_toggle", false)
+        val serviceWasRunning = sharedPreferences.getBoolean("service_was_running", false)
+        val appDestroyedAt = sharedPreferences.getLong("app_destroyed_at", 0L)
+        val currentTime = System.currentTimeMillis()
+
+        Log.d(TAG, "서비스 상태 확인 - 저장된 토글: $savedToggleState, 서비스 실행 기록: $serviceWasRunning")
+
+        // 앱이 최근에 종료되었는지 확인 (예: 30초 이내)
+        val wasRecentlyDestroyed = appDestroyedAt > 0 && (currentTime - appDestroyedAt) < 30000
+
+        if (wasRecentlyDestroyed) {
+            Log.d(TAG, "앱이 최근에 종료되어 서비스도 중지되었을 가능성이 높음")
+            // 프로세스 종료로 인한 재시작이므로 상태 초기화
+            resetToStoppedState()
+            return
+        }
+
+
+        // 앱 프로세스가 죽었다가 살아났을 때를 고려
+        if (savedToggleState || serviceWasRunning) {
+            Log.d(TAG, "이전에 서비스가 실행 중이었음 - 현재 상태 확인")
+
+            // UI를 일단 로딩 상태로 설정
+            isToggleEnabled.value = savedToggleState
+            heartStatus.value = if (savedToggleState) "서비스 상태 확인 중..." else "측정 중지됨"
+
+            // 실제 서비스 상태 확인
+            if (savedToggleState) {
+                // 1초 후 핑 확인 (브로드캐스트 리시버 등록 완료 대기)
+                lifecycleScope.launch {
+                    delay(1000)
+                    checkServiceWithPing()
+                }
+            } else {
+                resetHealthData()
+            }
+        } else {
+            Log.d(TAG, "이전에 서비스가 중지 상태였음")
+            isToggleEnabled.value = false
+            heartStatus.value = "측정 중지됨"
+            resetHealthData()
+            resetToStoppedState()
+        }
+    }
+
+    // 새로운 함수 추가
+    private fun resetToStoppedState() {
+        Log.d(TAG, "상태를 중지 상태로 초기화")
+        isToggleEnabled.value = false
+        heartStatus.value = "측정 중지됨"
+        resetHealthData()
+
+        // SharedPreferences도 초기화
+        sharedPreferences.edit()
+            .putBoolean("heart_rate_toggle", false)
+            .putBoolean("service_was_running", false)
+            .remove("app_destroyed_at")
+            .apply()
+    }
+
+    private fun checkServiceWithPing() {
+        var responseReceived = false
+        var tempReceiver: BroadcastReceiver? = null
+
+        Log.d(TAG, "서비스 핑 시작")
+
+        tempReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                if (intent?.action == HealthDataService.ACTION_SERVICE_STATUS) {
+                    responseReceived = true
+                    val isRunning = intent.getBooleanExtra("is_running", false)
+
+                    Log.d(TAG, "서비스 핑 응답: isRunning=$isRunning")
+
+                    lifecycleScope.launch {
+                        if (isRunning) {
+                            Log.d(TAG, "서비스 실행 중 - UI 상태 동기화")
+                            isToggleEnabled.value = true
+                            heartStatus.value = "측정 중..."
+
+                            // SharedPreferences도 업데이트
+                            sharedPreferences.edit()
+                                .putBoolean("heart_rate_toggle", true)
+                                .apply()
+                        } else {
+                            Log.d(TAG, "서비스 중지됨 - UI 상태 동기화")
+                            isToggleEnabled.value = false
+                            heartStatus.value = "측정 중지됨"
+                            resetHealthData()
+
+                            // SharedPreferences 업데이트
+                            sharedPreferences.edit()
+                                .putBoolean("heart_rate_toggle", false)
+                                .putBoolean("service_was_running", false)
+                                .apply()
+                        }
+
+                        // 임시 리시버 해제
+                        tempReceiver?.let { receiver ->
+                            try {
+                                unregisterReceiver(receiver)
+                                Log.d(TAG, "임시 리시버 해제 완료")
+                            } catch (e: Exception) {
+                                Log.w(TAG, "임시 리시버 해제 실패", e)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        try {
+            val tempFilter = IntentFilter(HealthDataService.ACTION_SERVICE_STATUS)
+            ContextCompat.registerReceiver(
+                this,
+                tempReceiver,
+                tempFilter,
+                ContextCompat.RECEIVER_NOT_EXPORTED
+            )
+
+            // 서비스에 상태 요청
+            HealthServiceHelper.requestServiceStatus(this)
+            Log.d(TAG, "서비스 상태 요청 전송")
+
+            // 3초 후에도 응답이 없으면 서비스 중지된 것으로 판단
+            lifecycleScope.launch {
+                delay(3000) // 2초에서 3초로 증가
+
+                if (!responseReceived) {
+                    Log.w(TAG, "서비스 핑 타임아웃 - 서비스 중지된 것으로 판단")
+
+                    isToggleEnabled.value = false
+                    heartStatus.value = "측정 중지됨"
+                    resetHealthData()
+
+                    sharedPreferences.edit()
+                        .putBoolean("heart_rate_toggle", false)
+                        .putBoolean("service_was_running", false)
+                        .apply()
+
+                    tempReceiver?.let { receiver ->
+                        try {
+                            unregisterReceiver(receiver)
+                            Log.d(TAG, "임시 리시버 해제 완료 (타임아웃)")
+                        } catch (e: Exception) {
+                            Log.w(TAG, "임시 리시버 해제 실패 (타임아웃)", e)
+                        }
+                    }
+                }
+            }
+
+        } catch (e: Exception) {
+            Log.e(TAG, "서비스 핑 실행 실패", e)
+            // 실패 시 안전하게 UI 상태 초기화
+            isToggleEnabled.value = false
+            heartStatus.value = "서비스 상태 확인 실패"
+            resetHealthData()
+        }
+    }
+
+    // 건강 데이터 초기화 함수 추가
+    private fun resetHealthData() {
+        currentHeartRate.value = 0.0
+        currentStressIndex.value = 0
+        currentStressLevel.value = "측정 대기"
+        stressAdvice.value = ""
+        lastUpdateTime.value = ""
+    }
+
+    // 새 함수 추가: 서비스 실행 상태 확인
+    private fun isServiceRunning(serviceClass: Class<*>): Boolean {
+        val manager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        @Suppress("DEPRECATION")
+        for (service in manager.getRunningServices(Integer.MAX_VALUE)) {
+            if (serviceClass.name == service.service.className) {
+                return true
+            }
+        }
+        return false
     }
 
     override fun onDestroy() {
+        Log.d(TAG, "onDestroy 호출")
+        logCurrentStates("onDestroy")
+
+        // 현재 상태를 한 번 더 저장
+        sharedPreferences.edit()
+            .putBoolean("heart_rate_toggle", isToggleEnabled.value)
+            .putBoolean("service_was_running", isToggleEnabled.value)
+            .putLong("app_destroyed_at", System.currentTimeMillis())
+            .apply()
+
+        Log.d(TAG, "앱 종료 시 상태 저장 완료")
+
         super.onDestroy()
+
         heartRateJob?.cancel()
         try {
             unregisterReceiver(healthDataReceiver)
@@ -221,7 +456,13 @@ class MainActivity : ComponentActivity() {
             addAction(HealthDataService.ACTION_STRESS_UPDATE)
             addAction(HealthDataService.ACTION_SERVICE_STATUS)
         }
-        registerReceiver(healthDataReceiver, filter, RECEIVER_NOT_EXPORTED)
+        // 항상 NOT_EXPORTED (앱 내부 전용 브로드캐스트)
+        ContextCompat.registerReceiver(
+            this,
+            healthDataReceiver,
+            filter,
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
     }
 
     private fun checkAndRestoreToggleState() {
@@ -245,19 +486,22 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun requestHealthPermissions() {
-        val permissions = arrayOf(
-            Manifest.permission.BODY_SENSORS,
-            Manifest.permission.WAKE_LOCK,
-            Manifest.permission.FOREGROUND_SERVICE,
-            Manifest.permission.FOREGROUND_SERVICE_HEALTH
-        )
+        val toRequest = mutableListOf<String>()
 
-        val permissionsToRequest = permissions.filter {
-            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BODY_SENSORS)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            toRequest += Manifest.permission.BODY_SENSORS
+        }
+        if (android.os.Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            toRequest += Manifest.permission.POST_NOTIFICATIONS
         }
 
-        if (permissionsToRequest.isNotEmpty()) {
-            requestPermissionLauncher.launch(permissionsToRequest.toTypedArray())
+        if (toRequest.isNotEmpty()) {
+            requestPermissionLauncher.launch(toRequest.toTypedArray())
         } else {
             checkAndRestoreToggleState()
         }
@@ -318,24 +562,24 @@ class MainActivity : ComponentActivity() {
                 val uiState = viewModel.uiState.value
 
                 if (uiState.isAuthenticated) {
-                        val heartRate = currentHeartRate.value
-                        val stressIndex = currentStressIndex.value
+                    val heartRate = currentHeartRate.value
+                    val stressIndex = currentStressIndex.value
 
-                        // 현재 시간을 ISO 8601 형식으로 생성
-                        val currentTime = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Seoul"))
-                            .format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+                    // 현재 시간을 ISO 8601 형식으로 생성
+                    val currentTime = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Seoul"))
+                        .format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
 
-                        Log.d(
-                            TAG,
-                            "서버로 건강 데이터 전송: HeartRate=$heartRate BPM, Stress=$stressIndex, Time=$currentTime"
-                        )
+                    Log.d(
+                        TAG,
+                        "서버로 건강 데이터 전송: HeartRate=$heartRate BPM, Stress=$stressIndex, Time=$currentTime"
+                    )
 
-                        // 심박수와 스트레스 지수를 함께 전송
-                        viewModel.sendHealthData(
-                            date = currentTime,
-                            heartRate = if (heartRate > 0) heartRate.toInt() else 0,
-                            stress = stressIndex
-                        )
+                    // 심박수와 스트레스 지수를 함께 전송
+                    viewModel.sendHealthData(
+                        date = currentTime,
+                        heartRate = if (heartRate > 0) heartRate.toInt() else 0,
+                        stress = stressIndex
+                    )
                 } else {
                     Log.w(TAG, "심박수 서버 전송 실패 - 인증 필요")
                 }
@@ -346,6 +590,9 @@ class MainActivity : ComponentActivity() {
 
     // 심박수 측정 토글 (인증 체크 포함)
     private fun toggleHeartRateMeasurement(enabled: Boolean, viewModel: WearMainViewModel) {
+        Log.d(TAG, "심박수 토글 요청: $enabled")
+        logCurrentStates("토글 요청 전")
+
         if (enabled) {
             // 심박수 측정 시작 시 인증 체크
             lifecycleScope.launch {
@@ -353,6 +600,14 @@ class MainActivity : ComponentActivity() {
                     viewModel = viewModel,
                     onAuthenticated = {
                         lifecycleScope.launch {
+                            // 첫 실행 체크
+                            val isFirstRun = checkIfFirstRun()
+
+                            if (isFirstRun) {
+                                Log.d(TAG, "첫 실행 감지 - 추가 초기화 수행")
+                                handleFirstRunSetup()
+                            }
+
                             // 먼저 상태 업데이트
                             isToggleEnabled.value = true
 
@@ -361,11 +616,23 @@ class MainActivity : ComponentActivity() {
                                 .apply()
 
                             Log.d(TAG, "Starting heart rate service with server sync")
+
+                            if (isFirstRun) {
+                                delay(1000)
+                            }
+
                             HealthServiceHelper.startService(this@MainActivity)
                             heartStatus.value = "서비스 시작 중..."
 
                             // 서버 동기화 시작
                             startHeartRateServerSync(viewModel)
+
+                            // 첫 실행 플래그 업데이트
+                                if (isFirstRun) {
+                                    sharedPreferences.edit()
+                                        .putBoolean("first_run_completed", true)
+                                        .apply()
+                                }
                         }
                     },
                     featureName = "심박수 서버 연동"
@@ -392,6 +659,74 @@ class MainActivity : ComponentActivity() {
                 heartStatus.value = "측정 중지됨"
                 isToggleEnabled.value = false
             }
+        }
+    }
+
+    // 첫 실행 체크
+    private fun checkIfFirstRun(): Boolean {
+        return !sharedPreferences.getBoolean("first_run_completed", false)
+    }
+
+    // 첫 실행 설정
+    private suspend fun handleFirstRunSetup() {
+        try {
+            Log.d(TAG, "첫 실행 설정 수행")
+
+            // 1. 배터리 최적화 예외 요청 (가능한 경우)
+            requestBatteryOptimizationExemption()
+
+            // 2. 추가 권한 재확인
+            ensureAllPermissions()
+
+            // 3. 서비스 초기화를 위한 추가 대기
+            delay(2000)
+
+            Log.d(TAG, "첫 실행 설정 완료")
+        } catch (e: Exception) {
+            Log.e(TAG, "첫 실행 설정 실패", e)
+        }
+    }
+
+    // 배터리 최적화 예외 요청 (Wear OS에서 가능한 경우)
+    private fun requestBatteryOptimizationExemption() {
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+                val packageName = packageName
+
+                if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {
+                    Log.d(TAG, "배터리 최적화 예외 필요")
+                    // Wear OS에서는 자동으로 예외 처리되는 경우가 많음
+                } else {
+                    Log.d(TAG, "배터리 최적화 예외 이미 적용됨")
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "배터리 최적화 체크 실패", e)
+        }
+    }
+
+    // 모든 권한 재확인
+    private fun ensureAllPermissions() {
+        val missingPermissions = mutableListOf<String>()
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BODY_SENSORS)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            missingPermissions.add(Manifest.permission.BODY_SENSORS)
+        }
+
+        if (android.os.Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            missingPermissions.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+
+        if (missingPermissions.isNotEmpty()) {
+            Log.w(TAG, "누락된 권한 발견: $missingPermissions")
+        } else {
+            Log.d(TAG, "모든 권한 확인됨")
         }
     }
 
@@ -608,7 +943,7 @@ class MainActivity : ComponentActivity() {
                                 modifier = Modifier.size(16.dp)
                             )
                             Text(
-                                text = if (toggleEnabled) "측정중" else "측정시작",
+                                text = if (toggleEnabled) "측정종료" else "측정시작",
                                 style = MaterialTheme.typography.caption2
                             )
                         }
@@ -712,8 +1047,9 @@ class MainActivity : ComponentActivity() {
                 onClick = {
                     if (!isLaborActive) {
                         // 진통 시작 - 시작 시간만 저장
-                        val startTime =  java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Seoul"))
-                            .format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+                        val startTime =
+                            java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Seoul"))
+                                .format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
                         laborStartTime = startTime
                         isLaborActive = true
 
@@ -730,7 +1066,10 @@ class MainActivity : ComponentActivity() {
                                 if (success) {
                                     isLaborActive = false
                                     laborCount++
-                                    lastLaborEndTime = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
+                                    lastLaborEndTime = java.text.SimpleDateFormat(
+                                        "HH:mm:ss",
+                                        java.util.Locale.getDefault()
+                                    )
                                         .format(java.util.Date())
                                     laborStartTime = null
                                 }
