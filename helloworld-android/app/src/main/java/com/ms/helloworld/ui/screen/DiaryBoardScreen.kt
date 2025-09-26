@@ -191,12 +191,11 @@ fun DiaryBoardScreen(
         val defaultTitle = if (diaryType == "birth") "출산일기" else "관찰일기"
         val actualTitle = currentDiary.getActualTitle()
         val actualContent = currentDiary.getActualContent()
-        val correctedDate = currentDiary.getCorrectedTargetDate()
         DiaryBoardData(
             title = actualTitle?.takeIf { it.isNotBlank() } ?: defaultTitle,
             content = actualContent ?: "",
             photos = emptyList(), // 현재 API에서 사진 데이터는 제공하지 않음
-            date = correctedDate,
+            date = currentDiary.targetDate ?: currentDate,
             diaryType = diaryType
         )
     } else {

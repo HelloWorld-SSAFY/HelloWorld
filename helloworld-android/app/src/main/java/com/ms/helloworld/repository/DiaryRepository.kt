@@ -44,8 +44,7 @@ class DiaryRepository @Inject constructor(
                     Log.d(TAG, "  [$index] ID: ${diary.diaryId}")
                     Log.d(TAG, "       제목: ${diary.diaryTitle}")
                     Log.d(TAG, "       역할: ${diary.authorRole}")
-                    Log.d(TAG, "       원본 targetDate: ${diary.targetDate}")
-                    Log.d(TAG, "       보정된 targetDate: ${diary.getCorrectedTargetDate()}")
+                    Log.d(TAG, "       targetDate: ${diary.targetDate}")
                     Log.d(TAG, "       coupleId: ${diary.coupleId}")
                     Log.d(TAG, "       authorId: ${diary.authorId}")
                 }
@@ -416,9 +415,7 @@ class DiaryRepository @Inject constructor(
             if (actualContent != null && actualContent.isNotEmpty()) {
                 Log.d(TAG, "📋 조회된 일기 목록:")
                 actualContent.forEachIndexed { index, diary ->
-                    Log.d(TAG, "  [$index] ID: ${diary.diaryId}, 제목: ${diary.diaryTitle}, 역할: ${diary.authorRole}")
-                    Log.d(TAG, "       원본 날짜: ${diary.targetDate}")
-                    Log.d(TAG, "       보정된 날짜: ${diary.getCorrectedTargetDate()}")
+                    Log.d(TAG, "  [$index] ID: ${diary.diaryId}, 제목: ${diary.diaryTitle}, 역할: ${diary.authorRole}, 날짜: ${diary.targetDate}")
                 }
             } else {
                 Log.d(TAG, "📋 해당 날짜에 등록된 일기가 없습니다")

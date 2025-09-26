@@ -237,32 +237,28 @@ fun DiaryDetailScreen(
         val birthDiary = apiDiaries.find {
             diary -> diary.inferAuthorRole(userId, userGender, null, null) == "FEMALE"  // TODO: 커플 정보 전달 필요
         }?.let { diary ->
-            val correctedDate = diary.getCorrectedTargetDate()
             Log.d("DiaryDetailScreen", "✅ 출산일기 찾음:")
             Log.d("DiaryDetailScreen", "  - 제목: ${diary.diaryTitle}")
-            Log.d("DiaryDetailScreen", "  - 원본 targetDate: ${diary.targetDate}")
-            Log.d("DiaryDetailScreen", "  - 보정된 targetDate: $correctedDate")
+            Log.d("DiaryDetailScreen", "  - targetDate: ${diary.targetDate}")
             Log.d("DiaryDetailScreen", "  - 요청한 임신일수: ${actualDayNumber}일차")
             DiaryEntry(
                 title = diary.diaryTitle ?: "",
                 content = diary.diaryContent ?: "",
-                date = correctedDate,
+                date = diary.targetDate,
                 imageUrl = diary.thumbnailUrl
             )
         }
         val observationDiary = apiDiaries.find {
             diary -> diary.inferAuthorRole(userId, userGender, null, null) == "MALE"  // TODO: 커플 정보 전달 필요
         }?.let { diary ->
-            val correctedDate = diary.getCorrectedTargetDate()
             Log.d("DiaryDetailScreen", "✅ 관찰일기 찾음:")
             Log.d("DiaryDetailScreen", "  - 제목: ${diary.diaryTitle}")
-            Log.d("DiaryDetailScreen", "  - 원본 targetDate: ${diary.targetDate}")
-            Log.d("DiaryDetailScreen", "  - 보정된 targetDate: $correctedDate")
+            Log.d("DiaryDetailScreen", "  - targetDate: ${diary.targetDate}")
             Log.d("DiaryDetailScreen", "  - 요청한 임신일수: ${actualDayNumber}일차")
             DiaryEntry(
                 title = diary.diaryTitle ?: "",
                 content = diary.diaryContent ?: "",
-                date = correctedDate,
+                date = diary.targetDate,
                 imageUrl = diary.thumbnailUrl
             )
         }
