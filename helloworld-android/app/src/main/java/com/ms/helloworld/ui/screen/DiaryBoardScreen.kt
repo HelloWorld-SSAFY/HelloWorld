@@ -260,7 +260,6 @@ fun DiaryBoardScreen(
     diaryState.errorMessage?.let { error ->
         LaunchedEffect(error) {
             // 에러가 발생하면 로그 출력하고 에러 클리어
-            println("DiaryBoardScreen 에러: $error")
             diaryViewModel.clearError()
         }
     }

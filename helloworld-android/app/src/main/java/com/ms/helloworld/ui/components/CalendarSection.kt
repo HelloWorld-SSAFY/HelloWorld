@@ -91,11 +91,6 @@ fun CalendarSection(
                         SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(date.time)
                     val hasPost = postsMap[dateKey]?.isNotEmpty() == true
 
-                    // 디버깅: 각 날짜별 포스트 확인
-                    if (hasPost) {
-                        println("CalendarSection - ${postsMap[dateKey]?.size}개 포스트 있음")
-                    }
-
                     Box(
                         modifier = Modifier
                             .size(32.dp)

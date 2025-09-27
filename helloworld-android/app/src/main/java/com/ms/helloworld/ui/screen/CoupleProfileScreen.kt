@@ -53,7 +53,6 @@ fun CoupleProfileScreen(
     LaunchedEffect(state.momProfile, state.isLoading) {
         // 로딩이 끝나고 momProfile이 업데이트되었을 때 HomeViewModel 새로고침
         if (!state.isLoading && state.momProfile != null) {
-            println("🔄 CoupleProfileScreen - 프로필 업데이트 감지, HomeViewModel 새로고침")
             kotlinx.coroutines.delay(500) // API 완료 대기
             homeViewModel.refreshProfile()
         }

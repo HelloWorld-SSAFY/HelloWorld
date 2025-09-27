@@ -204,8 +204,6 @@ fun DiaryDetailScreen(
     DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
-//                println("🔄 DiaryDetailScreen - 화면 복귀, 일기 새로고침")
-//                println("  - actualDayNumber: $actualDayNumber")
 
                 if (actualDayNumber > 0) {
                     // 일별 일기 조회
@@ -230,8 +228,6 @@ fun DiaryDetailScreen(
         // 디버깅: 각 일기의 role inference 확인
         apiDiaries.forEachIndexed { index, diary ->
             val inferredRole = diary.inferAuthorRole(userId, userGender)
-            println("🔍 DiaryDetailScreen - Diary[$index]: ID=${diary.diaryId}, authorId=${diary.authorId}, authorRole=${diary.authorRole}, inferredRole=${inferredRole}")
-            println("🔍 현재 사용자: userId=$userId, userGender=$userGender")
         }
 
         val birthDiary = apiDiaries.find {

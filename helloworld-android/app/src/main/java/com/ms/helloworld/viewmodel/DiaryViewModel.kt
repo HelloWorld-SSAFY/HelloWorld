@@ -56,36 +56,26 @@ class DiaryViewModel @Inject constructor(
 
     fun setLmpDate(lmpDate: String) {
         actualLmpDate = lmpDate
-        println("📝 DiaryViewModel - LMP 날짜 업데이트: lmpDate=$lmpDate")
     }
 
     fun clearDiaries() {
         _state.value = _state.value.copy(diaries = emptyList())
-        println("🧹 DiaryViewModel - 일기 데이터 초기화")
     }
 
     fun setUserInfo(userId: Long?, userGender: String?) {
         currentUserId = userId
         currentUserGender = userGender
-        println("📝 DiaryViewModel - 사용자 정보 업데이트: userId=$userId, userGender=$userGender")
     }
 
     fun setCoupleInfo(userAId: Long?, userBId: Long?) {
         this.userAId = userAId
         this.userBId = userBId
-        println("📝 DiaryViewModel - 커플 정보 업데이트: userAId=$userAId, userBId=$userBId")
     }
 
     private fun getLmpDate(): String = actualLmpDate
 
     private val _state = MutableStateFlow(DiaryState())
     val state: StateFlow<DiaryState> = _state.asStateFlow()
-
-    init {
-        // DiaryScreen에서 실제 임신 주차로 loadWeeklyDiaries를 호출하므로
-        // 여기서는 자동 로딩하지 않음
-        println("📝 DiaryViewModel - 초기화 완료, 수동 로딩 대기 중")
-    }
 
     fun loadCurrentWeekDiaries() {
         val currentDate = LocalDate.now()
@@ -98,8 +88,6 @@ class DiaryViewModel @Inject constructor(
             try {
                 _state.value = _state.value.copy(isLoading = true, errorMessage = null)
                 val lmpDate = getLmpDate()
-                println("📅 DiaryViewModel - 주간 일기 로딩: ${week}주차")
-                println("📅 DiaryViewModel - API 파라미터: week=$week, lmpDate=$lmpDate")
 
                 // 새로운 API 사용: calendar/diary/week
                 val result = diaryRepository.getDiariesByWeek(
@@ -121,21 +109,18 @@ class DiaryViewModel @Inject constructor(
                         weeklyDiaryStatus = weeklyStatus
                     )
 
-                    println("✅ DiaryViewModel - 주간 일기 로딩 완료: ${diaries.size}개")
                 } else {
                     val error = result.exceptionOrNull()?.message ?: "일기 로딩 실패"
                     _state.value = _state.value.copy(
                         isLoading = false,
                         errorMessage = error
                     )
-                    println("❌ DiaryViewModel - 주간 일기 로딩 실패: $error")
                 }
             } catch (e: Exception) {
                 _state.value = _state.value.copy(
                     isLoading = false,
                     errorMessage = e.message ?: "네트워크 오류"
                 )
-                println("💥 DiaryViewModel - 예외 발생: ${e.message}")
                 e.printStackTrace()
             }
         }
@@ -144,13 +129,6 @@ class DiaryViewModel @Inject constructor(
     fun createDiary(title: String, content: String, targetDate: String = LocalDate.now().toString(), authorRole: String = "FEMALE", authorId: Long) {
         viewModelScope.launch {
             try {
-                println("🚀 DiaryViewModel - createDiary 시작")
-                println("📝 입력 파라미터:")
-                println("  - title: '$title'")
-                println("  - content: '$content'")
-                println("  - targetDate: '$targetDate'")
-                println("  - authorRole: '$authorRole'")
-                println("  - authorId: $authorId")
 
                 _state.value = _state.value.copy(isLoading = true, errorMessage = null)
 
@@ -170,31 +148,15 @@ class DiaryViewModel @Inject constructor(
                     updatedAt = currentDateTime
                 )
 
-                println("📦 DiaryCreateRequest 생성:")
-                println("  - entryDate: '${request.entryDate}'")
-                println("  - diaryTitle: '${request.diaryTitle}'")
-                println("  - diaryContent: '${request.diaryContent}'")
-                println("  - imageUrl: '${request.imageUrl}'")
-                println("  - coupleId: ${request.coupleId}")
-                println("  - authorId: ${request.authorId}")
-                println("  - authorRole: '${request.authorRole}'")
-                println("  - targetDate: '${request.targetDate}'")
-
                 val result = diaryRepository.createDiary(request)
 
                 if (result.isSuccess) {
                     val response = result.getOrNull()
-                    println("✅ DiaryViewModel - 일기 생성 성공!")
-                    println("📋 생성된 일기 정보:")
-                    println("  - diaryId: ${response?.diaryId}")
-                    println("  - diaryTitle: ${response?.diaryTitle}")
-                    println("  - authorRole: ${response?.authorRole}")
 
                     // 상태 업데이트
                     _state.value = _state.value.copy(isLoading = false, errorMessage = null)
 
                     // 일기 목록 새로고침 - 약간의 지연 후 실행
-                    println("🔄 DiaryViewModel - 일기 목록 새로고침 시작")
                     kotlinx.coroutines.delay(500) // 0.5초 지연
 
                     // 주간 일기와 현재 상태의 일기들을 모두 새로고침
@@ -205,13 +167,9 @@ class DiaryViewModel @Inject constructor(
                     response?.let { newDiary ->
                         updatedDiaries.add(newDiary)
                         _state.value = _state.value.copy(diaries = updatedDiaries)
-                        println("📋 DiaryViewModel - 새 일기가 상태에 추가됨: ${newDiary.diaryId}")
                     }
                 } else {
                     val exception = result.exceptionOrNull()
-                    println("❌ DiaryViewModel - 일기 생성 실패")
-                    println("  - Exception: ${exception?.javaClass?.simpleName}")
-                    println("  - Message: ${exception?.message}")
 
                     val error = exception?.message ?: "일기 생성 실패"
                     _state.value = _state.value.copy(
@@ -220,9 +178,6 @@ class DiaryViewModel @Inject constructor(
                     )
                 }
             } catch (e: Exception) {
-                println("💥 DiaryViewModel - createDiary 예외 발생")
-                println("  - Exception type: ${e.javaClass.simpleName}")
-                println("  - Exception message: ${e.message}")
                 e.printStackTrace()
 
                 _state.value = _state.value.copy(
@@ -246,16 +201,6 @@ class DiaryViewModel @Inject constructor(
             try {
                 _state.value = _state.value.copy(isLoading = true, errorMessage = null)
 
-                println("📎 DiaryViewModel - Multipart 일기 생성 시작")
-                println("📝 Parameters:")
-                println("  - title: $title")
-                println("  - content: $content")
-                println("  - targetDate: $targetDate")
-                println("  - authorRole: $authorRole")
-                println("  - authorId: $authorId")
-                println("  - imageUris count: ${imageUris.size}")
-                println("  - ultrasounds: $ultrasounds")
-
                 val result = diaryRepository.createDiaryWithFiles(
                     context = context,
                     entryDate = targetDate,
@@ -272,20 +217,15 @@ class DiaryViewModel @Inject constructor(
 
                 if (result.isSuccess) {
                     val response = result.getOrNull()
-                    println("✅ DiaryViewModel - Multipart 일기 생성 성공: diaryId=${response?.diaryId}")
 
                     // 성공 시 일기 목록을 다시 로드하여 상태 업데이트
                     val updatedDiaries = _state.value.diaries.toMutableList()
                     response?.let { newDiary ->
                         updatedDiaries.add(newDiary)
                         _state.value = _state.value.copy(diaries = updatedDiaries)
-                        println("📋 DiaryViewModel - 새 일기가 상태에 추가됨: ${newDiary.diaryId}")
                     }
                 } else {
                     val exception = result.exceptionOrNull()
-                    println("❌ DiaryViewModel - Multipart 일기 생성 실패")
-                    println("  - Exception: ${exception?.javaClass?.simpleName}")
-                    println("  - Message: ${exception?.message}")
 
                     val error = exception?.message ?: "Multipart 일기 생성 실패"
                     _state.value = _state.value.copy(
@@ -294,9 +234,6 @@ class DiaryViewModel @Inject constructor(
                     )
                 }
             } catch (e: Exception) {
-                println("💥 DiaryViewModel - createDiaryWithFiles 예외 발생")
-                println("  - Exception type: ${e.javaClass.simpleName}")
-                println("  - Exception message: ${e.message}")
                 e.printStackTrace()
 
                 _state.value = _state.value.copy(
@@ -321,7 +258,6 @@ class DiaryViewModel @Inject constructor(
 
                 val result = diaryRepository.updateDiary(diaryId, request)
                 if (result.isSuccess) {
-                    println("✅ DiaryViewModel - 일기 수정 성공")
                     loadCurrentWeekDiaries()
                 } else {
                     val error = result.exceptionOrNull()?.message ?: "일기 수정 실패"
@@ -346,7 +282,6 @@ class DiaryViewModel @Inject constructor(
 
                 val result = diaryRepository.deleteDiary(diaryId)
                 if (result.isSuccess) {
-                    println("✅ DiaryViewModel - 일기 삭제 성공")
                     loadCurrentWeekDiaries()
                 } else {
                     val error = result.exceptionOrNull()?.message ?: "일기 삭제 실패"
@@ -419,14 +354,12 @@ class DiaryViewModel @Inject constructor(
                         isLoading = false,
                         errorMessage = error
                     )
-                    println("❌ DiaryViewModel - 일별 일기 로딩 실패: $error")
                 }
             } catch (e: Exception) {
                 _state.value = _state.value.copy(
                     isLoading = false,
                     errorMessage = e.message ?: "네트워크 오류"
                 )
-                println("💥 DiaryViewModel - 예외 발생: ${e.message}")
                 e.printStackTrace()
             }
         }
@@ -439,13 +372,11 @@ class DiaryViewModel @Inject constructor(
     // 수정할 일기 설정
     fun setEditingDiary(diary: DiaryResponse) {
         _state.value = _state.value.copy(editingDiary = diary)
-        println("📝 DiaryViewModel - 편집할 일기 설정: ID=${diary.diaryId}, 제목='${diary.diaryTitle}'")
     }
 
     // 수정할 일기 클리어
     fun clearEditingDiary() {
         _state.value = _state.value.copy(editingDiary = null)
-        println("🧹 DiaryViewModel - 편집 일기 클리어")
     }
 
     // TODO: 나중에 필요시 전체 일기 조회 기능 추가
@@ -461,7 +392,6 @@ class DiaryViewModel @Inject constructor(
             // 임신 주차는 1~42주 범위로 제한
             pregnancyWeek.coerceIn(1, 42)
         } catch (e: Exception) {
-            println("❌ DiaryViewModel - LMP 날짜 파싱 실패, 기본값 1주차 반환: ${e.message}")
             1 // 기본값으로 1주차 반환
         }
     }
@@ -475,18 +405,10 @@ class DiaryViewModel @Inject constructor(
         val weekStartDay = (week - 1) * 7 + 1 // 해당 주차의 첫 번째 날 (임신 일수)
         val startOfWeek = lmpDate.plusDays(weekStartDay.toLong()) // LMP + weekStartDay일 (서버 방식)
 
-        println("📅 DiaryViewModel - createWeeklyStatus: ${week}주차")
-        println("  - LMP 날짜: $lmpDate")
-        println("  - 주차 시작일: ${weekStartDay}일차")
-        println("  - 주간 시작 날짜: $startOfWeek")
-        println("  - 주간 종료 날짜: ${startOfWeek.plusDays(6)}")
-
         // 서버 응답의 일기들을 targetDate별로 그룹화
         val diariesByDate = diaries.groupBy { it.targetDate }
 
-        println("📅 DiaryViewModel - 서버 응답 일기 분석:")
         diariesByDate.forEach { (date, dateDiaries) ->
-            println("  - $date: ${dateDiaries.size}개 일기")
         }
 
         // 주간 7일 각각에 대해 상태 생성
@@ -498,12 +420,8 @@ class DiaryViewModel @Inject constructor(
             val dayDiaries = diariesByDate[targetDateString] ?: emptyList()
 
             // 디버깅: 각 날짜별 일기 확인
-            println("📅 DiaryViewModel - 요일${dayInWeek}: ${targetDateString}")
-            println("  - 해당 날짜 일기 수: ${dayDiaries.size}")
             dayDiaries.forEachIndexed { idx, diary ->
                 val inferredRole = diary.inferAuthorRole(currentUserId, currentUserGender)
-                println("    [$idx] ID=${diary.diaryId}, 제목=${diary.diaryTitle}, inferredRole=$inferredRole")
-                println("    [$idx] authorId=${diary.authorId}, authorRole=${diary.authorRole}")
             }
 
             val momDiary = dayDiaries.find {
@@ -512,10 +430,6 @@ class DiaryViewModel @Inject constructor(
             val dadDiary = dayDiaries.find {
                 it.inferAuthorRole(currentUserId, currentUserGender, userAId, userBId) == "MALE"
             }
-
-            println("  - momDiary found: ${momDiary != null}")
-            println("  - dadDiary found: ${dadDiary != null}")
-            println("  - 최종 원 위치: ${dayInWeek}번째")
 
             WeeklyDiaryStatus(
                 day = dayInWeek, // 1~7: 요일별 원의 위치

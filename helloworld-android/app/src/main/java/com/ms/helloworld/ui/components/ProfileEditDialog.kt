@@ -58,10 +58,6 @@ fun ProfileEditDialog(
 
     val isFemale = currentGender?.uppercase() == "FEMALE"
 
-    // 성별 디버깅
-    println("👩 ProfileEditDialog - currentGender: $currentGender")
-    println("👩 ProfileEditDialog - isFemale: $isFemale")
-
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(
