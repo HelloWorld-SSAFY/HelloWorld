@@ -2,7 +2,6 @@ package com.ms.helloworld.util
 
 import android.util.Base64
 import android.util.Log
-import com.ms.helloworld.service.TokenMessageListenerService
 import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -34,6 +33,7 @@ class TokenManager @Inject constructor(
             val currentTime = System.currentTimeMillis() / 1000
             val isExpired = currentTime >= exp
 
+//            Log.d(TAG, "토큰 만료 검사 - 현재시간: $currentTime, 만료시간: $exp, 만료됨: $isExpired")
             isExpired
         } catch (e: Exception) {
             Log.e(TAG, "토큰 만료 검사 실패: ${e.message}")
@@ -77,21 +77,8 @@ class TokenManager @Inject constructor(
                 Log.d(TAG, "RefreshToken 만료시간: $exp (${java.util.Date(exp * 1000)})")
             }
 
-            // 기존 토큰과 비교하여 실제로 변경되었는지 확인
-            val currentAccessToken = encryptedDataStore.getAccessTokenSuspend()
-            val isTokenChanged = currentAccessToken != accessToken
-
-            // 토큰 저장
             encryptedDataStore.saveTokens(accessToken, refreshToken)
             Log.d(TAG, "토큰 저장 완료")
-
-            // 토큰이 실제로 변경된 경우에만 워치에 동기화
-            if (isTokenChanged) {
-                Log.d(TAG, "토큰 변경 감지 - 워치로 동기화")
-                TokenMessageListenerService.getInstance()?.syncTokensToWatch(accessToken, refreshToken)
-            } else {
-                Log.d(TAG, "토큰 변경 없음 - 워치 동기화 스킵")
-            }
 
             // 저장 후 즉시 확인
             val savedAccess = encryptedDataStore.getAccessTokenSuspend()
@@ -184,11 +171,7 @@ class TokenManager @Inject constructor(
             Log.d(TAG, "삭제 전 - AccessToken: $beforeAccess")
             Log.d(TAG, "삭제 전 - RefreshToken: $beforeRefresh")
 
-            // 토큰 삭제
             encryptedDataStore.clearTokens()
-
-            // 워치에도 토큰 삭제 신호 전송
-            TokenMessageListenerService.getInstance()?.clearTokensFromWatch()
 
             // 삭제 후 확인
             val afterAccess = encryptedDataStore.getAccessTokenSuspend()

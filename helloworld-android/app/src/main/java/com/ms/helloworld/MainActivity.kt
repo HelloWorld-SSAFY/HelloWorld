@@ -156,6 +156,12 @@ class MainActivity : ComponentActivity() {
                         intent?.let { handleInitialDeepLink(it, navController) }
                     }
 
+                    LaunchedEffect(navController) {
+                        MainActivity.deepLinkIntents.collect { newIntent ->
+                            handleInitialDeepLink(newIntent, navController)
+                        }
+                    }
+
                     MainNavigation(navController = navController)
                 }
             }
@@ -267,7 +273,7 @@ class MainActivity : ComponentActivity() {
 
             // 서버 전송에 필요한 모든 권한이 있는지 확인
             if (hasActivityRecognition && hasLocation && hasStepsPermission) {
-//                Log.d(TAG, "모든 필수 권한 승인됨. WorkManager를 시작합니다.")
+                Log.d(TAG, "모든 필수 권한 승인됨. WorkManager를 시작합니다.")
                 stepsWorkScheduler.scheduleStepsUpload()
 
                 if (!hasNotification) {
@@ -290,7 +296,7 @@ class MainActivity : ComponentActivity() {
     private fun emitDeepLinkIntent(intent: Intent) {
         Log.d("DeepLink", "emit intent: action=${intent.action}, extras=${intent.extras}")
         // 실제 딥링크 정보가 없으면 패스
-        val hasInfo = intent.hasExtra("deeplink_type") && intent.hasExtra("coupleId")
+        val hasInfo = intent.hasExtra("deeplink_type")
         if (hasInfo) {
             // 최신 값 push (버퍼가 있으면 drop 되지 않음)
             MainActivity.deepLinkIntents.tryEmit(intent)
@@ -300,11 +306,8 @@ class MainActivity : ComponentActivity() {
     // 앱이 완전히 종료된 상태에서 알림을 눌렀을 때의 처리
     private fun handleInitialDeepLink(intent: Intent, navController: NavHostController) {
         val deeplinkType = intent.getStringExtra("deeplink_type")
-        val coupleId = intent.getStringExtra("coupleId")
 
-        Log.d("DeepLink", "초기 딥링크 처리 - type=$deeplinkType, coupleId=$coupleId")
-
-        if (coupleId.isNullOrEmpty()) return
+        Log.d("DeepLink", "초기 딥링크 처리 - type=$deeplinkType")
 
         // 타입별 화면으로 이동
         when (deeplinkType) {
@@ -328,7 +331,6 @@ class MainActivity : ComponentActivity() {
         // 처리 후 Intent 정리
 
         intent.removeExtra("deeplink_type")
-        intent.removeExtra("coupleId")
     }
 
     override fun onResume() {

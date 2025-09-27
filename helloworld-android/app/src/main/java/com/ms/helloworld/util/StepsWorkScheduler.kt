@@ -34,6 +34,9 @@ class StepsWorkScheduler @Inject constructor(
             .build()
 
         // 12시, 16시, 20시 각각 스케줄
+        // 15시 40분으로 테스트
+        scheduleWorkAt(15, 31, "steps_upload_test", constraints)
+
         scheduleWorkAt(12, 0, WORK_NAME_12, constraints)
         scheduleWorkAt(16, 0, WORK_NAME_16, constraints)
         scheduleWorkAt(20, 0, WORK_NAME_20, constraints)

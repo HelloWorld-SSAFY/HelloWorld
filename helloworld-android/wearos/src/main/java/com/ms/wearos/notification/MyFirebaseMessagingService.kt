@@ -1,6 +1,8 @@
 package com.ms.wearos.notification
 
 import android.Manifest
+import android.app.PendingIntent
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.hardware.Sensor.TYPE_HEART_RATE
 import android.os.Build
@@ -14,6 +16,7 @@ import com.google.firebase.messaging.RemoteMessage
 import com.ms.helloworld.R
 import com.ms.wearos.dto.request.Platforms
 import com.ms.wearos.repository.FcmRepository
+import com.ms.wearos.ui.MainActivity
 import com.ms.wearos.ui.theme.MainColor
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -28,6 +31,11 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
     companion object {
         const val TYPE_REMINDER = "REMINDER"           // 캘린더 일정 알림
         const val TYPE_EMERGENCY = "EMERGENCY"       // 심박수 이상 알림
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        NotificationChannels.createDefaultChannel(this)
     }
 
     override fun onNewToken(token: String) {
@@ -52,18 +60,51 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             return
         }
 
-        // 타입별 알림 설정
-        val notificationConfig = createNotificationConfig(type, title, body)
+        val channelId = when (type) {
+            TYPE_EMERGENCY -> NotificationChannels.EMERGENCY
+            TYPE_REMINDER  -> NotificationChannels.REMINDER
+            else           -> NotificationChannels.REMINDER
+        }
 
-        // 알림 생성 및 표시
-        val notification = NotificationCompat.Builder(this, NotificationChannels.DEFAULT)
-            .setSmallIcon(notificationConfig.iconRes)
-            .setContentTitle(notificationConfig.title)
-            .setContentText(notificationConfig.body)
+        val intent = Intent(this, MainActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+            putExtra("fromPushType", type)
+        }
+        val contentIntent = PendingIntent.getActivity(
+            this,
+            0, // 고정 권장
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val notification = NotificationCompat.Builder(this, channelId)
+            .setSmallIcon(
+                when (type) {
+                    TYPE_EMERGENCY -> R.drawable.ic_wear_noti
+                    TYPE_REMINDER  -> R.drawable.ic_calendar
+                    else           -> R.drawable.ic_noti
+                }
+            )
+            .setContentTitle(
+                if (title.isNotBlank()) title else when (type) {
+                    TYPE_EMERGENCY -> "위험 알림"
+                    TYPE_REMINDER  -> "일정 알림"
+                    else           -> "알림"
+                }
+            )
+            .setContentText(body.ifBlank { defaultBody(type) })
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body.ifBlank { defaultBody(type) }))
+            .setContentIntent(contentIntent)
             .setAutoCancel(true)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(notificationConfig.body))
-            .setVibrate(longArrayOf(0, 300, 200, 300))
+            .setPriority(NotificationCompat.PRIORITY_HIGH) // 하위버전 호환용
+            .setCategory(
+                when (type) {
+                    TYPE_EMERGENCY -> NotificationCompat.CATEGORY_ALARM
+                    TYPE_REMINDER  -> NotificationCompat.CATEGORY_REMINDER
+                    else           -> NotificationCompat.CATEGORY_MESSAGE
+                }
+            )
+            .setDefaults(NotificationCompat.DEFAULT_ALL) // 사운드/진동/라이트
             .build()
 
         NotificationManagerCompat.from(this).notify(Random.nextInt(), notification)
@@ -87,7 +128,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 NotificationConfig(
                     title = title.ifEmpty { "위험 알림" },
                     body = body.ifEmpty { "웨어러블 데이터가 정상 범위를 초과했습니다." },
-                    iconRes = R.drawable.ic_heart,
+                    iconRes = R.drawable.ic_wear_noti,
                     priority = NotificationCompat.PRIORITY_DEFAULT,
                     colorRes = MainColor
                 )
@@ -102,6 +143,12 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 )
             }
         }
+    }
+
+    private fun defaultBody(type: String) = when (type) {
+        TYPE_EMERGENCY -> "웨어러블 데이터가 정상 범위를 초과했습니다."
+        TYPE_REMINDER  -> "예정된 일정이 있습니다."
+        else           -> "새로운 알림이 도착했습니다."
     }
 
     /**
