@@ -2,20 +2,25 @@ package com.ms.helloworld.util
 
 import android.content.Context
 import android.util.Log
-import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import dagger.hilt.android.EntryPointAccessors
+import dagger.hilt.EntryPoint
+import dagger.hilt.InstallIn
+import dagger.hilt.components.SingletonComponent
 import com.ms.helloworld.repository.StepsRepository
-import dagger.assisted.Assisted
-import dagger.assisted.AssistedInject
 
-@HiltWorker
-class StepsUploadWorker @AssistedInject constructor(
-    @Assisted context: Context,
-    @Assisted workerParams: WorkerParameters,
-    private val stepsRepository: StepsRepository,
-    private val locationManager: LocationManager
+class StepsUploadWorker(
+    context: Context,
+    workerParams: WorkerParameters
 ) : CoroutineWorker(context, workerParams) {
+
+    @EntryPoint
+    @InstallIn(SingletonComponent::class)
+    interface StepsUploadWorkerEntryPoint {
+        fun stepsRepository(): StepsRepository
+        fun locationManager(): LocationManager
+    }
 
     companion object {
         private const val TAG = "StepsUploadWorker"
@@ -24,6 +29,15 @@ class StepsUploadWorker @AssistedInject constructor(
     override suspend fun doWork(): Result {
         return try {
             Log.d(TAG, "걸음수 업로드 작업 시작")
+
+            // Hilt EntryPoint를 통해 의존성 가져오기
+            val entryPoint = EntryPointAccessors.fromApplication(
+                applicationContext,
+                StepsUploadWorkerEntryPoint::class.java
+            )
+
+            val stepsRepository = entryPoint.stepsRepository()
+            val locationManager = entryPoint.locationManager()
 
             val location = locationManager.getCurrentLocation()
             if (location != null) {

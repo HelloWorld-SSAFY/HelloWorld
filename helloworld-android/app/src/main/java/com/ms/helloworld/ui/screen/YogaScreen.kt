@@ -94,8 +94,8 @@ fun YogaScreen(
                     .background(
                         Brush.verticalGradient(
                             colors = listOf(
-                                Color(0xFFF8F9FA),
-                                Color(0xFFE9ECEF)
+                                Color(0xFFFFF0F5),
+                                Color(0xFFF0F8FF)
                             )
                         )
                     )
@@ -177,6 +177,32 @@ private fun EmptyContent() {
 }
 
 @Composable
+private fun WelcomeMessage() {
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFFFFE4E1).copy(alpha = 0.8f) // 미스티 로즈
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+
+            Text(
+                text = "몸과 마음을 건강하게 해주는\n3개의 요가 영상을 추천해드려요 \uD83D\uDC95",
+                fontSize = 16.sp,
+                color = Color(0xFF6B4C93),
+                textAlign = TextAlign.Center,
+                lineHeight = 22.sp
+            )
+        }
+    }
+}
+
+@Composable
 private fun ErrorContent(
     error: String,
     onRetry: () -> Unit
@@ -230,6 +256,9 @@ private fun FullScreenYogaContent(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(0.dp)
     ) {
+        item{
+            WelcomeMessage()
+        }
         items(yogas.size) { index ->
             FullScreenYogaCard(
                 yoga = yogas[index],

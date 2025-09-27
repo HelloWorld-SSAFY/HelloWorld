@@ -258,19 +258,16 @@ fun HealthMetricsSection(
                         CircularProgressChart(
                             percentage = calculateHeartRatePercentage(heartRate),
                             label = "심박수",
-                            color = Color(0xFFFF6B6B),
                             value = "${heartRate}bpm"
                         )
                         CircularProgressChart(
                             percentage = stressScore.toFloat(),
                             label = "스트레스",
-                            color = Color(0xFF4DABF7),
                             value = "${stressScore}점"
                         )
                         CircularProgressChart(
                             percentage = calculateStepsPercentage(steps),
                             label = "걸음수",
-                            color = Color(0xFFFFD93D),
                             value = "${steps}걸음"
                         )
                     }
@@ -284,19 +281,16 @@ fun HealthMetricsSection(
                         CircularProgressChart(
                             percentage = 0f,
                             label = "심박수",
-                            color = Color(0xFFFF6B6B),
                             value = "--bpm"
                         )
                         CircularProgressChart(
                             percentage = 0f,
                             label = "스트레스",
-                            color = Color(0xFF4DABF7),
                             value = "--점"
                         )
                         CircularProgressChart(
                             percentage = 0f,
                             label = "걸음수",
-                            color = Color(0xFFFFD93D),
                             value = "--걸음"
                         )
                     }
@@ -311,9 +305,11 @@ fun HealthMetricsSection(
 fun CircularProgressChart(
     percentage: Float,
     label: String,
-    color: Color,
     value: String = "${percentage.toInt()}%"
 ) {
+    // 퍼센트에 따른 색상 계산
+    val color = getColorForPercentage(percentage)
+
     Column(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -343,6 +339,15 @@ fun CircularProgressChart(
             fontSize = 14.sp,
             color = Color.Gray
         )
+    }
+}
+
+// 퍼센트에 따른 색상 계산 함수
+private fun getColorForPercentage(percentage: Float): Color {
+    return when {
+        percentage <= 33f -> Color(0xFF4CAF50)  // 초록색 (0-33%)
+        percentage <= 66f -> Color(0xFFFF9800)  // 주황색 (34-66%)
+        else -> Color(0xFFF44336)               // 빨간색 (67-100%)
     }
 }
 

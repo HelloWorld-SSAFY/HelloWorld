@@ -74,7 +74,14 @@ fun MeditationScreen(
         }
 
         else -> {
-            Column(Modifier.fillMaxSize()) {
+            Column(Modifier.fillMaxSize().background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFFFFF0F5),
+                        Color(0xFFF0F8FF)
+                    )
+                )
+            )) {
                 CustomTopAppBar(
                     title = "오늘의 명상",
                     navController = navController
@@ -204,10 +211,39 @@ private fun FullScreenMeditationContent(
             .fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(0.dp)
     ) {
+        item{
+            WelcomeMessage()
+        }
         items(meditations.size) { index ->
             FullScreenMeditationCard(
                 meditation = meditations[index],
                 onClick = { onMeditationClick(meditations[index]) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun WelcomeMessage() {
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFFFFE4E1).copy(alpha = 0.8f) // 미스티 로즈
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+
+            Text(
+                text = "마음이 평온해지는\n3개의 명상 영상을 추천해드려요 \uD83D\uDC95",
+                fontSize = 16.sp,
+                color = Color(0xFF6B4C93),
+                textAlign = TextAlign.Center,
+                lineHeight = 22.sp
             )
         }
     }

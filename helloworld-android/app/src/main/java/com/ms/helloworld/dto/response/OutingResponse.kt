@@ -11,15 +11,15 @@ data class OutingResponse(
 
 data class OutingDelivery(
     val delivery_id: String,
-    val content_id: Int,
-    val title: String,
-    val provider: String,
-    val url: String,
-    val thumbnail: String,
-    val duration_sec: Int?,  // null 가능성 있음
-    val rank: Int,
-    val score: Double,
-    val created_at: String,
+    val place_id: Int,
+    val title: String?,  // null 가능성 추가
+    val lat: Double,
+    val lng: Double,
+    val address: String?,  // null 가능성 있음
+    val place_category: String,
+    val weather_gate: String?,  // null 가능성 있음
     val reason: String,
-    val meta: Map<String, Any> // JSON 오브젝트 → 키-값 맵핑
+    val rank: Int,
+    val created_at: String,
+    val meta: Map<String, Any> = emptyMap()  // 기본값 설정
 )
