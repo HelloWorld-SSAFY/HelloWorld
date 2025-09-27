@@ -5,6 +5,7 @@ import com.ms.helloworld.network.AuthInterceptor
 import com.ms.helloworld.network.TokenAuthenticator
 import com.ms.helloworld.network.api.AuthApi
 import com.ms.helloworld.network.api.CalendarApi
+import com.ms.helloworld.network.api.CaricatureApi
 import com.ms.helloworld.network.api.CoupleApi
 import com.ms.helloworld.network.api.DiaryApi
 import com.ms.helloworld.network.api.FcmApi
@@ -83,6 +84,12 @@ object NetworkModule {
     @Singleton
     fun provideCalendarApi(retrofit: Retrofit): CalendarApi {
         return retrofit.create(CalendarApi::class.java)
+    }
+
+    @Provides
+    @Singleton
+    fun provideCaricatureApi(retrofit: Retrofit): CaricatureApi {
+        return retrofit.create(CaricatureApi::class.java)
     }
 
     @Provides
