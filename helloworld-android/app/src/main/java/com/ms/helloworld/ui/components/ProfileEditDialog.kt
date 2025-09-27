@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.TextSelectionColors
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
@@ -20,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -27,6 +29,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.ms.helloworld.R
+import com.ms.helloworld.ui.theme.MainColor
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Calendar
@@ -76,7 +80,7 @@ fun ProfileEditDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(20.dp)
+                    .padding(16.dp)
             ) {
                 // 헤더 (제목과 닫기 버튼)
                 Row(
@@ -84,13 +88,6 @@ fun ProfileEditDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "프로필 수정",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF1A1A1A)
-                    )
-
                     IconButton(
                         onClick = onDismiss,
                         modifier = Modifier.size(32.dp)
@@ -110,49 +107,23 @@ fun ProfileEditDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(
-                        text = "프로필 사진",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = Color(0xFF333333)
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
                     Box(
                         modifier = Modifier
                             .size(100.dp)
                             .background(
-                                Color(0xFFA8D5A8),
+                                if (isFemale) Color(0xFFA8D5A8) else Color(0xFFB5D3F7), // 성별에 따른 배경색
                                 CircleShape
                             )
-                            .border(
-                                2.dp,
-                                Color(0xFF6200EE).copy(alpha = 0.3f),
-                                CircleShape
-                            )
-                            .clickable {
-                                // TODO: 이미지 선택 기능 구현
-                            },
+                            .clip(CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Edit,
-                                contentDescription = "사진 변경",
-                                modifier = Modifier.size(24.dp),
-                                tint = Color(0xFF666666)
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "사진 변경",
-                                fontSize = 10.sp,
-                                color = Color(0xFF666666),
-                                textAlign = TextAlign.Center
-                            )
-                        }
+                        Icon(
+                            painter = painterResource(
+                                if (isFemale) R.drawable.pregnant_woman else R.drawable.ic_man // 성별에 따른 아이콘
+                            ),
+                            contentDescription = if (isFemale) "아내 프로필 이미지" else "남편 프로필 이미지",
+                            tint = Color.Unspecified,
+                        )
                     }
                 }
 
@@ -181,8 +152,12 @@ fun ProfileEditDialog(
                         },
                         shape = RoundedCornerShape(12.dp),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Color(0xFF6200EE),
-                            unfocusedBorderColor = Color(0xFFE0E0E0)
+                            focusedBorderColor = MainColor,
+                            unfocusedBorderColor = Color(0xFFE0E0E0),
+                            selectionColors = TextSelectionColors(
+                                handleColor = MainColor, // 선택 핸들 색상
+                                backgroundColor = MainColor.copy(alpha = 0.4f) // 선택된 텍스트 배경색
+                            )
                         ),
                         singleLine = true
                     )
@@ -218,8 +193,12 @@ fun ProfileEditDialog(
                         },
                         shape = RoundedCornerShape(12.dp),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Color(0xFF6200EE),
-                            unfocusedBorderColor = Color(0xFFE0E0E0)
+                            focusedBorderColor = MainColor,
+                            unfocusedBorderColor = Color(0xFFE0E0E0),
+                            selectionColors = TextSelectionColors(
+                                handleColor = MainColor, // 선택 핸들 색상
+                                backgroundColor = MainColor.copy(alpha = 0.4f) // 선택된 텍스트 배경색
+                            )
                         ),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true
@@ -265,7 +244,7 @@ fun ProfileEditDialog(
                                 Icon(
                                     imageVector = Icons.Default.DateRange,
                                     contentDescription = "날짜 선택",
-                                    tint = Color(0xFF6200EE),
+                                    tint = MainColor,
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
@@ -305,8 +284,12 @@ fun ProfileEditDialog(
                             },
                             shape = RoundedCornerShape(12.dp),
                             colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = Color(0xFF6200EE),
-                                unfocusedBorderColor = Color(0xFFE0E0E0)
+                                focusedBorderColor = MainColor,
+                                unfocusedBorderColor = Color(0xFFE0E0E0),
+                                selectionColors = TextSelectionColors(
+                                    handleColor = MainColor, // 선택 핸들 색상
+                                    backgroundColor = MainColor.copy(alpha = 0.4f) // 선택된 텍스트 배경색
+                                )
                             ),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             singleLine = true
@@ -329,10 +312,10 @@ fun ProfileEditDialog(
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = Color(0xFF6200EE)
+                            contentColor = MainColor
                         ),
                         border = ButtonDefaults.outlinedButtonBorder.copy(
-                            brush = androidx.compose.ui.graphics.SolidColor(Color(0xFF6200EE))
+                            brush = androidx.compose.ui.graphics.SolidColor(MainColor)
                         )
                     ) {
                         Text(
@@ -361,7 +344,7 @@ fun ProfileEditDialog(
                         },
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF6200EE),
+                            containerColor = MainColor,
                             contentColor = Color.White
                         ),
                         shape = RoundedCornerShape(12.dp),
@@ -415,7 +398,7 @@ fun CustomDatePickerDialog(
                     }
                 },
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF6200EE)
+                    containerColor = MainColor
                 )
             ) {
                 Text("확인")
@@ -423,7 +406,7 @@ fun CustomDatePickerDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("취소")
+                Text("취소", color = MainColor)
             }
         }
     ) {

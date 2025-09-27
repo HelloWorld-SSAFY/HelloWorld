@@ -128,7 +128,11 @@ fun CalendarSection(
                                     modifier = Modifier
                                         .size(5.dp)
                                         .background(
-                                            if (isSelected) Color.White else MainColor,
+                                            when {
+                                                isSelected -> Color.White
+                                                isToday -> Color.Red // 오늘 날짜의 점은 빨간색
+                                                else -> MainColor    // 일반 일정 점은 메인 컬러
+                                            },
                                             CircleShape
                                         )
                                 )

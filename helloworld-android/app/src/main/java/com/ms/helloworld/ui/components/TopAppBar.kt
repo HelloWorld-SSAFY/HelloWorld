@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsEndWidth
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -20,6 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.util.packInts
 import androidx.navigation.NavHostController
 import com.ms.helloworld.R
 import com.ms.helloworld.navigation.Screen
@@ -35,13 +37,12 @@ fun CustomTopAppBar(
         title = {
             when (title) {
                 "home" -> {
-                    Text(
-                        text = "Hello World",
-                        color = Color.Black,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center,
-                        fontSize = 20.sp,
+                    Icon(
+                        painter = painterResource(R.drawable.ic_hello_world_topappbar),
+                        contentDescription = "Hello World Logo",
+                        tint = Color.Unspecified,
                         modifier = Modifier
+                            .height(150.dp)
                             .fillMaxWidth()
                             .padding(start = 24.dp)
                     )
@@ -54,6 +55,7 @@ fun CustomTopAppBar(
                         fontSize = 20.sp,
                         modifier = Modifier
                             .fillMaxWidth()
+                            .padding(end = 40.dp)
                     )
                 }
                 "wearable" -> {
@@ -131,17 +133,6 @@ fun CustomTopAppBar(
                             .clickable{
                                 navController.navigate(Screen.NotificationScreen.route)
                             }
-                    )
-                }
-                "profile" -> {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_setting),
-                        contentDescription = "설정",
-                        tint = Color.Unspecified,
-                        modifier = Modifier
-                            .padding(end = 16.dp)
-                            .size(24.dp)
-                            .clickable{}
                     )
                 }
             }
