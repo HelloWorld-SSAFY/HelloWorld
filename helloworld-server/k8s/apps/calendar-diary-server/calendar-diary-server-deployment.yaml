@@ -63,6 +63,12 @@ spec:
               name: s3-credentials
               key: S3_SECRETKEY
 
+        - name: APP_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: aiserver-apptoken
+              key: TOKEN
+
         - name: GMS_KEY
           valueFrom:
             secretKeyRef:
