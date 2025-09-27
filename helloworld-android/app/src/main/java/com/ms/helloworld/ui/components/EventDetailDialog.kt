@@ -2,14 +2,17 @@ package com.ms.helloworld.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -19,6 +22,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ms.helloworld.dto.response.CalendarEventResponse
+import com.ms.helloworld.ui.theme.MainColor
+import com.ms.helloworld.ui.theme.SubColor
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -32,8 +37,13 @@ fun EventDetailBottomSheet(
 ) {
     var showDeleteConfirmation by remember { mutableStateOf(false) }
 
+    val sheetState = rememberModalBottomSheetState(
+        skipPartiallyExpanded = true
+    )
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
+        sheetState = sheetState,
         dragHandle = {
             Box(
                 modifier = Modifier
@@ -49,13 +59,9 @@ fun EventDetailBottomSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(24.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 40.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(24.dp)
-            ) {
                 // 헤더 (제목과 닫기 버튼)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -86,7 +92,7 @@ fun EventDetailBottomSheet(
                 // 일정 제목
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF6200EE).copy(alpha = 0.1f)),
+                    colors = CardDefaults.cardColors(containerColor = MainColor.copy(alpha = 0.1f)),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Text(
@@ -109,7 +115,7 @@ fun EventDetailBottomSheet(
                         imageVector = Icons.Default.DateRange,
                         contentDescription = "날짜",
                         modifier = Modifier.size(20.dp),
-                        tint = Color(0xFF6200EE)
+                        tint = MainColor
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     val dateFormat = try {
@@ -138,7 +144,7 @@ fun EventDetailBottomSheet(
                         imageVector = Icons.Default.DateRange,
                         contentDescription = "시간",
                         modifier = Modifier.size(20.dp),
-                        tint = Color(0xFF6200EE)
+                        tint = MainColor
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     val timeFormat = try {
@@ -192,7 +198,7 @@ fun EventDetailBottomSheet(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Card(
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFF4CAF50)),
+                            colors = CardDefaults.cardColors(containerColor = SubColor),
                             shape = CircleShape
                         ) {
                             Text(
@@ -205,7 +211,7 @@ fun EventDetailBottomSheet(
                         Text(
                             text = "알림 설정됨",
                             fontSize = 14.sp,
-                            color = Color(0xFF4CAF50),
+                            color = SubColor,
                             fontWeight = FontWeight.Medium
                         )
                     }
@@ -223,7 +229,7 @@ fun EventDetailBottomSheet(
                         onClick = onEdit,
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF6200EE),
+                            containerColor = SubColor,
                             contentColor = Color.White
                         ),
                         shape = RoundedCornerShape(12.dp)
@@ -246,7 +252,7 @@ fun EventDetailBottomSheet(
                         onClick = { showDeleteConfirmation = true },
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFE53E3E),
+                            containerColor = Color(0xFFFF8A95),
                             contentColor = Color.White
                         ),
                         shape = RoundedCornerShape(12.dp)
@@ -264,7 +270,6 @@ fun EventDetailBottomSheet(
                         )
                     }
                 }
-            }
         }
     }
 
@@ -288,7 +293,7 @@ fun EventDetailBottomSheet(
                         onDelete()
                     },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFE53E3E),
+                        containerColor = Color(0xFFFF8A95),
                         contentColor = Color.White
                     )
                 ) {

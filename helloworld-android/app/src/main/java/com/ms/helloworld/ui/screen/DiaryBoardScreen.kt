@@ -32,6 +32,7 @@ import com.ms.helloworld.viewmodel.HomeViewModel
 import com.ms.helloworld.viewmodel.DiaryViewModel
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -76,6 +77,7 @@ fun DiaryBoardScreen(
     // DiaryViewModel에서 일기 데이터 가져오기
     val diaryViewModel: DiaryViewModel = hiltViewModel()
     val diaryState by diaryViewModel.state.collectAsStateWithLifecycle()
+
 
     val backgroundColor = Color(0xFFF5F5F5)
     val title = if (diaryType == "birth") "출산일기" else "관찰일기"
@@ -369,7 +371,8 @@ fun DiaryBoardScreen(
                         title = diaryData.title,
                         content = diaryData.content,
                         imageUrl = currentDiary?.thumbnailUrl,
-                        images = currentDiary?.images
+                        images = currentDiary?.images,
+                        diaryViewModel = diaryViewModel
                     )
                 }
             }
@@ -469,7 +472,8 @@ fun TextContentSection(
     title: String,
     content: String,
     imageUrl: String? = null,
-    images: List<com.ms.helloworld.dto.response.DiaryImage>? = null
+    images: List<com.ms.helloworld.dto.response.DiaryImage>? = null,
+    diaryViewModel: DiaryViewModel
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -484,16 +488,30 @@ fun TextContentSection(
         ) {
             // 사진 공간 - images 배열의 이미지들 표시
             if (images != null && images.isNotEmpty()) {
+                // 초음파 이미지들만 필터링하여 인덱스 매핑용으로 저장
+                val ultrasoundImages = remember(images) {
+                    images.filter { it.isUltrasound }
+                }
+
                 LazyRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     contentPadding = PaddingValues(vertical = 8.dp)
                 ) {
                     items(images) { image ->
+                        // 초음파 이미지의 인덱스 계산 (캐리커쳐 API용)
+                        val ultrasoundIndex = if (image.isUltrasound) {
+                            ultrasoundImages.indexOf(image)
+                        } else -1
+
+                        Log.d("DiaryBoardScreen", "Image 데이터: imageUrl=${image.imageUrl}, isUltrasound=${image.isUltrasound}, diaryPhotoId=${image.diaryPhotoId}, ultrasoundIndex=$ultrasoundIndex")
+
                         FlippableImageCard(
                             imageUrl = image.imageUrl,
                             isUltrasound = image.isUltrasound,
-                            diaryPhotoId = image.diaryPhotoId
+                            diaryPhotoId = image.diaryPhotoId,
+                            ultrasoundIndex = ultrasoundIndex,
+                            diaryViewModel = diaryViewModel
                         )
                     }
                 }
@@ -506,7 +524,9 @@ fun TextContentSection(
                     FlippableImageCard(
                         imageUrl = imageUrl,
                         isUltrasound = false,
-                        diaryPhotoId = null // 단일 이미지의 경우 diaryPhotoId가 없을 수 있음
+                        diaryPhotoId = null, // 단일 이미지의 경우 diaryPhotoId가 없을 수 있음
+                        ultrasoundIndex = -1, // 단일 이미지는 초음파가 아니므로 -1
+                        diaryViewModel = diaryViewModel
                     )
                 }
             } else {
@@ -557,21 +577,47 @@ fun TextContentSection(
 fun FlippableImageCard(
     imageUrl: String,
     isUltrasound: Boolean,
-    diaryPhotoId: Long?
+    diaryPhotoId: Long?,
+    ultrasoundIndex: Int,
+    diaryViewModel: DiaryViewModel
 ) {
+    Log.d("FlippableImageCard", "카드 생성: imageUrl=$imageUrl, isUltrasound=$isUltrasound, diaryPhotoId=$diaryPhotoId, ultrasoundIndex=$ultrasoundIndex")
+
     var flipped by remember { mutableStateOf(false) }
     var caricatureUrl by remember { mutableStateOf<String?>(null) }
     var isLoadingCaricature by remember { mutableStateOf(false) }
     var isGeneratingCaricature by remember { mutableStateOf(false) }
 
     // 카드가 뒤집힐 때 캐리커쳐 조회
-    LaunchedEffect(flipped, diaryPhotoId) {
-        if (flipped && isUltrasound && diaryPhotoId != null && caricatureUrl == null) {
+    LaunchedEffect(key1 = "${flipped}_${diaryPhotoId ?: 0L}") {
+        Log.d("FlippableImageCard", "LaunchedEffect 실행: flipped=$flipped, isUltrasound=$isUltrasound, diaryPhotoId=$diaryPhotoId, caricatureUrl=$caricatureUrl")
+
+        if (flipped && isUltrasound && caricatureUrl == null) {
             isLoadingCaricature = true
-            // TODO: CaricatureRepository 호출하여 캐리커쳐 조회
-            // 임시로 null 처리
-            kotlinx.coroutines.delay(1000) // 로딩 시뮬레이션
-            isLoadingCaricature = false
+            try {
+                Log.d("FlippableImageCard", "캐리커쳐 조회 시작: diaryPhotoId=$diaryPhotoId, ultrasoundIndex=$ultrasoundIndex")
+
+                // diaryPhotoId가 없으면 ultrasoundIndex 기반으로 ID 생성
+                val actualPhotoId = diaryPhotoId ?: (ultrasoundIndex + 1).toLong()
+                Log.d("FlippableImageCard", "실제 사용할 diaryPhotoId: $actualPhotoId (based on ultrasoundIndex: $ultrasoundIndex)")
+
+                val result = diaryViewModel.getCaricatureFromPhoto(actualPhotoId)
+                result.onSuccess { caricature: com.ms.helloworld.dto.response.CaricatureResponse? ->
+                    if (caricature != null) {
+                        caricatureUrl = caricature.imageUrl
+                        Log.d("FlippableImageCard", "캐리커쳐 조회 성공: ${caricature.imageUrl}")
+                    } else {
+                        Log.d("FlippableImageCard", "캐리커쳐가 없음")
+                    }
+                }
+                result.onFailure { exception ->
+                    Log.e("FlippableImageCard", "캐리커쳐 조회 실패: ${exception.message}")
+                }
+            } catch (e: Exception) {
+                Log.e("FlippableImageCard", "캐리커쳐 조회 예외: ${e.message}")
+            } finally {
+                isLoadingCaricature = false
+            }
         }
     }
 
@@ -618,9 +664,34 @@ fun FlippableImageCard(
                         isLoading = isLoadingCaricature,
                         isGenerating = isGeneratingCaricature,
                         onGenerateClick = {
-                            if (diaryPhotoId != null) {
+                            Log.d("FlippableImageCard", "캐리커쳐 생성 버튼 클릭됨! diaryPhotoId=$diaryPhotoId, isGenerating=$isGeneratingCaricature")
+                            if (!isGeneratingCaricature) {
                                 isGeneratingCaricature = true
-                                // TODO: 캐리커쳐 생성 API 호출
+                                Log.d("FlippableImageCard", "캐리커쳐 생성 시작 준비: diaryPhotoId=$diaryPhotoId")
+
+                                // 캐리커쳐 생성 API 호출을 Coroutine으로 실행
+                                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+                                    try {
+                                        Log.d("FlippableImageCard", "캐리커쳐 생성 시작: diaryPhotoId=$diaryPhotoId, ultrasoundIndex=$ultrasoundIndex")
+
+                                        // diaryPhotoId가 없으면 ultrasoundIndex 기반으로 ID 생성
+                                        val actualPhotoId = diaryPhotoId ?: (ultrasoundIndex + 1).toLong()
+                                        Log.d("FlippableImageCard", "실제 사용할 diaryPhotoId: $actualPhotoId (based on ultrasoundIndex: $ultrasoundIndex)")
+
+                                        val result = diaryViewModel.generateCaricature(actualPhotoId)
+                                        result.onSuccess { caricature: com.ms.helloworld.dto.response.CaricatureResponse ->
+                                            caricatureUrl = caricature.imageUrl
+                                            Log.d("FlippableImageCard", "캐리커쳐 생성 성공: ${caricature.imageUrl}")
+                                        }
+                                        result.onFailure { exception ->
+                                            Log.e("FlippableImageCard", "캐리커쳐 생성 실패: ${exception.message}")
+                                        }
+                                    } catch (e: Exception) {
+                                        Log.e("FlippableImageCard", "캐리커쳐 생성 예외: ${e.message}")
+                                    } finally {
+                                        isGeneratingCaricature = false
+                                    }
+                                }
                             }
                         }
                     )
