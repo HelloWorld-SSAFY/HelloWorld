@@ -38,9 +38,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import com.ms.helloworld.dto.response.CalendarEventResponse
-import com.ms.helloworld.ui.components.AddCalendarEventDialog
+import com.ms.helloworld.ui.components.AddCalendarEventBottomSheet
 import com.ms.helloworld.ui.components.CustomTopAppBar
-import com.ms.helloworld.ui.components.EventDetailDialog
+import com.ms.helloworld.ui.components.EventDetailBottomSheet
 import com.ms.helloworld.ui.theme.MainColor
 import com.ms.helloworld.viewmodel.CalendarViewModel
 import java.text.SimpleDateFormat
@@ -502,7 +502,7 @@ fun CalendarScreen(
             }
         }
 
-        AddCalendarEventDialog(
+        AddCalendarEventBottomSheet(
             selectedDate = dateKeyToUse,
             initialTitle = editTitle,
             initialContent = editContent,
@@ -558,7 +558,7 @@ fun CalendarScreen(
 
     // 이벤트 상세 다이얼로그
     if (showDetailDialog && detailEvent != null) {
-        EventDetailDialog(
+        EventDetailBottomSheet(
             event = detailEvent!!,
             onDismiss = {
                 showDetailDialog = false
@@ -741,10 +741,6 @@ fun EventCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = LocalIndication.current
-            ) { onClick() }
             .graphicsLayer {
                 translationY = dragOffset
                 alpha = if (isDragging) 0.9f else 1f
@@ -762,14 +758,24 @@ fun EventCard(
                         onDragStart()
                     },
                     onDragEnd = {
-                        isLongPressed = false
                         onDragEnd(totalOffset)
+                        isLongPressed = false
                     },
                     onDrag = { change, dragAmount ->
                         totalOffset += dragAmount.y
                         onDragUpdate(totalOffset)
+                        change.consume() // 제스처 소비 추가
                     }
                 )
+            }
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = LocalIndication.current,
+                enabled = !isDragging // 드래그 중에는 클릭 비활성화
+            ) {
+                if (!isLongPressed) { // 길게 누르지 않았을 때만 클릭
+                    onClick()
+                }
             },
         colors = CardDefaults.cardColors(
             containerColor = when {

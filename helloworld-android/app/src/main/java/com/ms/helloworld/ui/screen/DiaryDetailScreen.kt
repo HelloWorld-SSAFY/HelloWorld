@@ -178,11 +178,11 @@ fun DiaryDetailScreen(
             val lmpDateString = getLmpDate()
             try {
                 val lmpDate = java.time.LocalDate.parse(lmpDateString)
-                val calculatedDate = lmpDate.plusDays(actualDayNumber.toLong())
+                val calculatedDate = lmpDate.plusDays((actualDayNumber - 1).toLong())
                 Log.d("DiaryDetailScreen", "날짜 계산 확인:")
                 Log.d("DiaryDetailScreen", "  - LMP: $lmpDateString")
                 Log.d("DiaryDetailScreen", "  - 임신일수: ${actualDayNumber}일차")
-                Log.d("DiaryDetailScreen", "  - 계산식: LMP + ${actualDayNumber}일 (수정됨)")
+                Log.d("DiaryDetailScreen", "  - 계산식: LMP + ${actualDayNumber-1}일 (수정됨)")
                 Log.d("DiaryDetailScreen", "  - 계산된 날짜: $calculatedDate")
                 Log.d("DiaryDetailScreen", "  - 오늘 날짜: ${java.time.LocalDate.now()}")
             } catch (e: Exception) {
@@ -612,19 +612,20 @@ fun DiaryContent(
     diary: DiaryEntry,
     onClick: () -> Unit
 ) {
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxSize()
-            .clickable { onClick() }
+            .clickable { onClick() },
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // 썸네일 공간 - 실제 이미지 또는 placeholder
+        // 왼쪽: 썸네일 공간 - 실제 이미지 또는 placeholder
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(80.dp)
+                .width(120.dp)
+                .height(120.dp)
                 .background(
                     Color.Gray.copy(alpha = 0.1f),
-                    RoundedCornerShape(8.dp)
+                    RoundedCornerShape(12.dp)
                 ),
             contentAlignment = Alignment.Center
         ) {
@@ -632,49 +633,58 @@ fun DiaryContent(
                 AsyncImage(
                     model = diary.imageUrl,
                     contentDescription = "일기 썸네일",
-                    modifier = Modifier
-                        .height(60.dp)
-                        .fillMaxWidth(0.3f),
+                    modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
                 )
             } else {
                 Text(
-                    text = "📸 썸네일",
-                    fontSize = 12.sp,
+                    text = "📸",
+                    fontSize = 16.sp,
                     color = Color.Gray
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        // 오른쪽: 제목, 내용, 날짜
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight(),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+                // 일기 제목
+                if (diary.title.isNotEmpty()) {
+                    Text(
+                        text = diary.title,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color.Black,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                }
 
-        // 일기 제목
-        if (diary.title.isNotEmpty()) {
+                // 일기 내용
+                Text(
+                    text = diary.content,
+                    fontSize = 13.sp,
+                    color = Color.Black,
+                    lineHeight = 20.sp,
+                    maxLines = 4,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                )
+            }
+
+            // 작성 날짜 (하단 우측)
             Text(
-                text = diary.title,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                color = Color.Black,
-                modifier = Modifier.padding(bottom = 8.dp)
+                text = diary.date,
+                fontSize = 11.sp,
+                color = Color.Gray,
+                modifier = Modifier.align(Alignment.End)
             )
         }
-
-        // 일기 내용
-        Text(
-            text = diary.content,
-            fontSize = 13.sp,
-            color = Color.Black,
-            lineHeight = 20.sp,
-            modifier = Modifier.weight(1f)
-        )
-
-        // 작성 날짜
-        Text(
-            text = diary.date,
-            fontSize = 11.sp,
-            color = Color.Gray,
-            modifier = Modifier.align(Alignment.End)
-        )
     }
 }
 

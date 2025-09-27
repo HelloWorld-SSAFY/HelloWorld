@@ -1,8 +1,8 @@
 package com.ms.helloworld.ui.components
 
-import androidx.compose.animation.*
-import androidx.compose.animation.core.*
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,13 +17,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import java.text.SimpleDateFormat
+import java.time.LocalTime
 import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddCalendarEventDialog(
+fun AddCalendarEventBottomSheet(
     selectedDate: String,
     initialTitle: String = "",
     initialContent: String = "",
@@ -34,11 +34,11 @@ fun AddCalendarEventDialog(
     onDismiss: () -> Unit,
     onSave: (title: String, content: String, startTime: String, endTime: String, isRemind: Boolean, orderNo: Int) -> Unit
 ) {
-    var title by remember { mutableStateOf(initialTitle) }
-    var content by remember { mutableStateOf(initialContent) }
-    var startTime by remember { mutableStateOf(initialStartTime) }
-    var endTime by remember { mutableStateOf(initialEndTime) }
-    var isRemind by remember { mutableStateOf(initialIsRemind) }
+    var title by remember(initialTitle) { mutableStateOf(initialTitle) }
+    var content by remember(initialContent) { mutableStateOf(initialContent) }
+    var startTime by remember(initialStartTime) { mutableStateOf(initialStartTime) }
+    var endTime by remember(initialEndTime) { mutableStateOf(initialEndTime) }
+    var isRemind by remember(initialIsRemind) { mutableStateOf(initialIsRemind) }
     var offsetX by remember { mutableStateOf(0f) }
 
     // TimePicker 상태
@@ -46,43 +46,26 @@ fun AddCalendarEventDialog(
     var showEndTimePicker by remember { mutableStateOf(false) }
 
 
-    // 등장 애니메이션
-    var isVisible by remember { mutableStateOf(false) }
-
-    LaunchedEffect(Unit) {
-        isVisible = true
-    }
-
-    Dialog(onDismissRequest = onDismiss) {
-        AnimatedVisibility(
-            visible = isVisible,
-            enter = slideInHorizontally(
-                initialOffsetX = { it },
-                animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioMediumBouncy,
-                    stiffness = Spring.StiffnessMedium
-                )
-            ) + fadeIn(animationSpec = tween(300)),
-            exit = slideOutHorizontally(
-                targetOffsetX = { it },
-                animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioNoBouncy,
-                    stiffness = Spring.StiffnessMedium
-                )
-            ) + fadeOut(animationSpec = tween(200))
-        ) {
-            Card(
+    // BottomSheet 사용
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        dragHandle = {
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .wrapContentHeight(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .padding(24.dp)
-                        .verticalScroll(rememberScrollState())
-                ) {
+                    .padding(vertical = 8.dp)
+                    .size(width = 32.dp, height = 4.dp)
+                    .background(
+                        Color.Gray.copy(alpha = 0.4f),
+                        RoundedCornerShape(2.dp)
+                    )
+            )
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(24.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
                     // 헤더
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -130,48 +113,62 @@ fun AddCalendarEventDialog(
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         // 시작 시간
-                        OutlinedTextField(
-                            value = startTime,
-                            onValueChange = { },
-                            label = { Text("시작 시간", fontSize = 14.sp) },
-                            placeholder = { Text("09:00", fontSize = 14.sp) },
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable {
-                                    showStartTimePicker = true
-                                },
-                            singleLine = true,
-                            readOnly = true,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = Color.Black,
-                                focusedLabelColor = Color.Black,
-                                unfocusedBorderColor = Color.Gray,
-                                unfocusedLabelColor = Color.Gray,
-                                disabledTextColor = Color.Black
+                        Box(Modifier.weight(1f)) {
+                            OutlinedTextField(
+                                value = startTime,
+                                onValueChange = { }, // 읽기전용
+                                label = { Text("시작 시간", fontSize = 14.sp) },
+                                placeholder = { Text("09:00", fontSize = 14.sp) },
+                                readOnly = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = Color.Black,
+                                    focusedLabelColor = Color.Black,
+                                    unfocusedBorderColor = Color.Gray,
+                                    unfocusedLabelColor = Color.Gray,
+                                    disabledTextColor = Color.Black
+                                )
                             )
-                        )
+
+                            // 클릭을 확실히 잡는 투명 오버레이
+                            Spacer(
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .clickable(
+                                        indication = null,
+                                        interactionSource = remember { MutableInteractionSource() }
+                                    ) { showStartTimePicker = true }
+                            )
+                        }
 
                         // 종료 시간
-                        OutlinedTextField(
-                            value = endTime,
-                            onValueChange = { },
-                            label = { Text("종료 시간", fontSize = 14.sp) },
-                            placeholder = { Text("10:00", fontSize = 14.sp) },
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable {
-                                    showEndTimePicker = true
-                                },
-                            singleLine = true,
-                            readOnly = true,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = Color.Black,
-                                focusedLabelColor = Color.Black,
-                                unfocusedBorderColor = Color.Gray,
-                                unfocusedLabelColor = Color.Gray,
-                                disabledTextColor = Color.Black
+                        Box(Modifier.weight(1f)) {
+                            OutlinedTextField(
+                                value = endTime,
+                                onValueChange = { },
+                                label = { Text("종료 시간", fontSize = 14.sp) },
+                                placeholder = { Text("10:00", fontSize = 14.sp) },
+                                modifier = Modifier,
+                                singleLine = true,
+                                readOnly = true,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = Color.Black,
+                                    focusedLabelColor = Color.Black,
+                                    unfocusedBorderColor = Color.Gray,
+                                    unfocusedLabelColor = Color.Gray,
+                                    disabledTextColor = Color.Black
+                                )
                             )
-                        )
+                            Spacer(
+                                    modifier = Modifier
+                                        .matchParentSize()
+                                        .clickable(
+                                            indication = null,
+                                            interactionSource = remember { MutableInteractionSource() }
+                                        ) { showEndTimePicker = true }
+                                    )
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
@@ -258,35 +255,49 @@ fun AddCalendarEventDialog(
                             Text("저장", fontSize = 14.sp, fontWeight = FontWeight.Medium)
                         }
                     }
-                }
-            }
-        }
-    }
+        } // Column 닫기
+    } // BottomSheet 닫기
 
-    // 시작 시간 커스텀 TimePicker Dialog
+    // 시작 시간 TimePicker
     if (showStartTimePicker) {
-        CustomTimePickerDialog(
-            initialTime = startTime,
-            onDismiss = { showStartTimePicker = false },
+        KoreanTimePicker(
+            time = try {
+                val parts = startTime.split(":")
+                LocalTime.of(parts[0].toInt(), parts[1].toInt())
+            } catch (e: Exception) {
+                LocalTime.of(9, 0)
+            },
             onTimeSelected = { selectedTime ->
-                startTime = selectedTime
+                startTime = String.format("%02d:%02d", selectedTime.hour, selectedTime.minute)
                 showStartTimePicker = false
-            }
+            },
+            onDismiss = { showStartTimePicker = false },
+            is24Hour = true,
+            minuteStep = 1
         )
     }
 
-    // 종료 시간 커스텀 TimePicker Dialog
+    // 종료 시간 TimePicker
     if (showEndTimePicker) {
-        CustomTimePickerDialog(
-            initialTime = endTime,
-            onDismiss = { showEndTimePicker = false },
+        KoreanTimePicker(
+            time = try {
+                val parts = endTime.split(":")
+                LocalTime.of(parts[0].toInt(), parts[1].toInt())
+            } catch (e: Exception) {
+                LocalTime.of(10, 0)
+            },
             onTimeSelected = { selectedTime ->
-                endTime = selectedTime
+                endTime = String.format("%02d:%02d", selectedTime.hour, selectedTime.minute)
                 showEndTimePicker = false
-            }
+            },
+            onDismiss = { showEndTimePicker = false },
+            is24Hour = true,
+            minuteStep = 1
         )
     }
+
 }
+
 
 private fun formatDateForDisplay(dateKey: String): String {
     return try {

@@ -18,14 +18,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.ms.helloworld.dto.response.CalendarEventResponse
 import java.text.SimpleDateFormat
 import java.util.*
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EventDetailDialog(
+fun EventDetailBottomSheet(
     event: CalendarEventResponse,
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
@@ -33,20 +32,24 @@ fun EventDetailDialog(
 ) {
     var showDeleteConfirmation by remember { mutableStateOf(false) }
 
-    Dialog(
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            dismissOnBackPress = true,
-            dismissOnClickOutside = true
-        )
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .padding(vertical = 8.dp)
+                    .size(width = 32.dp, height = 4.dp)
+                    .background(
+                        Color.Gray.copy(alpha = 0.4f),
+                        RoundedCornerShape(2.dp)
+                    )
+            )
+        },
     ) {
-        Card(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                .padding(24.dp)
         ) {
             Column(
                 modifier = Modifier

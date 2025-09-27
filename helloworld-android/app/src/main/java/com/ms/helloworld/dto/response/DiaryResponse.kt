@@ -3,6 +3,7 @@ package com.ms.helloworld.dto.response
 import com.google.gson.annotations.SerializedName
 
 data class DiaryImage(
+    @SerializedName("diaryPhotoId") val diaryPhotoId: Long? = null,
     @SerializedName("imageUrl") val imageUrl: String,
     @SerializedName("ultrasound") val isUltrasound: Boolean = false
 )

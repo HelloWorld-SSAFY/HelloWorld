@@ -3,6 +3,7 @@ package com.ms.helloworld.ui.screen
 import android.annotation.SuppressLint
 import android.util.Log
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -16,12 +17,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import coil.compose.AsyncImage
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.navigation.NavHostController
 import com.ms.helloworld.viewmodel.HomeViewModel
 import com.ms.helloworld.viewmodel.DiaryViewModel
@@ -482,47 +487,27 @@ fun TextContentSection(
             if (images != null && images.isNotEmpty()) {
                 LazyRow(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                     contentPadding = PaddingValues(vertical = 8.dp)
                 ) {
                     items(images) { image ->
-                        AsyncImage(
-                            model = image.imageUrl,
-                            contentDescription = if (image.isUltrasound) "초음파 사진" else "일기 사진",
-                            modifier = Modifier
-                                .width(250.dp)
-                                .height(180.dp)
-                                .background(
-                                    Color.Gray.copy(alpha = 0.1f),
-                                    RoundedCornerShape(8.dp)
-                                ),
-                            contentScale = ContentScale.Fit
+                        FlippableImageCard(
+                            imageUrl = image.imageUrl,
+                            isUltrasound = image.isUltrasound,
+                            diaryPhotoId = image.diaryPhotoId
                         )
                     }
                 }
             } else if (!imageUrl.isNullOrEmpty()) {
                 // 백업용: 단일 imageUrl이 있는 경우
                 Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(200.dp)
-                        .background(
-                            Color.Gray.copy(alpha = 0.1f),
-                            RoundedCornerShape(8.dp)
-                        ),
+                    modifier = Modifier.fillMaxWidth(),
                     contentAlignment = Alignment.Center
                 ) {
-                    AsyncImage(
-                        model = imageUrl,
-                        contentDescription = "일기 사진",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(180.dp)
-                            .background(
-                                Color.Gray.copy(alpha = 0.1f),
-                                RoundedCornerShape(8.dp)
-                            ),
-                        contentScale = ContentScale.Fit
+                    FlippableImageCard(
+                        imageUrl = imageUrl,
+                        isUltrasound = false,
+                        diaryPhotoId = null // 단일 이미지의 경우 diaryPhotoId가 없을 수 있음
                     )
                 }
             } else {
@@ -565,6 +550,253 @@ fun TextContentSection(
                 color = Color.Black,
                 lineHeight = 22.sp
             )
+        }
+    }
+}
+
+@Composable
+fun FlippableImageCard(
+    imageUrl: String,
+    isUltrasound: Boolean,
+    diaryPhotoId: Long?
+) {
+    var flipped by remember { mutableStateOf(false) }
+    var caricatureUrl by remember { mutableStateOf<String?>(null) }
+    var isLoadingCaricature by remember { mutableStateOf(false) }
+    var isGeneratingCaricature by remember { mutableStateOf(false) }
+
+    // 카드가 뒤집힐 때 캐리커쳐 조회
+    LaunchedEffect(flipped, diaryPhotoId) {
+        if (flipped && isUltrasound && diaryPhotoId != null && caricatureUrl == null) {
+            isLoadingCaricature = true
+            // TODO: CaricatureRepository 호출하여 캐리커쳐 조회
+            // 임시로 null 처리
+            kotlinx.coroutines.delay(1000) // 로딩 시뮬레이션
+            isLoadingCaricature = false
+        }
+    }
+
+    val flip by animateFloatAsState(
+        targetValue = if (flipped && isUltrasound) 180f else 0f,
+        animationSpec = tween(600),
+        label = "flip"
+    )
+    val cameraDistancePx = with(LocalDensity.current) { 12.dp.toPx() }
+
+    Card(
+        modifier = Modifier
+            .width(320.dp)
+            .height(240.dp)
+            .clickable {
+                if (isUltrasound) {
+                    flipped = !flipped
+                }
+            }
+            .graphicsLayer {
+                rotationY = if (isUltrasound) flip else 0f
+                cameraDistance = cameraDistancePx
+            },
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Gray.copy(alpha = 0.1f)),
+            contentAlignment = Alignment.Center
+        ) {
+            if (flipped && isUltrasound) {
+                // 카드 뒷면 - 캐리커쳐 영역 (텍스트가 정상적으로 보이도록 다시 180도 회전)
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            rotationY = 180f // 뒷면 내용을 다시 180도 회전시켜 정상 방향으로
+                        }
+                ) {
+                    CaricatureBackSide(
+                        caricatureUrl = caricatureUrl,
+                        isLoading = isLoadingCaricature,
+                        isGenerating = isGeneratingCaricature,
+                        onGenerateClick = {
+                            if (diaryPhotoId != null) {
+                                isGeneratingCaricature = true
+                                // TODO: 캐리커쳐 생성 API 호출
+                            }
+                        }
+                    )
+                }
+            } else {
+                // 카드 앞면 - 원본 이미지
+                AsyncImage(
+                    model = imageUrl,
+                    contentDescription = if (isUltrasound) "초음파 사진" else "일기 사진",
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(8.dp),
+                    contentScale = ContentScale.Fit
+                )
+
+                // 초음파 사진인 경우 배지 표시
+                if (isUltrasound) {
+                    Card(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(12.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color(0xFFF49699).copy(alpha = 0.9f)
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            text = "초음파",
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color.White
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun CaricatureBackSide(
+    caricatureUrl: String?,
+    isLoading: Boolean,
+    isGenerating: Boolean,
+    onGenerateClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        when {
+            isLoading -> {
+                // 캐리커쳐 조회 중
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(40.dp),
+                        color = Color(0xFFF49699)
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "캐리커쳐 확인 중...",
+                        fontSize = 14.sp,
+                        color = Color.Gray
+                    )
+                }
+            }
+
+            isGenerating -> {
+                // 캐리커쳐 생성 중
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(40.dp),
+                        color = Color(0xFFF49699)
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "캐리커쳐 생성 중...",
+                        fontSize = 14.sp,
+                        color = Color.Gray
+                    )
+                    Text(
+                        text = "잠시만 기다려주세요",
+                        fontSize = 12.sp,
+                        color = Color.Gray.copy(alpha = 0.7f)
+                    )
+                }
+            }
+
+            caricatureUrl != null -> {
+                // 캐리커쳐가 있는 경우
+                AsyncImage(
+                    model = caricatureUrl,
+                    contentDescription = "아기 캐리커쳐",
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(8.dp),
+                    contentScale = ContentScale.Fit
+                )
+
+                // 캐리커쳐 배지
+                Card(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(12.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color(0xFF88A9F8).copy(alpha = 0.9f)
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        text = "캐리커쳐",
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color.White
+                    )
+                }
+            }
+
+            else -> {
+                // 캐리커쳐가 없는 경우 - 생성 버튼 표시
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Face,
+                        contentDescription = "캐리커쳐",
+                        modifier = Modifier.size(48.dp),
+                        tint = Color.Gray.copy(alpha = 0.5f)
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Text(
+                        text = "아직 캐리커쳐가 없어요",
+                        fontSize = 14.sp,
+                        color = Color.Gray,
+                        fontWeight = FontWeight.Medium
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Button(
+                        onClick = onGenerateClick,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFF49699)
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .padding(horizontal = 16.dp)
+                            .height(48.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AccountCircle,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "캐리커쳐 생성",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color.White
+                        )
+                    }
+                }
+            }
         }
     }
 }

@@ -86,7 +86,7 @@ fun DiaryRegisterScreen(
         val lmpDateString = getLmpDate()
         val lmpDate = LocalDate.parse(lmpDateString)
 
-        // 수정된 계산: 마지막 생리일 + day일 (day일차는 LMP + day일)
+        // 수정된 계산: day일차는 LMP + day일 (1일차 = LMP + 1일)
         val actualDate = lmpDate.plusDays(day.toLong())
         actualDate.format(DateTimeFormatter.ofPattern("yyyy년 MM월 dd일"))
     }
@@ -95,7 +95,7 @@ fun DiaryRegisterScreen(
         val lmpDateString = getLmpDate()
         val lmpDate = LocalDate.parse(lmpDateString)
 
-        // 수정된 계산: 마지막 생리일 + day일 (day일차는 LMP + day일)
+        // 수정된 계산: day일차는 LMP + day일 (1일차 = LMP + 1일)
         val actualDate = lmpDate.plusDays(day.toLong())
         val result = actualDate.toString() // yyyy-MM-dd 형식
 
@@ -479,28 +479,17 @@ fun DiaryRegisterScreen(
                                 Log.d("DiaryRegisterScreen", "사진[$index]: $photo, 초음파 여부: $isUltrasound")
                             }
 
-                            // 선택된 사진이 있으면 Multipart 업로드, 없으면 기존 방식
-                            if (selectedPhotos.isNotEmpty()) {
-                                Log.d("DiaryRegisterScreen", "🚀 Multipart 업로드 시작")
-                                diaryViewModel.createDiaryWithFiles(
-                                    title = diaryTitle,
-                                    content = diaryContent,
-                                    targetDate = targetDateForApi,
-                                    authorRole = authorRole,
-                                    authorId = userId ?: 0L,
-                                    imageUris = selectedPhotos,
-                                    ultrasounds = ultrasounds
-                                )
-                            } else {
-                                Log.d("DiaryRegisterScreen", "📝 기존 방식 업로드 (사진 없음)")
-                                diaryViewModel.createDiary(
-                                    title = diaryTitle,
-                                    content = diaryContent,
-                                    targetDate = targetDateForApi,
-                                    authorRole = authorRole,
-                                    authorId = userId ?: 0L
-                                )
-                            }
+                            // 모든 일기 등록을 Multipart 방식으로 통일 (서버가 JSON을 지원하지 않음)
+                            Log.d("DiaryRegisterScreen", "🚀 Multipart 업로드 시작 (사진 ${selectedPhotos.size}장)")
+                            diaryViewModel.createDiaryWithFiles(
+                                title = diaryTitle,
+                                content = diaryContent,
+                                targetDate = targetDateForApi,
+                                authorRole = authorRole,
+                                authorId = userId ?: 0L,
+                                imageUris = selectedPhotos, // 빈 리스트여도 상관없음
+                                ultrasounds = ultrasounds
+                            )
                         }
                     }
                 }

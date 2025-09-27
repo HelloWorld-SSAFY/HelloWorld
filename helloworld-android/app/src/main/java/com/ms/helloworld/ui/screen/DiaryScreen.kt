@@ -168,7 +168,7 @@ fun DiaryScreen(
             for (day in weekStartDay..weekEndDay) {
                 val targetDate = try {
                     val lmpDate = java.time.LocalDate.parse(menstrualDate)
-                    lmpDate.plusDays(day.toLong())
+                    lmpDate.plusDays((day - 1).toLong())
                 } catch (e: Exception) {
                     null
                 }
