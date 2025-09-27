@@ -5,10 +5,13 @@ import com.google.firebase.messaging.FirebaseMessaging;
 import com.google.firebase.messaging.Message;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.ResponseEntity;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Slf4j
@@ -18,6 +21,7 @@ public class FcmService {
 
     private final UserServerClient userClient;
 
+    // === 응급 알림 + 결과 기록 (기존 유지) ===
     @Async
     public void sendEmergencyTripleAndRecord(Long alarmId, Long measuredUserId, int hr, String title, String body) {
         try {
@@ -41,11 +45,11 @@ public class FcmService {
                 }
             }
 
-            // 3) 공통 데이터
+            // 3) 공통 데이터 (기본 카피)
             Map<String,String> data = Map.of(
                     "type","EMERGENCY",
                     "title", title != null ? title : "심박수 이상 감지",
-                    "body",  body  != null ? body  : String.format("현재 심박수가 %dBPM을 초과했습니다. 상태를 확인해주세요.", hr)
+                    "body",  body  != null ? body  : String.format("현재 심박수가 %dBPM입니다. 상태를 확인해주세요.", hr)
             );
 
             // 4) 3건 전송 + 결과 수집
@@ -76,28 +80,10 @@ public class FcmService {
         }
     }
 
-    // === 헬퍼: 토큰 존재 시만 전송 ===
-    private void sendIfPresent(String token, Map<String,String> data, Long ownerUserId, String label) {
-        if (token == null || token.isBlank()) {
-            log.debug("[FCM] skip empty token label={} user={}", label, ownerUserId);
-            return;
-        }
-        try {
-            Message msg = Message.builder().putAllData(data).setToken(token).build();
-            String res = FirebaseMessaging.getInstance().send(msg);
-            log.info("[FCM] ok label={} user={} res={}", label, ownerUserId, res);
-        } catch (com.google.firebase.messaging.FirebaseMessagingException e) {
-            // 필요 시: SENDER_ID_MISMATCH 등 코드별 처리 추가 가능
-            log.warn("[FCM] fail label={} user={} code={}", label, ownerUserId, e.getMessagingErrorCode(), e);
-        } catch (Exception e) {
-            log.error("[FCM] fail label={} user={}", label, ownerUserId, e);
-        }
-    }
-
+    // === 리마인더 발송 ===
     @Async
     public void sendReminderNotification(Long userId, String title, String body) {
         try {
-            // 1) 유저의 ANDROID / WATCH 최신 1개씩 조회
             String androidToken = null, watchToken = null;
             var resp = userClient.latestTwo(userId);
             if (resp != null && resp.getStatusCode().is2xxSuccessful() && resp.getBody() != null) {
@@ -107,14 +93,12 @@ public class FcmService {
                 log.warn("[FCM-REMINDER] latestTwo empty user={}", userId);
             }
 
-            // 2) 공통 데이터 페이로드
             Map<String,String> data = Map.of(
                     "type", "REMINDER",
                     "title", title,
                     "body",  body
             );
 
-            // 3) 두 군데 발송 (모바일 1, 워치 1)
             sendIfPresent(androidToken, data, userId, "ANDROID_REMINDER");
             sendIfPresent(watchToken,   data, userId, "WATCH_REMINDER");
 
@@ -123,38 +107,31 @@ public class FcmService {
         }
     }
 
-    private static class SendResult {
-        final boolean success; final String messageId; final String errorCode;
-        SendResult(boolean s, String id, String err){ this.success=s; this.messageId=id; this.errorCode=err; }
-    }
-
-    private SendResult sendOne(String token, Map<String,String> data, Long ownerUserId, String label) {
-        if (token == null || token.isBlank()) {
-            log.debug("[FCM] skip empty token label={} user={}", label, ownerUserId);
-            return new SendResult(false, null, "NO_TOKEN");
-        }
-        try {
-            var msg = Message.builder().putAllData(data).setToken(token).build();
-            String res = FirebaseMessaging.getInstance().send(msg); // messageId
-            log.info("[FCM] ok label={} user={} msgId={}", label, ownerUserId, res);
-            return new SendResult(true, res, null);
-        } catch (com.google.firebase.messaging.FirebaseMessagingException e) {
-            var code = e.getMessagingErrorCode() != null ? e.getMessagingErrorCode().name() : "UNKNOWN";
-            log.warn("[FCM] fail label={} user={} code={}", label, ownerUserId, code, e);
-            return new SendResult(false, null, code);
-        } catch (Exception e) {
-            log.error("[FCM] error label={} user={}", label, ownerUserId, e);
-            return new SendResult(false, null, "EXCEPTION");
-        }
-    }
-
-    /**
-     * AI 서버 응답을 받아 위급 상황별 알림 전송 (확장된 버전)
-     */
+    // === AI 응답을 반영해 상황별 문구/페이로드로 발송 (쿨다운 미포함 오버로드) ===
     @Async
-    public void sendEmergencyTripleWithAiResponse(Long measuredUserId, int hr, String mode, String riskLevel, java.util.List<String> reasons) {
+    public void sendEmergencyTripleWithAiResponse(
+            Long measuredUserId,
+            int hr,
+            String mode,
+            String riskLevel,
+            List<String> reasons
+    ) {
+        sendEmergencyTripleWithAiResponse(measuredUserId, hr, mode, riskLevel, reasons, null, null);
+    }
+
+    // === AI 응답을 반영해 상황별 문구/페이로드로 발송 (쿨다운 포함) ===
+    @Async
+    public void sendEmergencyTripleWithAiResponse(
+            Long measuredUserId,
+            int hr,
+            String mode,                                // "restrict" | "emergency" | "normal"
+            String riskLevel,                           // 필요시 사용
+            List<String> reasons,                       // 예: ["HR low"], ["HR high"], ["stress high"], ["|HR_Z|>=5 x3"], ["HR>=150 for 120s"], ["HR<=45 for 120s"]
+            OffsetDateTime restrictCooldownUntil,       // restrict 전용
+            OffsetDateTime emergencyCooldownUntil       // emergency 전용
+    ) {
         try {
-            // 1) 본인 ANDROID / WATCH 최신 토큰
+            // 1) 본인 토큰
             String androidToken = null, watchToken = null;
             var twoResp = userClient.latestTwo(measuredUserId);
             if (twoResp != null && twoResp.getStatusCode().is2xxSuccessful() && twoResp.getBody() != null) {
@@ -164,7 +141,7 @@ public class FcmService {
                 log.warn("[FCM] latestTwo empty user={}", measuredUserId);
             }
 
-            // 2) 파트너 ANDROID 최신 토큰
+            // 2) 파트너 토큰
             Long partnerId = null;
             String partnerAndroidToken = null;
             var pidResp = userClient.partnerId(measuredUserId);
@@ -180,35 +157,35 @@ public class FcmService {
                 log.warn("[FCM] partnerId not found for user={}", measuredUserId);
             }
 
-            // 3) AI 서버 응답 기반 위급 메시지 생성
-            EmergencyMessage emergencyMsg = generateEmergencyMessage(hr, mode, riskLevel, reasons);
+            // 3) 이유 정규화 + 문구 생성
+            String reasonCode = normalizeReason(reasons); // HR_HIGH / HR_LOW / STRESS_HIGH / HR_Z_SPIKE / HR_HIGH_120S / HR_LOW_120S / UNKNOWN
+            TitleBody copy = ("emergency".equalsIgnoreCase(mode))
+                    ? makeEmergencyCopy(hr, reasonCode)
+                    : ("restrict".equalsIgnoreCase(mode)
+                    ? makeRestrictCopy(hr, reasonCode)
+                    : makeNormalCopy(hr, reasonCode, riskLevel));
 
-            // 4) 본인용 데이터 (자세한 정보 포함)
-            Map<String,String> selfData = Map.of(
-                    "type", "EMERGENCY",
-                    "mode", mode != null ? mode : "normal",
-                    "risk_level", riskLevel != null ? riskLevel : "low",
-                    "title", emergencyMsg.title,
-                    "body", emergencyMsg.selfBody
-            );
+            // 4) FCM 데이터 구성
+            Map<String,String> selfData = new HashMap<>();
+            selfData.put("type", "EMERGENCY");        // 앱 호환용
+            selfData.put("mode", safe(mode));         // restrict/emergency/normal
+            selfData.put("reason_code", reasonCode);  // 정규화된 이유 코드
+            selfData.put("title", copy.title());
+            selfData.put("body",  copy.selfBody());
+            selfData.put("hr", Integer.toString(hr));
+            putIfNotBlank(selfData, "restrict_cooldown_until", fmtOffset(restrictCooldownUntil));
+            putIfNotBlank(selfData, "emergency_cooldown_until", fmtOffset(emergencyCooldownUntil));
 
-            // 5) 파트너용 데이터 (걱정과 행동 유도 메시지)
-            Map<String,String> partnerData = Map.of(
-                    "type", "EMERGENCY",
-                    "mode", mode != null ? mode : "normal",
-                    "risk_level", riskLevel != null ? riskLevel : "low",
-                    "title", emergencyMsg.title,
-                    "body", emergencyMsg.partnerBody
-            );
+            Map<String,String> partnerData = new HashMap<>(selfData);
+            partnerData.put("body", copy.partnerBody());
 
-            // 6) 본인에게 발송 (ANDROID, WATCH)
+            // 5) 본인에게 발송 (ANDROID, WATCH)
             sendIfPresent(androidToken, selfData, measuredUserId, "ANDROID");
             sendIfPresent(watchToken,   selfData, measuredUserId, "WATCH");
 
-            // 7) 파트너에게 발송 (ANDROID) - emergency/restrict 모드일 때만
-            if ("emergency".equals(mode) || "restrict".equals(mode)) {
+            // 6) restrict/emergency 모드일 때만 파트너 발송
+            if ("emergency".equalsIgnoreCase(mode) || "restrict".equalsIgnoreCase(mode)) {
                 sendIfPresent(partnerAndroidToken, partnerData, partnerId, "PARTNER_ANDROID");
-                log.info("[FCM] Emergency/Restrict mode - notified partner for user={}", measuredUserId);
             } else {
                 log.debug("[FCM] Normal mode - skipping partner notification for user={}", measuredUserId);
             }
@@ -218,6 +195,7 @@ public class FcmService {
         }
     }
 
+    // === 단순 응급 알림(기본 카피) ===
     @Async
     public void sendEmergencyTriple(Long measuredUserId, int hr) {
         try {
@@ -247,28 +225,31 @@ public class FcmService {
                 log.warn("[FCM] partnerId not found for user={}", measuredUserId);
             }
 
-            // 3) AI 서버 응답 기반 위급 메시지 생성 (기본값으로 처리)
-            EmergencyMessage emergencyMsg = generateEmergencyMessage(hr, "normal", "low", null);
+            // 3) 기본(노멀) 카피
+            TitleBody copy = makeNormalCopy(hr, "UNKNOWN", "low");
 
-            // 4) 본인용 데이터 (자세한 정보 포함)
             Map<String,String> selfData = Map.of(
                     "type", "EMERGENCY",
-                    "title", emergencyMsg.title,
-                    "body", emergencyMsg.selfBody
+                    "mode", "normal",
+                    "reason_code", "UNKNOWN",
+                    "title", copy.title(),
+                    "body",  copy.selfBody(),
+                    "hr", Integer.toString(hr)
             );
-
-            // 5) 파트너용 데이터 (걱정과 행동 유도 메시지)
             Map<String,String> partnerData = Map.of(
                     "type", "EMERGENCY",
-                    "title", emergencyMsg.title,
-                    "body", emergencyMsg.partnerBody
+                    "mode", "normal",
+                    "reason_code", "UNKNOWN",
+                    "title", copy.title(),
+                    "body",  copy.partnerBody(),
+                    "hr", Integer.toString(hr)
             );
 
-            // 6) 본인에게 발송 (ANDROID, WATCH)
+            // 4) 본인에게 발송 (ANDROID, WATCH)
             sendIfPresent(androidToken, selfData, measuredUserId, "ANDROID");
             sendIfPresent(watchToken,   selfData, measuredUserId, "WATCH");
 
-            // 7) 파트너에게 발송 (ANDROID)
+            // 5) 파트너에게 발송
             sendIfPresent(partnerAndroidToken, partnerData, partnerId, "PARTNER_ANDROID");
 
         } catch (Exception e) {
@@ -276,151 +257,167 @@ public class FcmService {
         }
     }
 
-    /**
-     * AI 서버 응답에 따른 위급 상황별 메시지 생성
-     */
-    private EmergencyMessage generateEmergencyMessage(int hr, String mode, String riskLevel, java.util.List<String> reasons) {
-        String title;
-        String selfBody;
-        String partnerBody;
-
-        // AI 서버 응답의 mode에 따른 분기 처리
-        switch (mode != null ? mode.toLowerCase() : "normal") {
-            case "emergency":
-                return generateEmergencyModeMessage(hr, reasons);
-            case "restrict":
-                return generateRestrictModeMessage(hr, reasons);
-            case "normal":
-            default:
-                return generateNormalModeMessage(hr, riskLevel);
+    // === 토큰 존재 시만 전송 ===
+    private void sendIfPresent(String token, Map<String,String> data, Long ownerUserId, String label) {
+        if (token == null || token.isBlank()) {
+            log.debug("[FCM] skip empty token label={} user={}", label, ownerUserId);
+            return;
+        }
+        try {
+            Message msg = Message.builder().putAllData(data).setToken(token).build();
+            String res = FirebaseMessaging.getInstance().send(msg);
+            log.info("[FCM] ok label={} user={} res={}", label, ownerUserId, res);
+        } catch (com.google.firebase.messaging.FirebaseMessagingException e) {
+            log.warn("[FCM] fail label={} user={} code={}", label, ownerUserId, e.getMessagingErrorCode(), e);
+        } catch (Exception e) {
+            log.error("[FCM] fail label={} user={}", label, ownerUserId, e);
         }
     }
 
-    /**
-     * Emergency 모드 메시지 생성 (critical 상황)
-     */
-    private EmergencyMessage generateEmergencyModeMessage(int hr, java.util.List<String> reasons) {
-        String reasonText = reasons != null && !reasons.isEmpty()
-                ? String.join(", ", reasons)
-                : "지속적인 이상 수치";
-
-        String title = "🚨 응급 상황 감지";
-        String selfBody = String.format(
-                "현재 심박수 %dBPM - 응급 상황이 감지되었습니다.\n" +
-                        "감지 사유: %s\n" +
-                        "즉시 안전한 곳으로 이동하여 휴식을 취하고, 필요시 응급실에 연락하세요.",
-                hr, reasonText
-        );
-        String partnerBody = String.format(
-                "🚨 파트너에게 응급 상황이 감지되었습니다!\n" +
-                        "심박수: %dBPM\n" +
-                        "감지 사유: %s\n" +
-                        "즉시 연락하여 안전 상태를 확인해주세요.",
-                hr, reasonText
-        );
-
-        return new EmergencyMessage(title, selfBody, partnerBody);
-    }
-
-    /**
-     * Restrict 모드 메시지 생성 (이상 감지, 3회 연속)
-     */
-    private EmergencyMessage generateRestrictModeMessage(int hr, java.util.List<String> reasons) {
-        String reasonText = reasons != null && !reasons.isEmpty()
-                ? String.join(", ", reasons)
-                : "연속 이상 수치";
-
-        String title = "⚠️ 건강 이상 감지";
-        String selfBody = String.format(
-                "현재 심박수 %dBPM - 건강 이상이 감지되었습니다.\n" +
-                        "감지 사유: %s\n" +
-                        "즉시 활동을 중단하고 호흡을 정리하며 충분한 휴식을 취해주세요.",
-                hr, reasonText
-        );
-        String partnerBody = String.format(
-                "⚠️ 파트너의 건강 이상이 감지되었습니다.\n" +
-                        "심박수: %dBPM\n" +
-                        "감지 사유: %s\n" +
-                        "상태를 확인하고 도움이 필요한지 연락해보세요.",
-                hr, reasonText
-        );
-
-        return new EmergencyMessage(title, selfBody, partnerBody);
-    }
-
-    /**
-     * Normal 모드 메시지 생성 (기존 심박수 범위별 처리)
-     */
-    private EmergencyMessage generateNormalModeMessage(int hr, String riskLevel) {
-        String title;
-        String selfBody;
-        String partnerBody;
-
-        // risk_level 고려한 추가 분기
-        if ("high".equals(riskLevel)) {
-            title = "⚠️ 심박수 주의";
-            selfBody = String.format("현재 심박수가 %dBPM으로 주의가 필요합니다. 천천히 호흡하며 휴식을 취해주세요.", hr);
-            partnerBody = String.format("파트너의 심박수가 %dBPM으로 평소보다 높습니다. 상태를 확인해보세요.", hr);
-        } else if (hr >= 180) {
-            // 극도로 높은 심박수 (180 이상)
-            title = "🚨 심각한 심박수 이상";
-            selfBody = String.format("현재 심박수가 %dBPM으로 매우 위험한 수준입니다. 즉시 휴식을 취하고 필요시 응급실에 연락하세요.", hr);
-            partnerBody = String.format("파트너의 심박수가 %dBPM으로 위험한 상태입니다. 즉시 연락하여 상태를 확인해주세요.", hr);
-        } else if (hr >= 160) {
-            // 매우 높은 심박수 (160-179)
-            title = "⚠️ 심박수 위험 경고";
-            selfBody = String.format("현재 심박수가 %dBPM으로 높습니다. 즉시 활동을 중단하고 안전한 곳에서 휴식을 취하세요.", hr);
-            partnerBody = String.format("파트너의 심박수가 %dBPM으로 높은 상태입니다. 안전 상태를 확인해주세요.", hr);
-        } else if (hr >= 140) {
-            // 높은 심박수 (140-159)
-            title = "⚠️ 심박수 주의";
-            selfBody = String.format("현재 심박수가 %dBPM입니다. 천천히 호흡하며 휴식을 취해주세요.", hr);
-            partnerBody = String.format("파트너의 심박수가 %dBPM으로 평소보다 높습니다. 상태를 확인해보세요.", hr);
-        } else if (hr >= 120) {
-            // 중간 수준 높은 심박수 (120-139)
-            title = "💗 심박수 알림";
-            selfBody = String.format("현재 심박수가 %dBPM입니다. 잠시 휴식을 취하시는 것을 권장합니다.", hr);
-            partnerBody = String.format("파트너의 심박수가 %dBPM으로 조금 높습니다.", hr);
-        } else if (hr <= 40) {
-            // 매우 낮은 심박수 (40 이하)
-            title = "⚠️ 심박수 저하 경고";
-            selfBody = String.format("현재 심박수가 %dBPM으로 매우 낮습니다. 몸에 이상이 없는지 확인하고 필요시 의료진에게 연락하세요.", hr);
-            partnerBody = String.format("파트너의 심박수가 %dBPM으로 매우 낮은 상태입니다. 상태를 확인해주세요.", hr);
-        } else if (hr <= 50) {
-            // 낮은 심박수 (41-50)
-            title = "💙 심박수 저하 알림";
-            selfBody = String.format("현재 심박수가 %dBPM으로 낮습니다. 몸 상태를 확인해보세요.", hr);
-            partnerBody = String.format("파트너의 심박수가 %dBPM으로 평소보다 낮습니다.", hr);
-        } else {
-            // 기본 메시지 (51-119)
-            title = "💗 심박수 알림";
-            selfBody = String.format("현재 심박수가 %dBPM입니다. 상태를 확인해주세요.", hr);
-            partnerBody = String.format("파트너의 심박수가 %dBPM입니다.", hr);
+    // === 단일 전송(결과 반환) ===
+    private SendResult sendOne(String token, Map<String,String> data, Long ownerUserId, String label) {
+        if (token == null || token.isBlank()) {
+            log.debug("[FCM] skip empty token label={} user={}", label, ownerUserId);
+            return new SendResult(false, null, "NO_TOKEN");
         }
-
-        return new EmergencyMessage(title, selfBody, partnerBody);
-    }
-
-    /**
-     * 위급 상황 메시지 정보를 담는 내부 클래스
-     */
-    private static class EmergencyMessage {
-        final String title;
-        final String selfBody;      // 본인에게 보낼 메시지
-        final String partnerBody;   // 파트너에게 보낼 메시지
-
-        EmergencyMessage(String title, String selfBody, String partnerBody) {
-            this.title = title;
-            this.selfBody = selfBody;
-            this.partnerBody = partnerBody;
+        try {
+            var msg = Message.builder().putAllData(data).setToken(token).build();
+            String res = FirebaseMessaging.getInstance().send(msg); // messageId
+            log.info("[FCM] ok label={} user={} msgId={}", label, ownerUserId, res);
+            return new SendResult(true, res, null);
+        } catch (com.google.firebase.messaging.FirebaseMessagingException e) {
+            var code = e.getMessagingErrorCode() != null ? e.getMessagingErrorCode().name() : "UNKNOWN";
+            log.warn("[FCM] fail label={} user={} code={}", label, ownerUserId, code, e);
+            return new SendResult(false, null, code);
+        } catch (Exception e) {
+            log.error("[FCM] error label={} user={}", label, ownerUserId, e);
+            return new SendResult(false, null, "EXCEPTION");
         }
     }
 
+    // === 카피 생성 보조 ===
+    private static String safe(String s){ return s==null ? "normal" : s; }
+    private static void putIfNotBlank(Map<String,String> m, String k, String v){
+        if (v != null && !v.isBlank()) m.put(k, v);
+    }
+    private static String fmtOffset(OffsetDateTime odt){
+        return odt == null ? null : odt.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+    }
+
+    private static record TitleBody(String title, String selfBody, String partnerBody) {}
+
+    /** reasons 리스트를 표준 코드로 정규화 */
+    private static String normalizeReason(List<String> reasons){
+        if (reasons == null || reasons.isEmpty()) return "UNKNOWN";
+        String joined = String.join("|", reasons).toLowerCase();
+
+        if (joined.contains("stress high"))                           return "STRESS_HIGH";
+        if (joined.contains("hr low"))                                 return "HR_LOW";
+        if (joined.contains("hr high"))                                return "HR_HIGH";
+        if ((joined.contains("hr>=150") || joined.contains("hr >= 150")) && joined.contains("120s")) return "HR_HIGH_120S";
+        if ((joined.contains("hr<=45")  || joined.contains("hr <= 45"))  && joined.contains("120s")) return "HR_LOW_120S";
+        if (joined.contains("|hr_z|>=5") || joined.contains("hr_z") || joined.contains("z spike"))   return "HR_Z_SPIKE";
+        return "UNKNOWN";
+    }
+
+    /** restrict 모드 카피 */
+    private static TitleBody makeRestrictCopy(int hr, String reason){
+        switch (reason) {
+            case "STRESS_HIGH" -> {
+                String t = "스트레스 지수 높음 (제한 모드)";
+                String s = "지금 스트레스 지수가 높습니다. 잠시 휴식을 취하고 심호흡을 해보세요.";
+                String p = "파트너의 스트레스 지수가 높습니다. 상태를 확인해 주세요.";
+                return new TitleBody(t, s, p);
+            }
+            case "HR_HIGH" -> {
+                String t = "심박수 상승 (제한 모드)";
+                String s = String.format("현재 심박수가 %dBPM 이상입니다. 활동을 줄이고 휴식하세요.", hr);
+                String p = String.format("파트너의 심박수가 %dBPM 이상으로 높습니다. 상태를 확인해 주세요.", hr);
+                return new TitleBody(t, s, p);
+            }
+            case "HR_LOW" -> {
+                String t = "심박수 저하 (제한 모드)";
+                String s = String.format("현재 심박수가 %dBPM 이하입니다. 어지럼증 등 증상이 없는지 확인하세요.", hr);
+                String p = String.format("파트너의 심박수가 %dBPM 이하로 낮습니다. 상태를 확인해 주세요.", hr);
+                return new TitleBody(t, s, p);
+            }
+            default -> {
+                String t = "건강 제한 모드";
+                String s = String.format("현재 상태로 제한 모드가 적용되었습니다. (심박수 %dBPM)", hr);
+                String p = "파트너에게 제한 모드가 적용되었습니다. 상태를 확인해 주세요.";
+                return new TitleBody(t, s, p);
+            }
+        }
+    }
+
+    /** emergency 모드 카피 */
+    private static TitleBody makeEmergencyCopy(int hr, String reason){
+        switch (reason) {
+            case "HR_Z_SPIKE" -> {
+                String t = "🚨 급격한 심박수 변동 감지";
+                String s = String.format("심박수가 급격히 변했습니다. (현재 %dBPM) 안전한 곳에서 즉시 휴식하세요.", hr);
+                String p = String.format("파트너의 심박수에 급격한 변동이 감지되었습니다. (현재 %dBPM) 즉시 연락하여 상태를 확인하세요.", hr);
+                return new TitleBody(t, s, p);
+            }
+            case "HR_HIGH_120S" -> {
+                String t = "🚨 심박수 매우 높음 (2분 지속)";
+                String s = String.format("심박수 높음 상태가 120초 이상 지속되었습니다. (현재 %dBPM) 즉시 휴식하고 필요시 응급실에 연락하세요.", hr);
+                String p = String.format("파트너의 심박수가 2분 이상 매우 높은 상태입니다. (현재 %dBPM) 바로 연락해 상태를 확인하세요.", hr);
+                return new TitleBody(t, s, p);
+            }
+            case "HR_LOW_120S" -> {
+                String t = "🚨 심박수 매우 낮음 (2분 지속)";
+                String s = String.format("심박수 낮음 상태가 120초 이상 지속되었습니다. (현재 %dBPM) 어지럼증 등 증상을 확인하고 필요시 응급실에 연락하세요.", hr);
+                String p = String.format("파트너의 심박수가 2분 이상 매우 낮습니다. (현재 %dBPM) 즉시 상태를 확인하세요.", hr);
+                return new TitleBody(t, s, p);
+            }
+            case "HR_HIGH" -> {
+                String t = "🚨 심박수 위험 수치";
+                String s = String.format("현재 심박수가 매우 높습니다. (현재 %dBPM) 즉시 휴식이 필요합니다.", hr);
+                String p = String.format("파트너의 심박수가 매우 높습니다. (현재 %dBPM) 즉시 연락해 주세요.", hr);
+                return new TitleBody(t, s, p);
+            }
+            case "HR_LOW" -> {
+                String t = "🚨 심박수 위험 저하";
+                String s = String.format("현재 심박수가 매우 낮습니다. (현재 %dBPM) 안전을 위해 즉시 조치하세요.", hr);
+                String p = String.format("파트너의 심박수가 매우 낮습니다. (현재 %dBPM) 즉시 상태를 확인하세요.", hr);
+                return new TitleBody(t, s, p);
+            }
+            default -> {
+                String t = "🚨 응급 상황 감지";
+                String s = String.format("응급 상황이 감지되었습니다. (현재 %dBPM) 즉시 안전 조치를 취하세요.", hr);
+                String p = String.format("파트너에게 응급 상황이 감지되었습니다. (현재 %dBPM) 바로 연락하세요.", hr);
+                return new TitleBody(t, s, p);
+            }
+        }
+    }
+
+    /** normal (fallback) */
+    private static TitleBody makeNormalCopy(int hr, String reason, String riskLevel){
+        String t = "💗 심박수 알림";
+        String s = String.format("현재 심박수는 %dBPM입니다. 상태를 확인하세요.", hr);
+        String p = String.format("파트너의 심박수는 %dBPM입니다.", hr);
+        if ("high".equalsIgnoreCase(riskLevel)) {
+            t = "⚠️ 심박수 주의";
+            s = String.format("현재 심박수 %dBPM, 주의가 필요합니다. 잠시 휴식을 취하세요.", hr);
+            p = String.format("파트너의 심박수가 %dBPM으로 높습니다. 상태를 확인해 주세요.", hr);
+        }
+        return new TitleBody(t, s, p);
+    }
+
+    // === 내부 클래스들 ===
+    private static class SendResult {
+        final boolean success;
+        final String messageId;
+        final String errorCode;
+        SendResult(boolean s, String id, String err){ this.success=s; this.messageId=id; this.errorCode=err; }
+    }
+
+    // === 공통 헬퍼들 ===
     private static String firstNonNull(String... s){
         for (var x: s) if (x!=null && !x.isBlank()) return x;
         return null;
     }
-
     private static String reasonIfEmpty(String... tokens){
         for (var t: tokens) if (t!=null && !t.isBlank()) return null;
         return "NO_TOKEN";
