@@ -249,15 +249,15 @@ private fun FullScreenYogaCard(
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 12.dp)
             .clip(RoundedCornerShape(16.dp))
-            .height(600.dp)
+            .height(450.dp)
             .clickable { onClick() }
     ) {
         // 배경 이미지
         AsyncImage(
             model = yoga.thumbnail,
             contentDescription = yoga.title,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.FillBounds
+            modifier = Modifier.fillMaxWidth(),
+            contentScale = ContentScale.Fit
         )
 
         // 그라데이션 오버레이
@@ -317,11 +317,11 @@ private fun FullScreenYogaCard(
                             .background(Color.White.copy(alpha = 0.2f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = yoga.provider.take(1).uppercase(),
-                            color = Color.White,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold
+                        Icon(
+                            painter = painterResource(R.drawable.ic_youtube),
+                            contentDescription = "Youtube",
+                            tint = Color.Unspecified,
+                            modifier = Modifier.fillMaxSize()
                         )
                     }
 

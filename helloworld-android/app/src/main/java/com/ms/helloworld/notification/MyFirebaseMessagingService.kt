@@ -96,7 +96,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         val notificationConfig = createNotificationConfig(type, title, body)
 
         // 딥링크 Intent 생성
-        val intent = createDeepLinkIntent(type, coupleId)
+        val intent = createDeepLinkIntent(type)
         val pendingIntent = PendingIntent.getActivity(
             this,
             Random.nextInt(),
@@ -137,7 +137,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 NotificationConfig(
                     title = title.ifEmpty { "위험 알림" },
                     body = body.ifEmpty { "웨어러블 데이터가 정상 범위를 초과했습니다." },
-                    iconRes = R.drawable.ic_heart,
+                    iconRes = R.drawable.ic_wear_noti,
                     priority = NotificationCompat.PRIORITY_DEFAULT,
                     colorRes = MainColor
                 )
@@ -157,7 +157,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
     /**
      * 딥링크 Intent 생성 - type에 따라 이동할 화면 결정, coupleId로 데이터 조회
      */
-    private fun createDeepLinkIntent(type: String, coupleId: String): Intent {
+    private fun createDeepLinkIntent(type: String): Intent {
         return Intent(this, MainActivity::class.java).apply {
             action = "FCM_NOTIFICATION_$type"
             putExtra("notification_timestamp", System.currentTimeMillis())
@@ -170,15 +170,12 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             when (type) {
                 TYPE_REMINDER -> {
                     putExtra("deeplink_type", "REMINDER")
-                    // 캘린더 화면으로 이동 + coupleId로 해당 커플의 일정 조회
                 }
                 TYPE_EMERGENCY -> {
                     putExtra("deeplink_type", "EMERGENCY")
-                    // 웨어러블 추천 화면으로 이동 + coupleId로 해당 커플의 심박수 데이터 조회
                 }
                 else -> {
                     putExtra("deeplink_type", "main")
-                    // 메인 화면으로 이동
                 }
             }
         }
