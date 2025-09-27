@@ -24,7 +24,7 @@ public class CalendarService {
     private final HealthServerClient healthServerClient;
 
     // 필요 시 내부 고정 토큰(게이트웨이 우회 시 유용). 없다면 빈 값으로 두어도 무방.
-    @Value("${internal.app-token:}")
+    @Value("${healthserver.app-token:}")
     private String appToken;
 
     @Transactional

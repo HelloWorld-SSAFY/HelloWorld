@@ -332,7 +332,7 @@ public class FcmService {
     }
 
     // === AI 클라이언트 ===
-    @FeignClient(name = "aiClient", url = "${ai.server.url}")
+    @FeignClient(name = "aiClient", url = "${ai.server.base-url}")
     public interface AiClient {
         @PostMapping("/v1/telemetry")
         ResponseEntity<AiResponse> sendTelemetry(@RequestBody Map<String, Object> request);
