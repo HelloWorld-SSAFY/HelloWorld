@@ -102,9 +102,6 @@ fun DiaryScreen(
 
         // 실제 임신 정보 사용 (currentPregnancyDay를 우선 사용)
         val actualCurrentWeek = homeState?.let { profile ->
-            println("📊 DiaryScreen - MomProfile 데이터: 주차=${profile.pregnancyWeek}, 기존currentDay=${profile.currentDay}, 닉네임=${profile.nickname}")
-            println("📊 DiaryScreen - HomeViewModel currentPregnancyDay: ${currentPregnancyDay}")
-            println("📊 DiaryScreen - homeState 객체 해시: ${profile.hashCode()}")
             PregnancyWeek(
                 week = profile.pregnancyWeek,
                 dayCount = currentPregnancyDay  // HomeViewModel의 정확한 계산값 사용
@@ -258,12 +255,10 @@ fun DiaryScreen(
         // 사용자 정보를 DiaryViewModel에 전달
         LaunchedEffect(userId, userGender) {
             if (userId != null && userGender != null) {
-                println("👤 DiaryScreen - DiaryViewModel에 사용자 정보 전달: userId=$userId, userGender=$userGender")
                 viewModel.setUserInfo(userId, userGender)
 
                 // 사용자 정보가 업데이트되면 기존 데이터를 다시 처리
                 homeState?.let { profile ->
-                    println("🔄 DiaryScreen - 사용자 정보 업데이트 후 주간 일기 재로딩")
                     viewModel.loadWeeklyDiaries(profile.pregnancyWeek)
                 }
             }
@@ -303,20 +298,20 @@ fun DiaryScreen(
                     onPreviousWeek = {
                         if (displayWeek.week > 1) {
                             viewingWeek = displayWeek.week - 1
-                            println("📅 DiaryScreen - 이전 주차로 이동: ${displayWeek.week - 1}주차")
+
                             viewModel.loadWeeklyDiaries(displayWeek.week - 1)
                         }
                     },
                     onNextWeek = {
                         if (displayWeek.week < actualCurrentWeek.week) {
                             viewingWeek = displayWeek.week + 1
-                            println("📅 DiaryScreen - 다음 주차로 이동: ${displayWeek.week + 1}주차")
+
                             viewModel.loadWeeklyDiaries(displayWeek.week + 1)
                         }
                     },
                     onCurrentWeek = {
                         viewingWeek = null
-                        println("📅 DiaryScreen - 현재 주차로 돌아가기: ${actualCurrentWeek.week}주차")
+
                         viewModel.loadWeeklyDiaries(actualCurrentWeek.week)
                     }
                 )
@@ -327,7 +322,7 @@ fun DiaryScreen(
                     onDayClick = { dayInWeek ->
                         // 표시 중인 주차의 일수를 실제 임신 일수로 변환
                         val actualDay = (displayWeek.week - 1) * 7 + dayInWeek
-                        println("🔗 DiaryScreen - 네비게이션: ${displayWeek.week}주차 dayInWeek=$dayInWeek -> actualDay=$actualDay")
+
                         navController.navigate("diary_detail/$actualDay")
                     }
                 )

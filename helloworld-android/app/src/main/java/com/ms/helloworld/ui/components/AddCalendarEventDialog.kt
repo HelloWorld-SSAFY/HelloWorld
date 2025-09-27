@@ -6,6 +6,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.TextSelectionColors
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -75,195 +76,231 @@ fun AddCalendarEventBottomSheet(
                 .verticalScroll(rememberScrollState())
                 .padding(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 40.dp)
         ) {
-                    // 헤더
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "${formatDateForDisplay(selectedDate)} 일정 작성",
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+            // 헤더
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "${formatDateForDisplay(selectedDate)} 일정 작성",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
 
-                        IconButton(
-                            onClick = onDismiss,
-                            modifier = Modifier.size(24.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.Close,
-                                contentDescription = "닫기",
-                                tint = Color.Gray
-                            )
-                        }
-                    }
+            Spacer(modifier = Modifier.height(20.dp))
 
-                    Spacer(modifier = Modifier.height(20.dp))
-
-                    // 제목 입력
-                    OutlinedTextField(
-                        value = title,
-                        onValueChange = { title = it },
-                        label = { Text("일정 제목", fontSize = 14.sp) },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = MainColor,
-                            focusedLabelColor = MainColor
-                        )
+            // 제목 입력
+            OutlinedTextField(
+                value = title,
+                onValueChange = { title = it },
+                placeholder = {
+                    Text(
+                        text = "일정 제목",
+                        fontSize = 14.sp,
+                        color = Color(0xFF999999)
                     )
+                },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = MainColor,
+                    unfocusedBorderColor = Color.Gray,
+                    selectionColors = TextSelectionColors(
+                        handleColor = MainColor, // 선택 핸들 색상
+                        backgroundColor = MainColor.copy(alpha = 0.4f) // 선택된 텍스트 배경색
+                    )
+                ),
+            )
 
-                    Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-                    // 시간 설정
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        // 시작 시간
-                        Box(Modifier.weight(1f)) {
-                            OutlinedTextField(
-                                value = startTime,
-                                onValueChange = { }, // 읽기전용
-                                label = { Text("시작 시간", fontSize = 14.sp) },
-                                placeholder = { Text("09:00", fontSize = 14.sp) },
-                                readOnly = true,
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true,
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = MainColor,
-                                    focusedLabelColor = MainColor,
-                                    unfocusedBorderColor = Color.Gray,
-                                    unfocusedLabelColor = Color.Gray,
-                                    disabledTextColor = Color.Black
-                                )
-                            )
-
-                            // 클릭을 확실히 잡는 투명 오버레이
-                            Spacer(
-                                modifier = Modifier
-                                    .matchParentSize()
-                                    .clickable(
-                                        indication = null,
-                                        interactionSource = remember { MutableInteractionSource() }
-                                    ) { showStartTimePicker = true }
-                            )
-                        }
-
-                        // 종료 시간
-                        Box(Modifier.weight(1f)) {
-                            OutlinedTextField(
-                                value = endTime,
-                                onValueChange = { },
-                                label = { Text("종료 시간", fontSize = 14.sp) },
-                                placeholder = { Text("10:00", fontSize = 14.sp) },
-                                modifier = Modifier,
-                                singleLine = true,
-                                readOnly = true,
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = MainColor,
-                                    focusedLabelColor = MainColor,
-                                    unfocusedBorderColor = Color.Gray,
-                                    unfocusedLabelColor = Color.Gray,
-                                    disabledTextColor = Color.Black
-                                )
-                            )
-                            Spacer(
-                                    modifier = Modifier
-                                        .matchParentSize()
-                                        .clickable(
-                                            indication = null,
-                                            interactionSource = remember { MutableInteractionSource() }
-                                        ) { showEndTimePicker = true }
-                                    )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // 메모 입력
-                    OutlinedTextField(
-                        value = content,
-                        onValueChange = { content = it },
-                        label = { Text("메모", fontSize = 14.sp) },
+            // 시간 설정
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // 시작 시간
+                Box(Modifier.weight(1f)) {
+                    Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(100.dp),
-                        maxLines = 4,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = MainColor,
-                            focusedLabelColor = MainColor
-                        )
+                            .clickable { /* 시간 선택 로직 */ },
+                        shape = RoundedCornerShape(8.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color.White.copy(alpha = 0.2f)
+                        ),
+                        border = CardDefaults.outlinedCardBorder()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                Text(
+                                    text = "시작 시간",
+                                    fontSize = 12.sp,
+                                    color = Color.Gray
+                                )
+                                Text(
+                                    text = startTime,
+                                    fontSize = 16.sp,
+                                    color = Color.Black
+                                )
+                            }
+                        }
+                    }
+
+                    // 클릭을 확실히 잡는 투명 오버레이
+                    Spacer(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .clickable(
+                                indication = null,
+                                interactionSource = remember { MutableInteractionSource() }
+                            ) { showStartTimePicker = true }
                     )
+                }
 
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // 리마인드 설정
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                // 종료 시간
+                Box(Modifier.weight(1f)) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { /* 시간 선택 로직 */ },
+                        shape = RoundedCornerShape(8.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color.White.copy(alpha = 0.2f)
+                        ),
+                        border = CardDefaults.outlinedCardBorder()
                     ) {
-                        Text(
-                            text = "리마인드 알림",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-
-                        Switch(
-                            checked = isRemind,
-                            onCheckedChange = { isRemind = it },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = MainColor,
-                                uncheckedThumbColor = Color.White,
-                                uncheckedTrackColor = Color.Gray
-                            )
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    // 버튼
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = onDismiss,
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = Color.Gray
-                            )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text("취소", fontSize = 14.sp)
-                        }
-
-                        Button(
-                            onClick = {
-                                if (title.isNotEmpty()) {
-                                    onSave(
-                                        title,
-                                        content,
-                                        startTime,
-                                        endTime,
-                                        isRemind,
-                                        initialOrderNo
-                                    )
-                                }
-                            },
-                            modifier = Modifier.weight(1f),
-                            enabled = title.isNotEmpty(),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MainColor,
-                                contentColor = Color.White
-                            )
-                        ) {
-                            Text("저장", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                            Column {
+                                Text(
+                                    text = "종료 시간",
+                                    fontSize = 12.sp,
+                                    color = Color.Gray
+                                )
+                                Text(
+                                    text = endTime,
+                                    fontSize = 16.sp,
+                                    color = Color.Black
+                                )
+                            }
                         }
                     }
+                    Spacer(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .clickable(
+                                indication = null,
+                                interactionSource = remember { MutableInteractionSource() }
+                            ) { showEndTimePicker = true }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 메모 입력
+            OutlinedTextField(
+                value = content,
+                onValueChange = { content = it },
+                label = { Text("메모", fontSize = 14.sp) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(100.dp),
+                maxLines = 4,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = MainColor,
+                    unfocusedBorderColor = Color(0xFFE0E0E0),
+                    selectionColors = TextSelectionColors(
+                        handleColor = MainColor, // 선택 핸들 색상
+                        backgroundColor = MainColor.copy(alpha = 0.4f) // 선택된 텍스트 배경색
+                    )
+                ),
+            )
+
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 리마인드 설정
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "리마인드 알림",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium
+                )
+
+                Switch(
+                    checked = isRemind,
+                    onCheckedChange = { isRemind = it },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = MainColor,
+                        uncheckedThumbColor = Color.White,
+                        uncheckedTrackColor = Color.Gray
+                    )
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // 버튼
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                OutlinedButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = Color.Gray
+                    )
+                ) {
+                    Text("취소", fontSize = 16.sp)
+                }
+
+                Button(
+                    onClick = {
+                        if (title.isNotEmpty()) {
+                            onSave(
+                                title,
+                                content,
+                                startTime,
+                                endTime,
+                                isRemind,
+                                initialOrderNo
+                            )
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                    enabled = title.isNotEmpty(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MainColor,
+                        contentColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(16.dp),
+                ) {
+                    Text("저장", fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                }
+            }
         } // Column 닫기
     } // BottomSheet 닫기
 

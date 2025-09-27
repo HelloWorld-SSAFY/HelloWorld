@@ -32,9 +32,9 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.ms.helloworld.dto.response.WorkoutItem
 import com.ms.helloworld.dto.response.WorkoutType
+import com.ms.helloworld.ui.theme.MainColor
 import com.ms.helloworld.viewmodel.WeeklyViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WeeklyWorkoutScreen(
     initialWeek: Int = 1,
@@ -192,8 +192,8 @@ private fun WeeklyWorkoutHeader(
             horizontalArrangement = Arrangement.Center
         ) {
             Text(
-                text = "${currentWeek}주차",
-                fontSize = 18.sp,
+                text = "이번주 루틴",
+                fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFF333333),
                 textAlign = TextAlign.Center
@@ -216,7 +216,7 @@ private fun WorkoutCard(workout: WorkoutItem) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp)
+                .padding(18.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -224,8 +224,8 @@ private fun WorkoutCard(workout: WorkoutItem) {
             ) {
                 // 운동 타입 아이콘
                 val (icon, backgroundColor) = when (workout.type) {
-                    WorkoutType.TEXT -> "📝" to Color(0xFFE8F5E8)
-                    WorkoutType.VIDEO -> "📹" to Color(0xFFE1BEE7)
+                    WorkoutType.TEXT -> "📝" to MainColor.copy(alpha = 0.5f)
+                    WorkoutType.VIDEO -> "📹" to Color(0xFFFFCC80).copy(alpha = 0.5f)
                 }
 
                 Box(
@@ -236,7 +236,7 @@ private fun WorkoutCard(workout: WorkoutItem) {
                 ) {
                     Text(
                         text = icon,
-                        fontSize = 24.sp
+                        fontSize = 34.sp
                     )
                 }
 
@@ -251,124 +251,102 @@ private fun WorkoutCard(workout: WorkoutItem) {
                             WorkoutType.TEXT -> workout.text?.take(50) ?: "운동 가이드"
                             WorkoutType.VIDEO -> workout.title ?: "운동 영상"
                         },
-                        fontSize = 16.sp,
+                        fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF333333)
                     )
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    // 운동 내용
+                    when (workout.type) {
+                        WorkoutType.TEXT -> {
+                            workout.text?.let { text ->
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = text,
+                                    fontSize = 14.sp,
+                                    color = Color(0xFF666666),
+                                )
+                            }
+                        }
 
-                    // 운동 타입 표시
-                    Text(
-                        text = when (workout.type) {
-                            WorkoutType.TEXT -> "운동 가이드"
-                            WorkoutType.VIDEO -> "영상 운동"
-                        },
-                        fontSize = 12.sp,
-                        color = Color.White,
-                        modifier = Modifier
-                            .background(
-                                when (workout.type) {
-                                    WorkoutType.TEXT -> Color(0xFF4CAF50)
-                                    WorkoutType.VIDEO -> Color(0xFF9C27B0)
-                                },
-                                RoundedCornerShape(8.dp)
-                            )
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
-                }
-            }
-
-            // 운동 내용
-            when (workout.type) {
-                WorkoutType.TEXT -> {
-                    workout.text?.let { text ->
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = text,
-                            fontSize = 14.sp,
-                            color = Color(0xFF666666),
-                            lineHeight = 20.sp
-                        )
-                    }
-                }
-
-                WorkoutType.VIDEO -> {
-                    // 썸네일 이미지가 있으면 표시
-                    workout.thumbnailUrl?.let { thumbnailUrl ->
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(180.dp)
-                        ) {
-                            AsyncImage(
-                                model = ImageRequest.Builder(LocalContext.current)
-                                    .data(thumbnailUrl)
-                                    .crossfade(true)
-                                    .build(),
-                                contentDescription = "운동 영상 썸네일",
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .clip(RoundedCornerShape(8.dp)),
-                                contentScale = ContentScale.Crop,
-                                placeholder = painterResource(id = android.R.drawable.ic_menu_gallery),
-                                error = painterResource(id = android.R.drawable.ic_menu_gallery)
-                            )
-
-                            // 재생 버튼 오버레이
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(
-                                        Color.Black.copy(alpha = 0.3f),
-                                        RoundedCornerShape(8.dp)
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
+                        WorkoutType.VIDEO -> {
+                            // 썸네일 이미지가 있으면 표시
+                            workout.thumbnailUrl?.let { thumbnailUrl ->
+                                Spacer(modifier = Modifier.height(16.dp))
                                 Box(
                                     modifier = Modifier
-                                        .background(Color.White, RoundedCornerShape(24.dp))
-                                        .padding(12.dp),
-                                    contentAlignment = Alignment.Center
+                                        .fillMaxWidth()
+                                        .height(180.dp)
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.PlayArrow,
-                                        contentDescription = "영상 재생",
-                                        tint = Color(0xFF9C27B0),
-                                        modifier = Modifier.size(24.dp)
+                                    AsyncImage(
+                                        model = ImageRequest.Builder(LocalContext.current)
+                                            .data(thumbnailUrl)
+                                            .crossfade(true)
+                                            .build(),
+                                        contentDescription = "운동 영상 썸네일",
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .clip(RoundedCornerShape(8.dp)),
+                                        contentScale = ContentScale.Crop,
+                                        placeholder = painterResource(id = android.R.drawable.ic_menu_gallery),
+                                        error = painterResource(id = android.R.drawable.ic_menu_gallery)
                                     )
+
+                                    // 재생 버튼 오버레이
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(
+                                                Color.Black.copy(alpha = 0.3f),
+                                                RoundedCornerShape(8.dp)
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .background(Color.White, RoundedCornerShape(24.dp))
+                                                .padding(12.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.PlayArrow,
+                                                contentDescription = "영상 재생",
+                                                tint = Color(0xFFFFCC80),
+                                                modifier = Modifier.size(24.dp)
+                                            )
+                                        }
+                                    }
                                 }
                             }
-                        }
-                    }
 
-                    // 비디오 URL이 있으면 재생 버튼
-                    workout.url?.let { url ->
-                        if (workout.thumbnailUrl == null) {
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(containerColor = Color(0xFFF3E5F5))
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(16.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.PlayArrow,
-                                        contentDescription = "영상 재생",
-                                        tint = Color(0xFF9C27B0)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "운동 영상 보기",
-                                        fontSize = 14.sp,
-                                        color = Color(0xFF9C27B0),
-                                        fontWeight = FontWeight.Medium
-                                    )
+                            // 비디오 URL이 있으면 재생 버튼
+                            workout.url?.let { url ->
+                                if (workout.thumbnailUrl == null) {
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = CardDefaults.cardColors(containerColor = Color(0xFFF3E5F5))
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(16.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.PlayArrow,
+                                                contentDescription = "영상 재생",
+                                                tint = Color(0xFF9C27B0)
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                text = "운동 영상 보기",
+                                                fontSize = 14.sp,
+                                                color = Color(0xFF9C27B0),
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -376,13 +354,29 @@ private fun WorkoutCard(workout: WorkoutItem) {
                 }
             }
 
-            // 순서 정보 (필요한 경우)
-            workout.orderNo?.let { orderNo ->
-                Spacer(modifier = Modifier.height(8.dp))
+            Spacer(Modifier.height(8.dp))
+
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End // 오른쪽 정렬 추가
+            ) {
                 Text(
-                    text = "순서: $orderNo",
+                    text = when (workout.type) {
+                        WorkoutType.TEXT -> "가이드"
+                        WorkoutType.VIDEO -> "영상"
+                    },
                     fontSize = 12.sp,
-                    color = Color(0xFF999999)
+                    color = Color.White,
+                    modifier = Modifier
+                        .background(
+                            when (workout.type) {
+                                WorkoutType.TEXT -> MainColor
+                                WorkoutType.VIDEO -> Color(0xFFFFCC80)
+                            },
+                            RoundedCornerShape(8.dp)
+                        )
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
                 )
             }
         }

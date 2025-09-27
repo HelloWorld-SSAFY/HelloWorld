@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -23,9 +24,10 @@ import androidx.compose.ui.unit.sp
 import kotlin.math.abs
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ms.helloworld.R
+import com.ms.helloworld.ui.theme.MainColor
 import com.ms.helloworld.viewmodel.WeeklyViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WeeklyInfoScreen(
     initialWeek: Int = 1,
@@ -104,7 +106,7 @@ fun WeeklyInfoScreen(
 
                     Text(
                         text = "${state.currentWeek}주차 리포트",
-                        fontSize = 24.sp,
+                        fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF333333),
                         textAlign = TextAlign.Center,
@@ -130,7 +132,7 @@ fun WeeklyInfoScreen(
                     textAlign = TextAlign.Center,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 24.dp)
+                        .padding(bottom = 16.dp)
                 )
 
                 // 메인 정보 카드
@@ -141,7 +143,7 @@ fun WeeklyInfoScreen(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
                 // 추가 정보 섹션들
                 AdditionalInfoSections(weekNo = state.currentWeek)
@@ -186,8 +188,8 @@ private fun WeeklyInfoHeader(
             horizontalArrangement = Arrangement.Center
         ) {
             Text(
-                text = "${currentWeek}주차",
-                fontSize = 18.sp,
+                text = "이번주 리포트",
+                fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFF333333),
                 textAlign = TextAlign.Center
@@ -211,17 +213,20 @@ private fun MainInfoCard(
         shape = RoundedCornerShape(16.dp)
     ) {
         Column(
-            modifier = Modifier.padding(24.dp)
+            modifier = Modifier.padding(20.dp)
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(bottom = 16.dp)
             ) {
-                Text(
-                    text = "📖",
-                    fontSize = 32.sp,
-                    modifier = Modifier.padding(end = 12.dp)
-                )
+               Icon(
+                   painter = painterResource(R.drawable.ic_info),
+                   contentDescription = "Info Icon",
+                   tint = MainColor,
+                   modifier = Modifier
+                       .size(24.dp)
+               )
+                Spacer(modifier = Modifier.width(16.dp))
 
                 Column {
                     Text(
@@ -244,9 +249,10 @@ private fun MainInfoCard(
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
+                modifier = Modifier.fillMaxWidth(),
                 text = info,
-                fontSize = 16.sp,
-                color = Color(0xFF333333),
+                fontSize = 14.sp,
+                color = MainColor,
                 lineHeight = 24.sp,
                 textAlign = TextAlign.Start
             )
@@ -283,7 +289,7 @@ private fun InfoSectionCard(
         shape = RoundedCornerShape(12.dp)
     ) {
         Column(
-            modifier = Modifier.padding(20.dp)
+            modifier = Modifier.padding(18.dp)
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -291,18 +297,19 @@ private fun InfoSectionCard(
             ) {
                 Text(
                     text = icon,
-                    fontSize = 24.sp,
-                    modifier = Modifier.padding(end = 12.dp)
+                    fontSize = 26.sp,
+                    modifier = Modifier.padding(end = 10.dp)
                 )
                 Text(
                     text = title,
-                    fontSize = 16.sp,
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF333333)
                 )
             }
 
             Text(
+                modifier = Modifier.padding(start = 8.dp),
                 text = content,
                 fontSize = 14.sp,
                 color = Color(0xFF666666),
@@ -325,13 +332,13 @@ private fun getAdditionalInfoSections(weekNo: Int): List<InfoSection> {
             InfoSection(
                 title = "태아 발달",
                 icon = "👶",
-                content = "수정란이 착상하고 기본적인 신체 구조가 형성되기 시작합니다. 엽산 섭취가 중요한 시기예요.",
+                content = "수정란이 착상하고 기본적인 신체 구조가 형성되기 시작합니다.\n엽산 섭취가 중요한 시기예요.",
                 backgroundColor = Color(0xFFE8F5E8)
             ),
             InfoSection(
                 title = "몸의 변화",
                 icon = "🤰",
-                content = "입덧이 시작될 수 있고, 피로감을 많이 느낄 수 있어요. 충분한 휴식을 취하세요.",
+                content = "입덧이 시작될 수 있고, 피로감을 많이 느낄 수 있어요.\n충분한 휴식을 취하세요.",
                 backgroundColor = Color(0xFFFFF3E0)
             ),
             InfoSection(
@@ -346,13 +353,13 @@ private fun getAdditionalInfoSections(weekNo: Int): List<InfoSection> {
             InfoSection(
                 title = "태아 발달",
                 icon = "👶",
-                content = "주요 장기들이 형성되고, 심장박동을 확인할 수 있어요. 태아의 기본적인 외형이 갖춰집니다.",
+                content = "주요 장기들이 형성되고, 심장박동을 확인할 수 있어요.\n태아의 기본적인 외형이 갖춰집니다.",
                 backgroundColor = Color(0xFFE8F5E8)
             ),
             InfoSection(
                 title = "몸의 변화",
                 icon = "🤰",
-                content = "입덧이 심해질 수 있고, 가슴이 부드러워지며 커질 수 있어요. 소변이 자주 마려울 수 있습니다.",
+                content = "입덧이 심해질 수 있고, 가슴이 부드러워지며 커질 수 있어요.\n소변이 자주 마려울 수 있습니다.",
                 backgroundColor = Color(0xFFFFF3E0)
             ),
             InfoSection(
@@ -367,19 +374,19 @@ private fun getAdditionalInfoSections(weekNo: Int): List<InfoSection> {
             InfoSection(
                 title = "태아 발달",
                 icon = "👶",
-                content = "성별 확인이 가능하고, 태동을 느낄 수 있어요. 태아의 뼈가 단단해지기 시작합니다.",
+                content = "성별 확인이 가능하고, 태동을 느낄 수 있어요.\n태아의 뼈가 단단해지기 시작합니다.",
                 backgroundColor = Color(0xFFE8F5E8)
             ),
             InfoSection(
                 title = "몸의 변화",
                 icon = "🤰",
-                content = "입덧이 줄어들고 식욕이 돌아와요. 배가 조금씩 나오기 시작합니다.",
+                content = "입덧이 줄어들고 식욕이 돌아와요.\n배가 조금씩 나오기 시작합니다.",
                 backgroundColor = Color(0xFFFFF3E0)
             ),
             InfoSection(
                 title = "필요한 준비",
                 icon = "📝",
-                content = "임신복 구입을 고려하고, 태교를 시작해보세요. 정기 산전검사를 꾸준히 받으세요.",
+                content = "임신복 구입을 고려하고, 태교를 시작해보세요.\n정기 산전검사를 꾸준히 받으세요.",
                 backgroundColor = Color(0xFFF3E5F5)
             )
         )
@@ -394,13 +401,13 @@ private fun getAdditionalInfoSections(weekNo: Int): List<InfoSection> {
             InfoSection(
                 title = "몸의 변화",
                 icon = "🤰",
-                content = "배가 점점 커지고, 허리 통증이 생길 수 있어요. 체중 관리에 신경 써야 합니다.",
+                content = "배가 점점 커지고, 허리 통증이 생길 수 있어요.\n체중 관리에 신경 써야 합니다.",
                 backgroundColor = Color(0xFFFFF3E0)
             ),
             InfoSection(
                 title = "중요한 검사",
                 icon = "🏥",
-                content = "임신성 당뇨 검사와 빈혈 검사를 받으세요. 정기적인 태아 성장 확인이 중요해요.",
+                content = "임신성 당뇨 검사와 빈혈 검사를 받으세요.\n정기적인 태아 성장 확인이 중요해요.",
                 backgroundColor = Color(0xFFE1F5FE)
             )
         )
@@ -409,19 +416,19 @@ private fun getAdditionalInfoSections(weekNo: Int): List<InfoSection> {
             InfoSection(
                 title = "태아 발달",
                 icon = "👶",
-                content = "태아의 폐가 성숙하고, 대부분의 신체 기능이 완성됩니다. 체중이 빠르게 증가해요.",
+                content = "태아의 폐가 성숙하고, 대부분의 신체 기능이 완성됩니다.\n체중이 빠르게 증가해요.",
                 backgroundColor = Color(0xFFE8F5E8)
             ),
             InfoSection(
                 title = "몸의 변화",
                 icon = "🤰",
-                content = "숨이 가빠지고, 소화불량이 생길 수 있어요. 불면증을 겪을 수 있습니다.",
+                content = "숨이 가빠지고, 소화불량이 생길 수 있어요.\n불면증을 겪을 수 있습니다.",
                 backgroundColor = Color(0xFFFFF3E0)
             ),
             InfoSection(
                 title = "출산 준비",
                 icon = "🍼",
-                content = "출산용품을 준비하고, 병원 가방을 미리 싸두세요. 출산 교육에 참여해보세요.",
+                content = "출산용품을 준비하고, 병원 가방을 미리 싸두세요.\n출산 교육에 참여해보세요.",
                 backgroundColor = Color(0xFFF3E5F5)
             )
         )
@@ -430,19 +437,19 @@ private fun getAdditionalInfoSections(weekNo: Int): List<InfoSection> {
             InfoSection(
                 title = "태아 발달",
                 icon = "👶",
-                content = "태아가 완전히 성숙하여 언제든 출산이 가능한 상태예요. 머리가 아래로 향합니다.",
+                content = "태아가 완전히 성숙하여 언제든 출산이 가능한 상태예요.\n머리가 아래로 향합니다.",
                 backgroundColor = Color(0xFFE8F5E8)
             ),
             InfoSection(
                 title = "몸의 변화",
                 icon = "🤰",
-                content = "배가 아래로 내려오고, 진통이 시작될 수 있어요. 출산 징후를 잘 관찰하세요.",
+                content = "배가 아래로 내려오고, 진통이 시작될 수 있어요.\n출산 징후를 잘 관찰하세요.",
                 backgroundColor = Color(0xFFFFF3E0)
             ),
             InfoSection(
                 title = "최종 준비",
                 icon = "🏥",
-                content = "언제든 병원에 갈 수 있도록 준비하고, 진통 간격을 체크하세요. 연락처를 확인해두세요.",
+                content = "언제든 병원에 갈 수 있도록 준비하고, 진통 간격을 체크하세요.\n연락처를 확인해두세요.",
                 backgroundColor = Color(0xFFFFEBEE)
             )
         )

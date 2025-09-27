@@ -31,21 +31,10 @@ class CalendarRepository @Inject constructor(
         request: CalendarUpdateRequest
     ): Result<Map<String, Any>> {
         return try {
-            println("🌐 Repository - API 호출 직전:")
-            println("   eventId: $eventId")
-            println("   request: $request")
-            println("   title: '${request.title}'")
-            println("   memo: '${request.memo}'")
-            println("   startAt: '${request.startAt}'")
-            println("   endAt: '${request.endAt}'")
-            println("   isRemind: ${request.isRemind}")
-            println("   orderNo: ${request.orderNo}")
 
             val response = calendarApi.updateEvent(eventId, request)
-            println("✅ Repository - API 응답 성공: $response")
             Result.success(response)
         } catch (e: Exception) {
-            println("❌ Repository - API 호출 실패: ${e.message}")
             e.printStackTrace()
             Result.failure(e)
         }
@@ -53,17 +42,13 @@ class CalendarRepository @Inject constructor(
     
     suspend fun deleteEvent(eventId: Long): Result<Unit> {
         return try {
-            println("🗑️ Repository - 삭제 API 호출: eventId=$eventId")
             val response = calendarApi.deleteEvent(eventId)
             if (response.isSuccessful) {
-                println("✅ Repository - 삭제 API 응답 성공: ${response.code()}")
                 Result.success(Unit)
             } else {
-                println("❌ Repository - 삭제 API 응답 실패: ${response.code()} ${response.message()}")
                 Result.failure(Exception("HTTP ${response.code()}: ${response.message()}"))
             }
         } catch (e: Exception) {
-            println("❌ Repository - 삭제 API 호출 실패: ${e.message}")
             e.printStackTrace()
             Result.failure(e)
         }

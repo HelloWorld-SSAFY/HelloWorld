@@ -30,9 +30,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.ms.helloworld.dto.response.DietDay
+import com.ms.helloworld.ui.theme.MainColor
 import com.ms.helloworld.viewmodel.WeeklyViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WeeklyDietScreen(
     initialWeek: Int = 1,
@@ -81,7 +81,9 @@ fun WeeklyDietScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                CircularProgressIndicator()
+                CircularProgressIndicator(
+                    color = MainColor
+                )
             }
         } else {
             LazyColumn(
@@ -137,7 +139,7 @@ fun WeeklyDietScreen(
                         textAlign = TextAlign.Center,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 16.dp)
+                            .padding(bottom = 8.dp)
                     )
                 }
 
@@ -148,7 +150,7 @@ fun WeeklyDietScreen(
 
                 // 하단 여백
                 item {
-                    Spacer(modifier = Modifier.height(100.dp))
+                    Spacer(modifier = Modifier.height(56.dp))
                 }
             }
         }
@@ -189,8 +191,8 @@ private fun WeeklyDietHeader(
             horizontalArrangement = Arrangement.Center
         ) {
             Text(
-                text = "${currentWeek}주차",
-                fontSize = 18.sp,
+                text = "이번주 메뉴",
+                fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFF333333),
                 textAlign = TextAlign.Center
@@ -254,7 +256,7 @@ private fun DietCard(diet: DietDay) {
                         color = Color.White,
                         modifier = Modifier
                             .background(
-                                Color(0xFF4CAF50),
+                                MainColor,
                                 RoundedCornerShape(12.dp)
                             )
                             .padding(horizontal = 8.dp, vertical = 4.dp)
