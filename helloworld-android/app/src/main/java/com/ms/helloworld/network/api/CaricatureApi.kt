@@ -1,5 +1,6 @@
 package com.ms.helloworld.network.api
 
+import com.ms.helloworld.dto.response.CaricatureResponse
 import retrofit2.Response
 import retrofit2.http.*
 
@@ -13,16 +14,5 @@ interface CaricatureApi {
     @POST("calendar/caricatures/{diaryPhotoId}/caricature")
     suspend fun generateCaricature(
         @Path("diaryPhotoId") diaryPhotoId: Long
-    ): Response<CaricatureGenerateResponse>
+    ): Response<CaricatureResponse>
 }
-
-data class CaricatureResponse(
-    val caricatureId: Long,
-    val imageUrl: String,
-    val createdAt: String
-)
-
-data class CaricatureGenerateResponse(
-    val caricatureId: Long,
-    val message: String
-)

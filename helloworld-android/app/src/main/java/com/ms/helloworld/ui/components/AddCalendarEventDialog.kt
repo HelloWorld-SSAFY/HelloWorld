@@ -10,10 +10,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import com.ms.helloworld.ui.theme.MainColor
+import com.ms.helloworld.ui.theme.SubColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -46,9 +49,14 @@ fun AddCalendarEventBottomSheet(
     var showEndTimePicker by remember { mutableStateOf(false) }
 
 
+    val sheetState = rememberModalBottomSheetState(
+        skipPartiallyExpanded = true
+    )
+
     // BottomSheet 사용
     ModalBottomSheet(
         onDismissRequest = onDismiss,
+        sheetState = sheetState,
         dragHandle = {
             Box(
                 modifier = Modifier
@@ -63,8 +71,9 @@ fun AddCalendarEventBottomSheet(
     ) {
         Column(
             modifier = Modifier
-                .padding(24.dp)
+                .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
+                .padding(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 40.dp)
         ) {
                     // 헤더
                     Row(
@@ -100,8 +109,8 @@ fun AddCalendarEventBottomSheet(
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Color.Black,
-                            focusedLabelColor = Color.Black
+                            focusedBorderColor = MainColor,
+                            focusedLabelColor = MainColor
                         )
                     )
 
@@ -123,8 +132,8 @@ fun AddCalendarEventBottomSheet(
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
                                 colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = Color.Black,
-                                    focusedLabelColor = Color.Black,
+                                    focusedBorderColor = MainColor,
+                                    focusedLabelColor = MainColor,
                                     unfocusedBorderColor = Color.Gray,
                                     unfocusedLabelColor = Color.Gray,
                                     disabledTextColor = Color.Black
@@ -153,8 +162,8 @@ fun AddCalendarEventBottomSheet(
                                 singleLine = true,
                                 readOnly = true,
                                 colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = Color.Black,
-                                    focusedLabelColor = Color.Black,
+                                    focusedBorderColor = MainColor,
+                                    focusedLabelColor = MainColor,
                                     unfocusedBorderColor = Color.Gray,
                                     unfocusedLabelColor = Color.Gray,
                                     disabledTextColor = Color.Black
@@ -183,8 +192,8 @@ fun AddCalendarEventBottomSheet(
                             .height(100.dp),
                         maxLines = 4,
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Color.Black,
-                            focusedLabelColor = Color.Black
+                            focusedBorderColor = MainColor,
+                            focusedLabelColor = MainColor
                         )
                     )
 
@@ -208,7 +217,7 @@ fun AddCalendarEventBottomSheet(
                             onCheckedChange = { isRemind = it },
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = Color.White,
-                                checkedTrackColor = Color.Black,
+                                checkedTrackColor = MainColor,
                                 uncheckedThumbColor = Color.White,
                                 uncheckedTrackColor = Color.Gray
                             )
@@ -248,7 +257,7 @@ fun AddCalendarEventBottomSheet(
                             modifier = Modifier.weight(1f),
                             enabled = title.isNotEmpty(),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = Color.Black,
+                                containerColor = MainColor,
                                 contentColor = Color.White
                             )
                         ) {

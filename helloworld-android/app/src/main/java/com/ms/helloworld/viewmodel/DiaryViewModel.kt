@@ -8,6 +8,8 @@ import com.ms.helloworld.dto.request.DiaryCreateRequest
 import com.ms.helloworld.dto.request.DiaryUpdateRequest
 import com.ms.helloworld.dto.response.DiaryResponse
 import com.ms.helloworld.repository.DiaryRepository
+import com.ms.helloworld.repository.CaricatureRepository
+import com.ms.helloworld.dto.response.CaricatureResponse
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -42,6 +44,7 @@ data class WeeklyDiaryStatus(
 @HiltViewModel
 class DiaryViewModel @Inject constructor(
     private val diaryRepository: DiaryRepository,
+    private val caricatureRepository: CaricatureRepository,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -448,8 +451,23 @@ class DiaryViewModel @Inject constructor(
         println("🧹 DiaryViewModel - 편집 일기 클리어")
     }
 
-    // TODO: 나중에 필요시 전체 일기 조회 기능 추가
-    // fun loadAllDiariesForDebug() { ... }
+    // 캐리커쳐 조회
+    suspend fun getCaricatureFromPhoto(diaryPhotoId: Long): Result<CaricatureResponse?> {
+        return try {
+            caricatureRepository.getCaricatureFromPhoto(diaryPhotoId)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    // 캐리커쳐 생성
+    suspend fun generateCaricature(diaryPhotoId: Long): Result<CaricatureResponse> {
+        return try {
+            caricatureRepository.generateCaricature(diaryPhotoId)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 
     // 임신 주차 계산 (네겔레 법칙 기반)
     private fun getCurrentPregnancyWeek(currentDate: LocalDate): Int {
