@@ -23,6 +23,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -31,6 +32,7 @@ import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
+import com.ms.helloworld.R
 import com.ms.helloworld.dto.response.CalendarEventResponse
 import com.ms.helloworld.ui.components.AddCalendarEventBottomSheet
 import com.ms.helloworld.ui.components.CustomTopAppBar
@@ -182,10 +184,10 @@ fun CalendarScreen(
                                     add(Calendar.MONTH, -1)
                                 }
                             }) {
-                                Text(
-                                    "<",
-                                    fontSize = 18.sp,
-                                    fontWeight = FontWeight.Bold
+                                Icon(
+                                    painter = painterResource(R.drawable.left_arrow),
+                                    contentDescription = "이전 달",
+                                    tint = Color.Unspecified
                                 )
                             }
 
@@ -201,10 +203,10 @@ fun CalendarScreen(
                                     add(Calendar.MONTH, 1)
                                 }
                             }) {
-                                Text(
-                                    ">",
-                                    fontSize = 18.sp,
-                                    fontWeight = FontWeight.Bold
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_profile_move),
+                                    contentDescription = "다음 달",
+                                    tint = Color.Unspecified
                                 )
                             }
                         }
@@ -281,9 +283,9 @@ fun CalendarScreen(
                             ) {
                                 Text(
                                     text = "${currentEvents.size}",
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                                     color = Color.White,
-                                    fontSize = 12.sp,
+                                    fontSize = 14.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
@@ -364,69 +366,69 @@ fun CalendarScreen(
                                         detailEvent = event
                                         showDetailDialog = true
                                     },
-                                    onDragStart = {
-                                        draggingEvent = event
-                                        isDragging = true
-                                    },
-                                    onDragEnd = { finalOffset ->
-                                        if (isDragging && draggingEvent != null) {
-                                            // 드래그 거리에 따라 순서 변경 결정
-                                            val threshold = 60f // 임계값을 줄여서 더 민감하게 반응
-                                            val currentIndex = currentEvents.indexOfFirst { it.eventId == draggingEvent!!.eventId }
-
-                                            if (currentIndex != -1) {
-                                                when {
-                                                    finalOffset < -threshold && currentIndex > 0 -> {
-                                                        // 위로 이동 (더 작은 orderNo로)
-                                                        val targetIndex = currentIndex - 1
-                                                        val draggedEvent = currentEvents[currentIndex]
-                                                        val targetEvent = currentEvents[targetIndex]
-
-                                                        // 새로운 리스트 생성하여 순서 재할당
-                                                        val reorderedEvents = currentEvents.toMutableList()
-                                                        reorderedEvents.removeAt(currentIndex)
-                                                        reorderedEvents.add(targetIndex, draggedEvent)
-
-                                                        // 전체 리스트의 orderNo를 1부터 순차적으로 재할당
-                                                        reorderedEvents.forEachIndexed { index, eventItem ->
-                                                            viewModel.updateEvent(
-                                                                eventId = eventItem.eventId,
-                                                                orderNo = index + 1
-                                                            )
-                                                        }
-                                                    }
-                                                    finalOffset > threshold && currentIndex < currentEvents.size - 1 -> {
-                                                        // 아래로 이동 (더 큰 orderNo로)
-                                                        val targetIndex = currentIndex + 1
-                                                        val draggedEvent = currentEvents[currentIndex]
-                                                        val targetEvent = currentEvents[targetIndex]
-
-                                                        // 새로운 리스트 생성하여 순서 재할당
-                                                        val reorderedEvents = currentEvents.toMutableList()
-                                                        reorderedEvents.removeAt(currentIndex)
-                                                        reorderedEvents.add(targetIndex, draggedEvent)
-
-                                                        // 전체 리스트의 orderNo를 1부터 순차적으로 재할당
-                                                        reorderedEvents.forEachIndexed { index, eventItem ->
-                                                            viewModel.updateEvent(
-                                                                eventId = eventItem.eventId,
-                                                                orderNo = index + 1
-                                                            )
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        // 드래그 상태 초기화
-                                        draggingEvent = null
-                                        isDragging = false
-                                        dragOffset = 0f
-                                    },
-                                    onDragUpdate = { offset ->
-                                        dragOffset = offset
-                                    },
-                                    isDragging = isDragging && draggingEvent?.eventId == event.eventId,
-                                    dragOffset = if (draggingEvent?.eventId == event.eventId) dragOffset else 0f
+//                                    onDragStart = {
+//                                        draggingEvent = event
+//                                        isDragging = true
+//                                    },
+//                                    onDragEnd = { finalOffset ->
+//                                        if (isDragging && draggingEvent != null) {
+//                                            // 드래그 거리에 따라 순서 변경 결정
+//                                            val threshold = 60f // 임계값을 줄여서 더 민감하게 반응
+//                                            val currentIndex = currentEvents.indexOfFirst { it.eventId == draggingEvent!!.eventId }
+//
+//                                            if (currentIndex != -1) {
+//                                                when {
+//                                                    finalOffset < -threshold && currentIndex > 0 -> {
+//                                                        // 위로 이동 (더 작은 orderNo로)
+//                                                        val targetIndex = currentIndex - 1
+//                                                        val draggedEvent = currentEvents[currentIndex]
+//                                                        val targetEvent = currentEvents[targetIndex]
+//
+//                                                        // 새로운 리스트 생성하여 순서 재할당
+//                                                        val reorderedEvents = currentEvents.toMutableList()
+//                                                        reorderedEvents.removeAt(currentIndex)
+//                                                        reorderedEvents.add(targetIndex, draggedEvent)
+//
+//                                                        // 전체 리스트의 orderNo를 1부터 순차적으로 재할당
+//                                                        reorderedEvents.forEachIndexed { index, eventItem ->
+//                                                            viewModel.updateEvent(
+//                                                                eventId = eventItem.eventId,
+//                                                                orderNo = index + 1
+//                                                            )
+//                                                        }
+//                                                    }
+//                                                    finalOffset > threshold && currentIndex < currentEvents.size - 1 -> {
+//                                                        // 아래로 이동 (더 큰 orderNo로)
+//                                                        val targetIndex = currentIndex + 1
+//                                                        val draggedEvent = currentEvents[currentIndex]
+//                                                        val targetEvent = currentEvents[targetIndex]
+//
+//                                                        // 새로운 리스트 생성하여 순서 재할당
+//                                                        val reorderedEvents = currentEvents.toMutableList()
+//                                                        reorderedEvents.removeAt(currentIndex)
+//                                                        reorderedEvents.add(targetIndex, draggedEvent)
+//
+//                                                        // 전체 리스트의 orderNo를 1부터 순차적으로 재할당
+//                                                        reorderedEvents.forEachIndexed { index, eventItem ->
+//                                                            viewModel.updateEvent(
+//                                                                eventId = eventItem.eventId,
+//                                                                orderNo = index + 1
+//                                                            )
+//                                                        }
+//                                                    }
+//                                                }
+//                                            }
+//                                        }
+//                                        // 드래그 상태 초기화
+//                                        draggingEvent = null
+//                                        isDragging = false
+//                                        dragOffset = 0f
+//                                    },
+//                                    onDragUpdate = { offset ->
+//                                        dragOffset = offset
+//                                    },
+//                                    isDragging = isDragging && draggingEvent?.eventId == event.eventId,
+//                                    dragOffset = if (draggingEvent?.eventId == event.eventId) dragOffset else 0f
                                 )
                             }
                         }
@@ -448,7 +450,7 @@ fun CalendarScreen(
                 selectedDateKey = displayDateKey
                 showAddDialog = true
             },
-            containerColor = MaterialTheme.colorScheme.primary,
+            containerColor = MainColor,
             contentColor = Color.White,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
@@ -655,7 +657,7 @@ fun CalendarGrid(
                                     .clip(CircleShape)
                                     .background(
                                         when {
-                                            isSelected -> Color.Black
+                                            isSelected -> MainColor
                                             isToday -> Color.Gray.copy(alpha = 0.3f)
                                             else -> Color.Transparent
                                         }
@@ -718,25 +720,25 @@ fun EventCard(
                 rotationZ = if (isDragging) (dragOffset / 50f).coerceIn(-2f, 2f) else 0f
             }
             .animateContentSize()
-            .pointerInput(event.eventId) {
-                var totalOffset = 0f
-                detectDragGesturesAfterLongPress(
-                    onDragStart = {
-                        totalOffset = 0f
-                        isLongPressed = true
-                        onDragStart()
-                    },
-                    onDragEnd = {
-                        onDragEnd(totalOffset)
-                        isLongPressed = false
-                    },
-                    onDrag = { change, dragAmount ->
-                        totalOffset += dragAmount.y
-                        onDragUpdate(totalOffset)
-                        change.consume() // 제스처 소비 추가
-                    }
-                )
-            }
+//            .pointerInput(event.eventId) {
+//                var totalOffset = 0f
+//                detectDragGesturesAfterLongPress(
+//                    onDragStart = {
+//                        totalOffset = 0f
+//                        isLongPressed = true
+//                        onDragStart()
+//                    },
+//                    onDragEnd = {
+//                        onDragEnd(totalOffset)
+//                        isLongPressed = false
+//                    },
+//                    onDrag = { change, dragAmount ->
+//                        totalOffset += dragAmount.y
+//                        onDragUpdate(totalOffset)
+//                        change.consume() // 제스처 소비 추가
+//                    }
+//                )
+//            }
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = LocalIndication.current,
@@ -754,7 +756,7 @@ fun EventCard(
             }
         ),
         elevation = CardDefaults.cardElevation(
-            defaultElevation = if (isDragging) 16.dp else 2.dp
+            defaultElevation = if (isDragging) 16.dp else 0.dp
         ),
         shape = RoundedCornerShape(12.dp),
         border = if (isDragging) BorderStroke(2.dp, PrimaryColorMedium) else null
@@ -770,23 +772,23 @@ fun EventCard(
                 verticalAlignment = Alignment.Top
             ) {
                 // 드래그 핸들 (길게 누를 때만 표시)
-                if (isDragging || isLongPressed) {
-                    Column(
-                        modifier = Modifier.padding(end = 12.dp, top = 4.dp)
-                    ) {
-                        repeat(3) {
-                            Box(
-                                modifier = Modifier
-                                    .size(width = 3.dp, height = 12.dp)
-                                    .background(
-                                        PrimaryColorDark,
-                                        RoundedCornerShape(2.dp)
-                                    )
-                            )
-                            if (it < 2) Spacer(modifier = Modifier.height(2.dp))
-                        }
-                    }
-                }
+//                if (isDragging || isLongPressed) {
+//                    Column(
+//                        modifier = Modifier.padding(end = 12.dp, top = 4.dp)
+//                    ) {
+//                        repeat(3) {
+//                            Box(
+//                                modifier = Modifier
+//                                    .size(width = 3.dp, height = 12.dp)
+//                                    .background(
+//                                        PrimaryColorDark,
+//                                        RoundedCornerShape(2.dp)
+//                                    )
+//                            )
+//                            if (it < 2) Spacer(modifier = Modifier.height(2.dp))
+//                        }
+//                    }
+//                }
 
                 // 메인 콘텐츠
                 Column(modifier = Modifier.weight(1f)) {
@@ -814,9 +816,9 @@ fun EventCard(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            imageVector = Icons.Default.DateRange,
+                            painter = painterResource(R.drawable.ic_time),
                             contentDescription = "시간",
-                            modifier = Modifier.size(14.dp),
+                            modifier = Modifier.size(16.dp),
                             tint = PrimaryColor
                         )
                         Spacer(modifier = Modifier.width(4.dp))
@@ -835,43 +837,43 @@ fun EventCard(
                         )
 
                         // 순서 표시 (드래그 모드일 때)
-                        if (isDragging) {
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Card(
-                                colors = CardDefaults.cardColors(containerColor = PrimaryColor),
-                                shape = CircleShape
-                            ) {
-                                Text(
-                                    text = "#${event.orderNo ?: 1}",
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                                    color = Color.White,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
+//                        if (isDragging) {
+//                            Spacer(modifier = Modifier.width(12.dp))
+//                            Card(
+//                                colors = CardDefaults.cardColors(containerColor = PrimaryColor),
+//                                shape = CircleShape
+//                            ) {
+//                                Text(
+//                                    text = "#${event.orderNo ?: 1}",
+//                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+//                                    color = Color.White,
+//                                    fontSize = 10.sp,
+//                                    fontWeight = FontWeight.Bold
+//                                )
+//                            }
+//                        }
                     }
                 }
             }
 
 
             // 드래그 안내 메시지 (길게 누를 때만 표시)
-            if (isLongPressed && !isDragging) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = PrimaryColorLight),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text(
-                        text = "↕️ 위아래로 드래그하여 순서를 변경하세요",
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        fontSize = 11.sp,
-                        color = PrimaryColor,
-                        fontWeight = FontWeight.Medium,
-                        textAlign = TextAlign.Center
-                    )
-                }
-            }
+//            if (isLongPressed && !isDragging) {
+//                Spacer(modifier = Modifier.height(8.dp))
+//                Card(
+//                    colors = CardDefaults.cardColors(containerColor = PrimaryColorLight),
+//                    shape = RoundedCornerShape(8.dp)
+//                ) {
+//                    Text(
+//                        text = "↕️ 위아래로 드래그하여 순서를 변경하세요",
+//                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+//                        fontSize = 11.sp,
+//                        color = PrimaryColor,
+//                        fontWeight = FontWeight.Medium,
+//                        textAlign = TextAlign.Center
+//                    )
+//                }
+//            }
         }
     }
 }

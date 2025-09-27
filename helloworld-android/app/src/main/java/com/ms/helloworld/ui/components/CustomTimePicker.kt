@@ -22,6 +22,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.ms.helloworld.ui.theme.MainColor
 import kotlinx.coroutines.launch
 import java.time.LocalTime
 import kotlin.math.PI
@@ -300,14 +301,14 @@ fun KoreanTimePickerDialog(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(8.dp))
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 TextButton(onClick = onDismiss) {
-                    Text("취소", fontSize = 17.sp, color = Color(0xFF8E8E93))
+                    Text("취소", fontSize = 16.sp, color = Color.Gray)
                 }
                 TextButton(onClick = { onTimeSelected(tempTime); onDismiss() }) {
-                    Text("저장", fontSize = 17.sp, color = Color.Black)
+                    Text("저장", fontSize = 16.sp, color = MainColor)
                 }
             }
         }

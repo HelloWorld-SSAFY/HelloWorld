@@ -91,7 +91,18 @@ fun CustomTopAppBar(
                             .padding(end = 40.dp)
                     )
                 }
-                "calendar", "diary" -> {}
+                "calendar" -> {
+                    Text(
+                        text = "캘린더",
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        fontSize = 20.sp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(end = 40.dp)
+                    )
+                }
+                "diary" -> {}
                 else -> {
                     Text(
                         text = title,
