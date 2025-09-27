@@ -34,9 +34,6 @@ class StepsWorkScheduler @Inject constructor(
             .build()
 
         // 12시, 16시, 20시 각각 스케줄
-        // 15시 40분으로 테스트
-        scheduleWorkAt(15, 31, "steps_upload_test", constraints)
-
         scheduleWorkAt(12, 0, WORK_NAME_12, constraints)
         scheduleWorkAt(16, 0, WORK_NAME_16, constraints)
         scheduleWorkAt(20, 0, WORK_NAME_20, constraints)
@@ -58,7 +55,7 @@ class StepsWorkScheduler @Inject constructor(
 
         val delayInMinutes = ChronoUnit.MINUTES.between(now, targetDateTime)
 
-        Log.d(TAG, "${hour}시 작업 스케줄: 현재 시간에서 ${delayInMinutes}분 후 실행 (${targetDateTime})")
+        Log.d(TAG, "${hour}시 ${minute}분 작업 스케줄: 현재 시간에서 ${delayInMinutes}분 후 실행 (${targetDateTime})")
 
         // 매일 반복되는 작업 생성
         val periodicWorkRequest = PeriodicWorkRequestBuilder<StepsUploadWorker>(

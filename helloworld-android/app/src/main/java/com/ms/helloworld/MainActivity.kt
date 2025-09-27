@@ -57,13 +57,10 @@ class MainActivity : ComponentActivity() {
         )
     }
 
-    // 안드로이드 기본 권한 결과 처리 추가
+    // 안드로이드 기본 권한 결과 처리 (ACTIVITY_RECOGNITION 제거)
     private val androidPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-//        Log.d(TAG, "안드로이드 권한 결과: $permissions")
-
-        val activityRecognitionGranted = permissions[Manifest.permission.ACTIVITY_RECOGNITION] ?: false
         val locationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
         val notificationGranted = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
             permissions[Manifest.permission.POST_NOTIFICATIONS] ?: false
@@ -71,31 +68,26 @@ class MainActivity : ComponentActivity() {
             true // API 33 미만에서는 알림 권한 불필요
         }
 
-//        Log.d(TAG, "권한 상태 - 활동인식: $activityRecognitionGranted, 위치: $locationGranted, 알림: $notificationGranted")
+        Log.d(TAG, "권한 상태 - 위치: $locationGranted, 알림: $notificationGranted")
 
-        if (activityRecognitionGranted && locationGranted) {
-//            Log.d(TAG, "기본 권한 승인됨. Health Connect 권한 확인을 진행합니다.")
+        if (locationGranted) {
+            Log.d(TAG, "위치 권한 승인됨. Health Connect 권한 확인을 진행합니다.")
 
             // 알림 권한이 있으면 FCM 토큰 등록
             if (notificationGranted) {
-//                Log.d(TAG, "알림 권한도 승인됨. FCM 토큰을 등록합니다.")
-//                fcmRepository.registerTokenAsync(platform = "ANDROID")
+                Log.d(TAG, "알림 권한도 승인됨. FCM 토큰을 등록합니다.")
+                // fcmRepository.registerTokenAsync(platform = "ANDROID")
             }
 
             checkAndRequestHealthConnectPermissions()
         } else {
-            Log.w(TAG, "기본 권한이 거부되었습니다.")
-            if (!activityRecognitionGranted) {
-                Log.w(TAG, "ACTIVITY_RECOGNITION 권한 없음 - 걸음수 데이터 수집 불가")
-            }
-            if (!locationGranted) {
-                Log.w(TAG, "위치 권한 없음 - 위치 데이터 수집 불가")
-            }
+            Log.w(TAG, "위치 권한이 거부되었습니다.")
+            Log.w(TAG, "위치 권한 없음 - 위치 데이터 수집 불가")
             if (!notificationGranted) {
                 Log.w(TAG, "알림 권한 없음 - 푸시 알림 수신 불가")
             }
 
-            // 서버 전송에 필요한 권한이 부족하지만, Health Connect는 여전히 확인
+            // 위치 권한이 없어도 Health Connect는 확인 (걸음수는 수집 가능)
             checkAndRequestHealthConnectPermissions()
         }
     }
@@ -171,12 +163,6 @@ class MainActivity : ComponentActivity() {
     private fun checkAndRequestAndroidPermissions() {
         val permissionsToRequest = mutableListOf<String>()
 
-        // ACTIVITY_RECOGNITION 권한 확인 (걸음수에 중요)
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACTIVITY_RECOGNITION)
-            != PackageManager.PERMISSION_GRANTED) {
-            permissionsToRequest.add(Manifest.permission.ACTIVITY_RECOGNITION)
-        }
-
         // 위치 권한 확인
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
             != PackageManager.PERMISSION_GRANTED) {
@@ -247,7 +233,6 @@ class MainActivity : ComponentActivity() {
 
     // 모든 권한 상태를 최종 확인하고 WorkManager 시작 여부 결정
     private fun checkFinalPermissionsAndStartWork() {
-        val hasActivityRecognition = ContextCompat.checkSelfPermission(this, Manifest.permission.ACTIVITY_RECOGNITION) == PackageManager.PERMISSION_GRANTED
         val hasLocation = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
         val hasNotification = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
@@ -266,13 +251,12 @@ class MainActivity : ComponentActivity() {
             }
 
             Log.d(TAG, "=== 최종 권한 상태 확인 ===")
-            Log.d(TAG, "ACTIVITY_RECOGNITION: $hasActivityRecognition")
             Log.d(TAG, "위치 권한: $hasLocation")
             Log.d(TAG, "알림 권한: $hasNotification")
             Log.d(TAG, "걸음수 권한: $hasStepsPermission")
 
             // 서버 전송에 필요한 모든 권한이 있는지 확인
-            if (hasActivityRecognition && hasLocation && hasStepsPermission) {
+            if (hasStepsPermission) {
                 Log.d(TAG, "모든 필수 권한 승인됨. WorkManager를 시작합니다.")
                 stepsWorkScheduler.scheduleStepsUpload()
 
