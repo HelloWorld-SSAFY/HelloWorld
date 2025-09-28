@@ -51,7 +51,7 @@ public class WeeklyQueryService {
             boolean needLookup = refresh || missing || isExpired(w);
 
             if (needLookup) {
-                String base = !isBlank(w.getVideoTitle()) ? w.getVideoTitle() : w.getTextBody();
+                String base = w.getTextBody();
                 String query = "임산부를 위한 " + base;
 
                 youtube.searchFirst(query).ifPresent(result -> {

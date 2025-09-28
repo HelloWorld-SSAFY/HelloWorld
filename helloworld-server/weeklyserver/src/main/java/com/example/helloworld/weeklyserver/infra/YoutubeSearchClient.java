@@ -1,5 +1,7 @@
 package com.example.helloworld.weeklyserver.infra;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -37,42 +39,46 @@ public class YoutubeSearchClient {
         }
     }
 
+    // YoutubeSearchClient.java
     public Optional<YoutubeVideo> searchFirst(String query) {
         if (apiKey == null || apiKey.isBlank()) {
-            log.warn("YouTube API KEY is missing");
+            log.warn("[YouTube] API KEY missing");
             return Optional.empty();
         }
         try {
             String q = URLEncoder.encode(query, StandardCharsets.UTF_8);
-            String url =
-                    "https://www.googleapis.com/youtube/v3/search"
-                            + "?part=snippet&type=video&maxResults=1"
-                            + "&q=" + q
-                            + "&key=" + apiKey;
+            String url = "https://www.googleapis.com/youtube/v3/search"
+                    + "?part=snippet&type=video&maxResults=1&q=" + q + "&key=" + apiKey;
 
-            var res = restClient.get()
-                    .uri(url)
+            // 1) 원문 JSON 로깅
+            String raw = restClient.get().uri(url)
                     .accept(MediaType.APPLICATION_JSON)
                     .retrieve()
-                    .body(SearchResponse.class);
+                    .body(String.class);
+            log.info("[YouTube] raw={}", raw);   // ← 여기까지 보이면 HTTP/네트워크 OK
 
-            if (res == null || res.items == null || res.items.length == 0) return Optional.empty();
+            // 2) 안전 파싱
+            SearchResponse res = new com.fasterxml.jackson.databind.ObjectMapper()
+                    .configure(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+                    .readValue(raw, SearchResponse.class);
 
-            var item = res.items[0];
-            var videoId = item.id != null ? item.id.videoId : null;
-            var title = item.snippet != null ? item.snippet.title : null;
-            var thumb =
-                    item.snippet != null && item.snippet.thumbnails != null
-                            ? firstThumb(item.snippet.thumbnails)
-                            : null;
+            if (res == null || res.items == null || res.items.length == 0) {
+                log.warn("[YouTube] No items for query: {}", query);
+                return Optional.empty();
+            }
+            var item  = res.items[0];
+            var vid   = (item.id != null) ? item.id.videoId : null;
+            var title = (item.snippet != null) ? item.snippet.title : null;
+            var thumb = (item.snippet != null && item.snippet.thumbnails != null) ? firstThumb(item.snippet.thumbnails) : null;
 
-            if (videoId == null) return Optional.empty();
-            return Optional.of(new YoutubeVideo(videoId, title, thumb));
+            if (vid == null) { log.warn("[YouTube] Missing videoId"); return Optional.empty(); }
+            return Optional.of(new YoutubeVideo(vid, title, thumb));
         } catch (Exception e) {
-            log.warn("YouTube search failed: {}", e.getMessage());
+            log.warn("[YouTube] search failed", e);
             return Optional.empty();
         }
     }
+
 
     private String firstThumb(Thumbnails t) {
         if (t.maxres != null) return t.maxres.url;
@@ -83,13 +89,27 @@ public class YoutubeSearchClient {
         return null;
     }
 
-    // ---- DTOs (간단 매핑용) ----
-    record SearchResponse(Item[] items) {}
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    static class SearchResponse { Item[] items; }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
     static class Item { Id id; Snippet snippet; }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
     static class Id { String kind; String videoId; }
-    static class Snippet { String title; Thumbnails thumbnails; }
-    static class Thumbnails {
-        Thumb defaultThumb; Thumb medium; Thumb high; Thumb standard; Thumb maxres;
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    static class Snippet {
+        String title;
+        Thumbnails thumbnails;
     }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    static class Thumbnails {
+        @JsonProperty("default") Thumb defaultThumb;  // ← 예약어 매핑
+        Thumb medium; Thumb high; Thumb standard; Thumb maxres;
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
     static class Thumb { String url; Integer width; Integer height; }
 }
