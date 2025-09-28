@@ -2,23 +2,50 @@ package com.ms.helloworld.ui.screen
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -27,6 +54,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
+import com.ms.helloworld.R
 import com.ms.helloworld.navigation.Screen
 import com.ms.helloworld.ui.components.CustomTopAppBar
 import com.ms.helloworld.ui.components.ProfileEditDialog
@@ -34,29 +62,21 @@ import com.ms.helloworld.viewmodel.CoupleProfileViewModel
 import com.ms.helloworld.viewmodel.HomeViewModel
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-import java.time.temporal.ChronoUnit
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CoupleProfileScreen(
     navController: NavHostController,
-    onBackClick: () -> Unit = {},
     viewModel: CoupleProfileViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
-    // HomeViewModel도 함께 사용하여 프로필 업데이트 시 동기화
     val homeViewModel: HomeViewModel = hiltViewModel()
     val currentPregnancyDay by homeViewModel.currentPregnancyDay.collectAsState()
 
     // 프로필 업데이트 완료 감지하여 HomeViewModel 새로고침
     LaunchedEffect(state.momProfile, state.isLoading) {
-        // 로딩이 끝나고 momProfile이 업데이트되었을 때 HomeViewModel 새로고침
-        if (!state.isLoading && state.momProfile != null) {
-            println("🔄 CoupleProfileScreen - 프로필 업데이트 감지, HomeViewModel 새로고침")
-            kotlinx.coroutines.delay(500) // API 완료 대기
-            homeViewModel.refreshProfile()
-        }
+        homeViewModel.refreshProfile()
     }
 
     // 로그아웃 완료 감지
@@ -75,7 +95,6 @@ fun CoupleProfileScreen(
     var showInviteCodeBottomSheet by remember { mutableStateOf(false) }
     var showProfileEditDialog by remember { mutableStateOf(false) }
     val bottomSheetState = rememberModalBottomSheetState()
-    val backgroundColor = Color(0xFFFFFFFF)
 
     val isPartnerConnected = state.isPartnerConnected
     val shouldShowInviteCode = state.memberProfile?.gender?.uppercase() == "FEMALE" // 여성만 초대 코드 생성
@@ -114,14 +133,14 @@ fun CoupleProfileScreen(
                                 .background(
                                     Color(0xFFA8D5A8),
                                     CircleShape
-                                ),
+                                )
+                            .clip(CircleShape),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = "사진",
-                                color = Color.Black,
-                                fontSize = 12.sp,
-                                textAlign = TextAlign.Center
+                            Icon(
+                                painter = painterResource(R.drawable.pregnant_woman),
+                                contentDescription = "아내 프로필 이미지",
+                                tint = Color.Unspecified,
                             )
                         }
                         
@@ -133,12 +152,14 @@ fun CoupleProfileScreen(
                             horizontalArrangement = Arrangement.Center
                         ) {
                             Text(
-                                text = state.userA?.nickname ?: "아내 닉네임",
+                                text = state.userA?.nickname ?: "",
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = Color.Black,
                                 textAlign = TextAlign.Center
                             )
+
+                            Spacer(modifier = Modifier.width(4.dp))
 
                             // 여성 사용자만 아내 프로필 수정 버튼 표시
                             if (currentUserGender == "FEMALE") {
@@ -156,8 +177,20 @@ fun CoupleProfileScreen(
                             }
                         }
                     }
-                    
-                    Spacer(modifier = Modifier.width(30.dp))
+
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.width(30.dp)
+                    ) {
+                        Spacer(modifier = Modifier.height(40.dp)) // 프로필 이미지 중앙에 맞추기 위한 여백
+
+                        Icon(
+                            imageVector = Icons.Default.Favorite, // 하트 아이콘
+                            contentDescription = "커플 연결",
+                            tint = Color(0xFFF49699), // 핑크 색상
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
                     
                     // 남편 프로필 (오른쪽)
                     Column(
@@ -169,14 +202,14 @@ fun CoupleProfileScreen(
                                 .background(
                                     Color(0xFFB5D3F7),
                                     CircleShape
-                                ),
+                                )
+                                .clip(CircleShape),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = "사진",
-                                color = Color.Black,
-                                fontSize = 12.sp,
-                                textAlign = TextAlign.Center
+                            Icon(
+                                painter = painterResource(R.drawable.ic_man),
+                                contentDescription = "남편 프로필 이미지",
+                                tint = Color.Unspecified,
                             )
                         }
 
@@ -187,12 +220,13 @@ fun CoupleProfileScreen(
                             horizontalArrangement = Arrangement.Center
                         ) {
                             Text(
-                                text = state.userB?.nickname ?: "남편 닉네임",
+                                text = state.userB?.nickname ?: "",
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = Color.Black,
                                 textAlign = TextAlign.Center
                             )
+                            Spacer(modifier = Modifier.width(4.dp))
 
                             // 남성 사용자만 남편 프로필 수정 버튼 표시
                             if (currentUserGender == "MALE") {
@@ -218,7 +252,7 @@ fun CoupleProfileScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp)
-                    .padding(top = 8.dp, bottom = 20.dp),
+                    .padding(top = 16.dp, bottom = 20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // 임신 일수 (첨번째 줄)
@@ -277,6 +311,7 @@ fun CoupleProfileScreen(
                 thickness = 1.dp,
                 color = Color.LightGray
             )
+            Spacer(modifier = Modifier.height(8.dp))
 
             // 설정 섹션
             Column(

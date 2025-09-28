@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -25,8 +26,9 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.ms.helloworld.dto.response.MomProfile
+import com.ms.helloworld.R
 import com.ms.helloworld.ui.components.CustomTopAppBar
+import com.ms.helloworld.ui.theme.MainColor
 import com.ms.helloworld.viewmodel.DiaryViewModel
 import com.ms.helloworld.viewmodel.HomeViewModel
 import com.ms.helloworld.viewmodel.HealthViewModel
@@ -103,9 +105,6 @@ fun DiaryScreen(
         // 실제 임신 정보 사용 (currentPregnancyDay를 우선 사용)
         val actualCurrentWeek = homeState?.let { profile ->
             val calculatedWeek = ((currentPregnancyDay - 1) / 7) + 1
-            println("📊 DiaryScreen - MomProfile 데이터: 서버주차=${profile.pregnancyWeek}, 계산된주차=${calculatedWeek}, 기존currentDay=${profile.currentDay}, 닉네임=${profile.nickname}")
-            println("📊 DiaryScreen - HomeViewModel currentPregnancyDay: ${currentPregnancyDay}")
-            println("📊 DiaryScreen - homeState 객체 해시: ${profile.hashCode()}")
             PregnancyWeek(
                 week = calculatedWeek,
                 dayCount = currentPregnancyDay  // HomeViewModel의 정확한 계산값 사용
@@ -260,13 +259,12 @@ fun DiaryScreen(
         // 사용자 정보를 DiaryViewModel에 전달
         LaunchedEffect(userId, userGender) {
             if (userId != null && userGender != null) {
-                println("👤 DiaryScreen - DiaryViewModel에 사용자 정보 전달: userId=$userId, userGender=$userGender")
                 viewModel.setUserInfo(userId, userGender)
 
                 // 사용자 정보가 업데이트되면 기존 데이터를 다시 처리
                 homeState?.let { profile ->
+                    viewModel.loadWeeklyDiaries(profile.pregnancyWeek)
                     val calculatedWeek = ((currentPregnancyDay - 1) / 7) + 1
-                    println("🔄 DiaryScreen - 사용자 정보 업데이트 후 주간 일기 재로딩: ${calculatedWeek}주차")
                     viewModel.loadWeeklyDiaries(calculatedWeek)
                 }
             }
@@ -280,7 +278,6 @@ fun DiaryScreen(
                     val calculatedWeek = ((currentPregnancyDay - 1) / 7) + 1
                     viewModel.setLmpDate(actualMenstrualDate)
                     viewModel.loadWeeklyDiaries(calculatedWeek)
-                    println("🔄 DiaryScreen - LaunchedEffect: ${calculatedWeek}주차 로딩")
                 }
             }
         }
@@ -308,20 +305,20 @@ fun DiaryScreen(
                     onPreviousWeek = {
                         if (displayWeek.week > 1) {
                             viewingWeek = displayWeek.week - 1
-                            println("📅 DiaryScreen - 이전 주차로 이동: ${displayWeek.week - 1}주차")
+
                             viewModel.loadWeeklyDiaries(displayWeek.week - 1)
                         }
                     },
                     onNextWeek = {
                         if (displayWeek.week < actualCurrentWeek.week) {
                             viewingWeek = displayWeek.week + 1
-                            println("📅 DiaryScreen - 다음 주차로 이동: ${displayWeek.week + 1}주차")
+
                             viewModel.loadWeeklyDiaries(displayWeek.week + 1)
                         }
                     },
                     onCurrentWeek = {
                         viewingWeek = null
-                        println("📅 DiaryScreen - 현재 주차로 돌아가기: ${actualCurrentWeek.week}주차")
+
                         viewModel.loadWeeklyDiaries(actualCurrentWeek.week)
                     }
                 )
@@ -332,7 +329,7 @@ fun DiaryScreen(
                     onDayClick = { dayInWeek ->
                         // 표시 중인 주차의 일수를 실제 임신 일수로 변환
                         val actualDay = (displayWeek.week - 1) * 7 + dayInWeek
-                        println("🔗 DiaryScreen - 네비게이션: ${displayWeek.week}주차 dayInWeek=$dayInWeek -> actualDay=$actualDay")
+
                         navController.navigate("diary_detail/$actualDay")
                     }
                 )
@@ -403,19 +400,19 @@ fun WeeklyDiaryCard(
                 Icon(
                     Icons.Default.DateRange,
                     contentDescription = "일기",
-                    modifier = Modifier.size(20.dp),
-                    tint = Color.Black
+                    modifier = Modifier.size(22.dp),
+                    tint = MainColor
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = "일주일 일기 체크",
                     fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.SemiBold,
                     color = Color.Black
                 )
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             // 요일 라벨 (1-7)
             Row(
@@ -467,9 +464,9 @@ fun DiaryStatusCircle(
 
     val circleColor = when (diaryState) {
         DiaryState.NONE -> Color(0xFFE0E0E0)      // 회색
-        DiaryState.MOM_ONLY -> Color(0xFFF49699)  // 산모만
+        DiaryState.MOM_ONLY -> MainColor.copy(alpha = 0.9f)  // 산모만
         DiaryState.DAD_ONLY -> Color(0xFF88A9F8)  // 남편만
-        DiaryState.BOTH -> Color(0xFF26E936)      // 둘 다
+        DiaryState.BOTH -> Color(0xFF9CCC65)     // 둘 다
     }
 
     Box(
@@ -545,20 +542,20 @@ fun MomDataSummaryCard(
 
             // 체중
             DataSummaryItem(
-                icon = Icons.Default.Person,
-                iconColor = Color(0xFF26E936),
+                icon = R.drawable.ic_kg,
+                iconColor =  Color(0xFFAED581),
                 title = "체중",
                 value = "${momHealthData.weight.toInt()}kg",
                 subtitle = "",
                 progress = momHealthData.weight / 150, // 200kg 기준으로 진행률 계산
-                progressColor = Color(0xFF26E936)
+                progressColor =  Color(0xFFAED581)
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
             // 혈압
             DataSummaryItem(
-                icon = Icons.Default.Favorite,
+                icon = R.drawable.ic_heart_img,
                 iconColor = Color(0xFFF49699),
                 title = "혈압",
                 value = "${momHealthData.bloodPressureSystolic}/${momHealthData.bloodPressureDiastolic}mmHg",
@@ -571,8 +568,8 @@ fun MomDataSummaryCard(
 
             // 혈당
             DataSummaryItem(
-                icon = Icons.Default.Face,
-                iconColor = Color(0xFF88A9F8),
+                icon = R.drawable.ic_blood_sugar,
+                iconColor = Color.Unspecified,
                 title = "혈당",
                 value = "${momHealthData.bloodSugar}mg/dL",
                 subtitle = "",
@@ -585,7 +582,7 @@ fun MomDataSummaryCard(
 
 @Composable
 fun DataSummaryItem(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: Int,
     iconColor: Color,
     title: String,
     value: String,
@@ -602,11 +599,11 @@ fun DataSummaryItem(
             modifier = Modifier
                 .size(40.dp)
                 .clip(CircleShape)
-                .background(iconColor.copy(alpha = 0.1f)),
+                .background(if(title == "혈당") Color(0xFF88A9F8).copy(alpha = 0.1f) else iconColor.copy(alpha = 0.1f)),
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                icon,
+                painter = painterResource(id = icon),
                 contentDescription = title,
                 modifier = Modifier.size(20.dp),
                 tint = iconColor
@@ -632,7 +629,7 @@ fun DataSummaryItem(
                 Text(
                     text = value,
                     fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.SemiBold,
                     color = Color.Black
                 )
             }
@@ -680,7 +677,7 @@ fun WeekNavigationHeader(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
+            .padding(vertical = 12.dp),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -688,7 +685,7 @@ fun WeekNavigationHeader(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(8.dp)
         ) {
             // 주차 네비게이션
             Row(
@@ -696,54 +693,55 @@ fun WeekNavigationHeader(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // 이전 주차 버튼
-                IconButton(
-                    onClick = onPreviousWeek,
-                    enabled = currentWeek.week > 1
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.ArrowBack,
-                        contentDescription = "이전 주차",
-                        tint = if (currentWeek.week > 1) Color.Black else Color.Gray
-                    )
-                }
-
-                // 현재 주차 표시
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = "${currentWeek.week}주차",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Black
-                    )
-
-                    // 현재 주차가 아닌 경우 "현재로 돌아가기" 버튼
-                    if (currentWeek.week != actualCurrentWeek) {
-                        TextButton(
-                            onClick = onCurrentWeek,
-                            modifier = Modifier.padding(top = 4.dp)
-                        ) {
-                            Text(
-                                text = "현재 주차로 (${actualCurrentWeek}주차)",
-                                fontSize = 12.sp,
-                                color = Color(0xFFF49699)
-                            )
-                        }
+                /// 이전 주차 버튼 (조건부 표시)
+                if (currentWeek.week > 1) {
+                    IconButton(onClick = onPreviousWeek) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowBack,
+                            contentDescription = "이전 주차",
+                            tint = Color.Black
+                        )
                     }
+                } else {
+                    // 빈 공간으로 균형 맞추기
+                    Spacer(modifier = Modifier.width(48.dp))
                 }
 
-                // 다음 주차 버튼
-                IconButton(
-                    onClick = onNextWeek,
-                    enabled = currentWeek.week < actualCurrentWeek
+                // 현재 주차 표시 (항상 중앙에 고정)
+                Text(
+                    text = "${currentWeek.week}주차",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.Black
+                )
+
+                // 다음 주차 버튼 (조건부 표시)
+                if (currentWeek.week < actualCurrentWeek) {
+                    IconButton(onClick = onNextWeek) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowForward,
+                            contentDescription = "다음 주차",
+                            tint = Color.Black
+                        )
+                    }
+                } else {
+                    // 빈 공간으로 균형 맞추기
+                    Spacer(modifier = Modifier.width(48.dp))
+                }
+            }
+            // 현재 주차가 아닌 경우 "현재로 돌아가기" 버튼 (타이틀 아래에 표시)
+            if (currentWeek.week != actualCurrentWeek) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.ArrowForward,
-                        contentDescription = "다음 주차",
-                        tint = if (currentWeek.week < actualCurrentWeek) Color.Black else Color.Gray
-                    )
+                    TextButton(onClick = onCurrentWeek) {
+                        Text(
+                            text = "현재 주차로 이동 (${actualCurrentWeek}주차)",
+                            fontSize = 14.sp,
+                            color = Color(0xFFF49699)
+                        )
+                    }
                 }
             }
         }

@@ -74,14 +74,7 @@ fun MeditationScreen(
         }
 
         else -> {
-            Column(Modifier.fillMaxSize().background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xFFFFF0F5),
-                        Color(0xFFF0F8FF)
-                    )
-                )
-            )) {
+            Column(Modifier.fillMaxSize()) {
                 CustomTopAppBar(
                     title = "오늘의 명상",
                     navController = navController
@@ -234,7 +227,7 @@ private fun WelcomeMessage() {
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(24.dp),
+            modifier = Modifier.fillMaxWidth().padding(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
 

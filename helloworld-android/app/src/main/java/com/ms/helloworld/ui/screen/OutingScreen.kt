@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -23,8 +24,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ms.helloworld.R
 import com.ms.helloworld.dto.response.OutingDelivery
 import com.ms.helloworld.ui.components.CustomTopAppBar
+import com.ms.helloworld.ui.theme.MainColor
 import com.ms.helloworld.viewmodel.OutingViewModel
 
 @Composable
@@ -84,14 +87,7 @@ fun OutingScreen(
             Column(
                 Modifier
                     .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                Color(0xFFFFF0F5), // 연한 핑크
-                                Color(0xFFF0F8FF)  // 연한 하늘색
-                            )
-                        )
-                    )
+
             ) {
                 CustomTopAppBar(
                     title = "오늘의 장소",
@@ -149,7 +145,9 @@ private fun WelcomeMessage(count: Int) {
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(24.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
 
@@ -170,14 +168,14 @@ private fun CuteePlaceCard(
     onClick: () -> Unit
 ) {
     val cuteMessages = listOf(
-        "아기와 함께 산책하기 좋아요 🚶‍♀️",
-        "마음이 편안해지는 곳이에요 😌",
-        "예쁜 추억을 만들어보세요 📸",
-        "여유로운 시간을 보내세요 ☕",
-        "힐링이 필요할 때 추천해요 🌿",
-        "기분 좋은 하루가 될 거예요 ☀️",
-        "아기에게도 좋은 경험이 될 거예요 👶",
-        "잠깐의 휴식이 필요할 때 💆‍♀️"
+        "아기와 함께 산책하기 좋아요",
+        "마음이 편안해지는 곳이에요",
+        "예쁜 추억을 만들어보세요",
+        "여유로운 시간을 보내세요",
+        "힐링이 필요할 때 추천해요",
+        "기분 좋은 하루가 될 거예요 ",
+        "아기에게도 좋은 경험이 될 거예요",
+        "잠깐의 휴식이 필요할 때 ️"
     )
 
     val randomMessage = remember { cuteMessages.random() }
@@ -215,10 +213,10 @@ private fun CuteePlaceCard(
                 }
 
                 Icon(
-                    imageVector = Icons.Outlined.FavoriteBorder,
+                    painter = painterResource(R.drawable.ic_map),
                     contentDescription = null,
-                    tint = Color(0xFFFF69B4), // 핫 핑크
-                    modifier = Modifier.size(20.dp)
+                    tint = Color.Unspecified,
+                    modifier = Modifier.size(28.dp)
                 )
             }
 
@@ -238,13 +236,18 @@ private fun CuteePlaceCard(
             Spacer(modifier = Modifier.height(16.dp))
 
             // 귀여운 메시지
-            Text(
-                text = randomMessage,
-                color = Color(0xFF6B4C93),
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                lineHeight = 20.sp
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = randomMessage,
+                    color = Color.Gray,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    lineHeight = 20.sp
+                )
+
+            }
 
             Spacer(modifier = Modifier.height(12.dp))
 
@@ -287,14 +290,14 @@ private fun LoadingContent() {
 
             Text(
                 text = "특별한 장소를 찾고 있어요",
-                color = Color(0xFF8B4B9C),
+                color = MainColor,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Medium
             )
 
             Text(
                 text = "아기와 함께 가면 좋을 곳들을\n정성스럽게 준비하고 있어요 💕",
-                color = Color(0xFF6B4C93),
+                color = MainColor,
                 fontSize = 14.sp,
                 textAlign = TextAlign.Center,
                 lineHeight = 20.sp
@@ -319,14 +322,14 @@ private fun ErrorContent(
         ) {
             Text(
                 text = "💝 잠깐 문제가 생겼어요",
-                color = Color(0xFF8B4B9C),
+                color = MainColor,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold
             )
 
             Text(
                 text = "걱정하지 마세요!\n다시 시도해보면 좋은 장소들을 찾을 수 있어요",
-                color = Color(0xFF6B4C93),
+                color = MainColor,
                 fontSize = 14.sp,
                 textAlign = TextAlign.Center,
                 lineHeight = 20.sp
@@ -374,7 +377,7 @@ private fun EmptyContent() {
 
             Text(
                 text = "아직 준비된 장소가 없어요",
-                color = Color(0xFF8B4B9C),
+                color = MainColor,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center
@@ -382,7 +385,7 @@ private fun EmptyContent() {
 
             Text(
                 text = "조금만 기다려주세요!\n예비맘을 위한 특별한 장소들을\n정성스럽게 준비하고 있어요 💜",
-                color = Color(0xFF6B4C93),
+                color = MainColor,
                 fontSize = 14.sp,
                 textAlign = TextAlign.Center,
                 lineHeight = 22.sp

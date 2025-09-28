@@ -91,11 +91,6 @@ fun CalendarSection(
                         SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(date.time)
                     val hasPost = postsMap[dateKey]?.isNotEmpty() == true
 
-                    // 디버깅: 각 날짜별 포스트 확인
-                    if (hasPost) {
-                        println("CalendarSection - ${postsMap[dateKey]?.size}개 포스트 있음")
-                    }
-
                     Box(
                         modifier = Modifier
                             .size(32.dp)
@@ -133,7 +128,11 @@ fun CalendarSection(
                                     modifier = Modifier
                                         .size(5.dp)
                                         .background(
-                                            if (isSelected) Color.White else MainColor,
+                                            when {
+                                                isSelected -> Color.White
+                                                isToday -> Color.Red // 오늘 날짜의 점은 빨간색
+                                                else -> MainColor    // 일반 일정 점은 메인 컬러
+                                            },
                                             CircleShape
                                         )
                                 )

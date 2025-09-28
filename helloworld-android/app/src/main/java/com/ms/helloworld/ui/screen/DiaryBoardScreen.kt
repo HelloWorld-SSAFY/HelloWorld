@@ -27,11 +27,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.ui.res.painterResource
 import androidx.navigation.NavHostController
 import com.ms.helloworld.viewmodel.HomeViewModel
 import com.ms.helloworld.viewmodel.DiaryViewModel
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ms.helloworld.R
+import com.ms.helloworld.ui.theme.MainColor
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -225,11 +228,11 @@ fun DiaryBoardScreen(
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                CircularProgressIndicator()
+                CircularProgressIndicator(color = MainColor)
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     text = "사용자 정보를 불러오는 중...",
-                    fontSize = 14.sp,
+                    fontSize = 16.sp,
                     color = Color.Gray
                 )
             }
@@ -246,11 +249,11 @@ fun DiaryBoardScreen(
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                CircularProgressIndicator()
+                CircularProgressIndicator(color = MainColor)
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     text = "일기를 불러오는 중...",
-                    fontSize = 14.sp,
+                    fontSize = 16.sp,
                     color = Color.Gray
                 )
             }
@@ -262,7 +265,6 @@ fun DiaryBoardScreen(
     diaryState.errorMessage?.let { error ->
         LaunchedEffect(error) {
             // 에러가 발생하면 로그 출력하고 에러 클리어
-            println("DiaryBoardScreen 에러: $error")
             diaryViewModel.clearError()
         }
     }
@@ -280,8 +282,9 @@ fun DiaryBoardScreen(
                         ) {
                             Text(
                                 text = title,
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Medium
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.padding(end = 40.dp)
                             )
                         }
                     }
@@ -295,7 +298,7 @@ fun DiaryBoardScreen(
                     }
                 },
                 actions = {
-                    // 일기가 존재할 때만 수정 버튼 표시
+                    /*// 일기가 존재할 때만 수정 버튼 표시
                     if (currentDiary != null) {
                         IconButton(onClick = {
                             // 최우선으로 출력되는 로그
@@ -325,7 +328,7 @@ fun DiaryBoardScreen(
                                 contentDescription = "수정"
                             )
                         }
-                    }
+                    }*/
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.White,
@@ -410,7 +413,7 @@ fun PhotoItem(
     onCharacterGenerateClick: () -> Unit
 ) {
     Column(
-        modifier = Modifier.width(280.dp)
+        modifier = Modifier.width(300.dp)
     ) {
         // 사진
         Card(
@@ -477,7 +480,7 @@ fun TextContentSection(
     diaryViewModel: DiaryViewModel
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxSize(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -493,14 +496,17 @@ fun TextContentSection(
                 val ultrasoundImages = remember(images) {
                     images.filter { it.isUltrasound }
                 }
+                PhotosHeaderSection()
+                Spacer(modifier = Modifier.height(16.dp))
 
                 LazyRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     contentPadding = PaddingValues(vertical = 8.dp)
                 ) {
-                    items(images) { image ->
+                    items(images.size) { index ->
                         // 초음파 이미지의 인덱스 계산 (캐리커쳐 API용)
+                        val image = images[index]
                         val ultrasoundIndex = if (image.isUltrasound) {
                             ultrasoundImages.indexOf(image)
                         } else -1
@@ -512,7 +518,9 @@ fun TextContentSection(
                             isUltrasound = image.isUltrasound,
                             diaryPhotoId = image.diaryPhotoId,
                             ultrasoundIndex = ultrasoundIndex,
-                            diaryViewModel = diaryViewModel
+                            diaryViewModel = diaryViewModel,
+                            imageIndex = index + 1,
+                            totalImages = images.size
                         )
                     }
                 }
@@ -527,7 +535,9 @@ fun TextContentSection(
                         isUltrasound = false,
                         diaryPhotoId = null, // 단일 이미지의 경우 diaryPhotoId가 없을 수 있음
                         ultrasoundIndex = -1, // 단일 이미지는 초음파가 아니므로 -1
-                        diaryViewModel = diaryViewModel
+                        diaryViewModel = diaryViewModel,
+                        imageIndex = 1,
+                        totalImages = 1
                     )
                 }
             } else {
@@ -552,25 +562,83 @@ fun TextContentSection(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // 구분선
+            Divider(
+                modifier = Modifier.padding(vertical = 8.dp),
+                color = Color.Gray.copy(alpha = 0.2f),
+                thickness = 1.dp
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            TextContentHeaderSection()
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             // 제목
             if (title.isNotEmpty()) {
                 Text(
                     text = title,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.SemiBold,
                     color = Color.Black,
-                    modifier = Modifier.padding(bottom = 16.dp)
+                    modifier = Modifier.padding(start = 8.dp, bottom = 16.dp)
                 )
             }
 
             // 내용
             Text(
                 text = content,
-                fontSize = 14.sp,
+                fontSize = 18.sp,
                 color = Color.Black,
-                lineHeight = 22.sp
+                lineHeight = 22.sp,
+                modifier = Modifier.padding(start = 8.dp)
             )
         }
+    }
+}
+
+@Composable
+fun PhotosHeaderSection() {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.ic_camera),
+            contentDescription = "사진들",
+            tint = MainColor.copy(alpha = 0.8f),
+            modifier = Modifier.size(20.dp)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = "오늘의 사진들",
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Medium,
+            color = Color.Black
+        )
+    }
+}
+
+@Composable
+fun TextContentHeaderSection() {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.ic_diary_image),
+            contentDescription = null,
+            tint = Color(0xFF88A9F8),
+            modifier = Modifier.size(20.dp)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = "일기 내용",
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Medium,
+            color = Color.Black
+        )
     }
 }
 
@@ -580,9 +648,14 @@ fun FlippableImageCard(
     isUltrasound: Boolean,
     diaryPhotoId: Long?,
     ultrasoundIndex: Int,
-    diaryViewModel: DiaryViewModel
+    diaryViewModel: DiaryViewModel,
+    imageIndex: Int,
+    totalImages: Int
 ) {
-    Log.d("FlippableImageCard", "카드 생성: imageUrl=$imageUrl, isUltrasound=$isUltrasound, diaryPhotoId=$diaryPhotoId, ultrasoundIndex=$ultrasoundIndex")
+    Log.d(
+        "FlippableImageCard",
+        "카드 생성: imageUrl=$imageUrl, isUltrasound=$isUltrasound, diaryPhotoId=$diaryPhotoId, ultrasoundIndex=$ultrasoundIndex"
+    )
 
     var flipped by remember { mutableStateOf(false) }
     var caricatureUrl by remember { mutableStateOf<String?>(null) }
@@ -591,16 +664,25 @@ fun FlippableImageCard(
 
     // 카드가 뒤집힐 때 캐리커쳐 조회
     LaunchedEffect(key1 = "${flipped}_${diaryPhotoId ?: 0L}") {
-        Log.d("FlippableImageCard", "LaunchedEffect 실행: flipped=$flipped, isUltrasound=$isUltrasound, diaryPhotoId=$diaryPhotoId, caricatureUrl=$caricatureUrl")
+        Log.d(
+            "FlippableImageCard",
+            "LaunchedEffect 실행: flipped=$flipped, isUltrasound=$isUltrasound, diaryPhotoId=$diaryPhotoId, caricatureUrl=$caricatureUrl"
+        )
 
         if (flipped && isUltrasound && caricatureUrl == null) {
             isLoadingCaricature = true
             try {
-                Log.d("FlippableImageCard", "캐리커쳐 조회 시작: diaryPhotoId=$diaryPhotoId, ultrasoundIndex=$ultrasoundIndex")
+                Log.d(
+                    "FlippableImageCard",
+                    "캐리커쳐 조회 시작: diaryPhotoId=$diaryPhotoId, ultrasoundIndex=$ultrasoundIndex"
+                )
 
                 // diaryPhotoId가 없으면 ultrasoundIndex 기반으로 ID 생성
                 val actualPhotoId = diaryPhotoId ?: (ultrasoundIndex + 1).toLong()
-                Log.d("FlippableImageCard", "실제 사용할 diaryPhotoId: $actualPhotoId (based on ultrasoundIndex: $ultrasoundIndex)")
+                Log.d(
+                    "FlippableImageCard",
+                    "실제 사용할 diaryPhotoId: $actualPhotoId (based on ultrasoundIndex: $ultrasoundIndex)"
+                )
 
                 val result = diaryViewModel.getCaricatureFromPhoto(actualPhotoId)
                 result.onSuccess { caricature: com.ms.helloworld.dto.response.CaricatureResponse? ->
@@ -629,102 +711,159 @@ fun FlippableImageCard(
     )
     val cameraDistancePx = with(LocalDensity.current) { 12.dp.toPx() }
 
-    Card(
-        modifier = Modifier
-            .width(320.dp)
-            .height(240.dp)
-            .clickable {
-                if (isUltrasound) {
-                    flipped = !flipped
-                }
-            }
-            .graphicsLayer {
-                rotationY = if (isUltrasound) flip else 0f
-                cameraDistance = cameraDistancePx
-            },
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-    ) {
-        Box(
+    Column {
+        // 사진 인덱스 표시
+        Row(
             modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Gray.copy(alpha = 0.1f)),
-            contentAlignment = Alignment.Center
+                .fillMaxWidth()
+                .padding(bottom = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            if (flipped && isUltrasound) {
-                // 카드 뒷면 - 캐리커쳐 영역 (텍스트가 정상적으로 보이도록 다시 180도 회전)
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer {
-                            rotationY = 180f // 뒷면 내용을 다시 180도 회전시켜 정상 방향으로
-                        }
-                ) {
-                    CaricatureBackSide(
-                        caricatureUrl = caricatureUrl,
-                        isLoading = isLoadingCaricature,
-                        isGenerating = isGeneratingCaricature,
-                        onGenerateClick = {
-                            Log.d("FlippableImageCard", "캐리커쳐 생성 버튼 클릭됨! diaryPhotoId=$diaryPhotoId, isGenerating=$isGeneratingCaricature")
-                            if (!isGeneratingCaricature) {
-                                isGeneratingCaricature = true
-                                Log.d("FlippableImageCard", "캐리커쳐 생성 시작 준비: diaryPhotoId=$diaryPhotoId")
+            Text(
+                text = "$imageIndex / $totalImages",
+                fontSize = 12.sp,
+                color = Color.Gray,
+                fontWeight = FontWeight.Medium
+            )
+        }
 
-                                // 캐리커쳐 생성 API 호출을 Coroutine으로 실행
-                                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
-                                    try {
-                                        Log.d("FlippableImageCard", "캐리커쳐 생성 시작: diaryPhotoId=$diaryPhotoId, ultrasoundIndex=$ultrasoundIndex")
+        Card(
+            modifier = Modifier
+                .width(330.dp)
+                .height(240.dp)
+                .clickable {
+                    if (isUltrasound) {
+                        flipped = !flipped
+                    }
+                }
+                .graphicsLayer {
+                    rotationY = if (isUltrasound) flip else 0f
+                    cameraDistance = cameraDistancePx
+                },
+            shape = RoundedCornerShape(16.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+            ) {
+                if (flipped && isUltrasound) {
+                    // 카드 뒷면 - 캐리커쳐 영역 (텍스트가 정상적으로 보이도록 다시 180도 회전)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                rotationY = 180f // 뒷면 내용을 다시 180도 회전시켜 정상 방향으로
+                            }
+                    ) {
+                        CaricatureBackSide(
+                            caricatureUrl = caricatureUrl,
+                            isLoading = isLoadingCaricature,
+                            isGenerating = isGeneratingCaricature,
+                            onGenerateClick = {
+                                Log.d(
+                                    "FlippableImageCard",
+                                    "캐리커쳐 생성 버튼 클릭됨! diaryPhotoId=$diaryPhotoId, isGenerating=$isGeneratingCaricature"
+                                )
+                                if (!isGeneratingCaricature) {
+                                    isGeneratingCaricature = true
+                                    Log.d(
+                                        "FlippableImageCard",
+                                        "캐리커쳐 생성 시작 준비: diaryPhotoId=$diaryPhotoId"
+                                    )
 
-                                        // diaryPhotoId가 없으면 ultrasoundIndex 기반으로 ID 생성
-                                        val actualPhotoId = diaryPhotoId ?: (ultrasoundIndex + 1).toLong()
-                                        Log.d("FlippableImageCard", "실제 사용할 diaryPhotoId: $actualPhotoId (based on ultrasoundIndex: $ultrasoundIndex)")
+                                    // 캐리커쳐 생성 API 호출을 Coroutine으로 실행
+                                    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main)
+                                        .launch {
+                                            try {
+                                                Log.d(
+                                                    "FlippableImageCard",
+                                                    "캐리커쳐 생성 시작: diaryPhotoId=$diaryPhotoId, ultrasoundIndex=$ultrasoundIndex"
+                                                )
 
-                                        val result = diaryViewModel.generateCaricature(actualPhotoId)
-                                        result.onSuccess { caricature: com.ms.helloworld.dto.response.CaricatureResponse ->
-                                            caricatureUrl = caricature.imageUrl
-                                            Log.d("FlippableImageCard", "캐리커쳐 생성 성공: ${caricature.imageUrl}")
+                                                // diaryPhotoId가 없으면 ultrasoundIndex 기반으로 ID 생성
+                                                val actualPhotoId =
+                                                    diaryPhotoId ?: (ultrasoundIndex + 1).toLong()
+                                                Log.d(
+                                                    "FlippableImageCard",
+                                                    "실제 사용할 diaryPhotoId: $actualPhotoId (based on ultrasoundIndex: $ultrasoundIndex)"
+                                                )
+
+                                                val result =
+                                                    diaryViewModel.generateCaricature(actualPhotoId)
+                                                result.onSuccess { caricature: com.ms.helloworld.dto.response.CaricatureResponse ->
+                                                    caricatureUrl = caricature.imageUrl
+                                                    Log.d(
+                                                        "FlippableImageCard",
+                                                        "캐리커쳐 생성 성공: ${caricature.imageUrl}"
+                                                    )
+                                                }
+                                                result.onFailure { exception ->
+                                                    Log.e(
+                                                        "FlippableImageCard",
+                                                        "캐리커쳐 생성 실패: ${exception.message}"
+                                                    )
+                                                }
+                                            } catch (e: Exception) {
+                                                Log.e(
+                                                    "FlippableImageCard",
+                                                    "캐리커쳐 생성 예외: ${e.message}"
+                                                )
+                                            } finally {
+                                                isGeneratingCaricature = false
+                                            }
                                         }
-                                        result.onFailure { exception ->
-                                            Log.e("FlippableImageCard", "캐리커쳐 생성 실패: ${exception.message}")
-                                        }
-                                    } catch (e: Exception) {
-                                        Log.e("FlippableImageCard", "캐리커쳐 생성 예외: ${e.message}")
-                                    } finally {
-                                        isGeneratingCaricature = false
-                                    }
                                 }
                             }
-                        }
-                    )
-                }
-            } else {
-                // 카드 앞면 - 원본 이미지
-                AsyncImage(
-                    model = imageUrl,
-                    contentDescription = if (isUltrasound) "초음파 사진" else "일기 사진",
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(8.dp),
-                    contentScale = ContentScale.Fit
-                )
-
-                // 초음파 사진인 경우 배지 표시
-                if (isUltrasound) {
-                    Card(
+                        )
+                    }
+                } else {
+                    // 카드 앞면 - 원본 이미지
+                    AsyncImage(
+                        model = imageUrl,
+                        contentDescription = if (isUltrasound) "초음파 사진" else "일기 사진",
                         modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(12.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = Color(0xFFF49699).copy(alpha = 0.9f)
-                        ),
-                        shape = RoundedCornerShape(8.dp)
+                            .fillMaxSize()
+                            .padding(8.dp),
+                        contentScale = ContentScale.Fit
+                    )
+
+                    // 그라데이션 오버레이 (하단)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(60.dp)
+                            .align(Alignment.BottomCenter)
+                            .background(
+                                brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                                    colors = listOf(
+                                        Color.Transparent,
+                                        Color.Black.copy(alpha = 0.3f)
+                                    )
+                                )
+                            )
+                    )
+
+                    // 하단 정보 (이미지 타입)
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(12.dp)
                     ) {
+                        val badgeColor = if (isUltrasound) MainColor else Color.Black.copy(alpha = 0.4f)
                         Text(
-                            text = "초음파",
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            text = if (isUltrasound) "초음파" else "일반",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium,
-                            color = Color.White
+                            color = Color.White,
+                            modifier = Modifier
+                                .background(
+                                    badgeColor,
+                                    RoundedCornerShape(8.dp)
+                                )
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
                         )
                     }
                 }

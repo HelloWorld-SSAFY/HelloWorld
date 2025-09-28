@@ -423,7 +423,7 @@ fun FetalMovementContent(
             // 지난주 대비 카드
             StatCard(
                 modifier = Modifier.weight(1f),
-                value = "+${data.weeklyChange}회",
+                value = if (data.weeklyChange >= 0) "+${data.weeklyChange}회" else "${data.weeklyChange}회",
                 label = "지난주 대비",
                 valueColor = Color(0xFF4CAF50)
             )

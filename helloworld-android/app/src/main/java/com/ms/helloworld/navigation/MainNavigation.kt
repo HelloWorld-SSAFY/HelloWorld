@@ -160,10 +160,7 @@ fun MainNavigation(
 
             composable(Screen.CoupleProfileScreen.route) {
                 CoupleProfileScreen(
-                    navController = navController,
-                    onBackClick = {
-                        navController.popBackStack()
-                    }
+                    navController = navController
                 )
             }
 

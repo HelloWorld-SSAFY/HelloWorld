@@ -46,7 +46,6 @@ data class DiaryResponse(
         // 1순위: 서버에서 제공된 authorRole 정보 사용 (수정 후)
         val serverRole = getActualAuthorRole()
         if (serverRole != null) {
-            println("🔍 inferAuthorRole - 서버 role 사용: $serverRole")
             return serverRole
         }
 
@@ -57,7 +56,6 @@ data class DiaryResponse(
                 userBId -> "MALE"    // userB는 보통 남성 (MALE)
                 else -> null
             }
-            println("🔍 inferAuthorRole - 커플 정보로 추론: authorId=$authorId, userA=$userAId, userB=$userBId -> $inferredRole")
             return inferredRole
         }
 
@@ -68,12 +66,10 @@ data class DiaryResponse(
                 "male" -> "MALE"
                 else -> null
             }
-            println("🔍 inferAuthorRole - 현재 사용자 매칭: authorId=$authorId, currentUserId=$currentUserId -> $genderRole")
             return genderRole
         }
 
         // 4순위: 모든 정보가 없으면 null 반환 (정확하지 않은 추정 제거)
-        println("🔍 inferAuthorRole - 충분한 정보 없음: authorId=$authorId, currentUserId=$currentUserId")
         return null
     }
 }

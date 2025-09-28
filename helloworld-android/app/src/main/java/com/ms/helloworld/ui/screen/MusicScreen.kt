@@ -124,14 +124,7 @@ fun MusicScreen(
             Column(
                 Modifier
                     .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                Color(0xFFFFF0F5),
-                                Color(0xFFF0F8FF)
-                            )
-                        )
-                    )
+
             ) {
                 CustomTopAppBar(
                     title = "오늘의 음악",
@@ -253,7 +246,7 @@ private fun WelcomeMessage() {
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(24.dp),
+            modifier = Modifier.fillMaxWidth().padding(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
 

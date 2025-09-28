@@ -31,6 +31,9 @@ import com.ms.helloworld.viewmodel.DiaryViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.DisposableEffect
 import android.util.Log
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
+import com.ms.helloworld.R
 
 // 데이터 클래스들
 data class DiaryEntry(
@@ -73,14 +76,20 @@ fun DiaryDetailScreen(
     // 현재 주차의 시작일과 끝일 계산 (UI 표시용)
     val weekStartDay = if (momProfile?.pregnancyWeek != null && momProfile.pregnancyWeek > 0) {
         val calculated = (momProfile.pregnancyWeek - 1) * 7 + 1
-        Log.d("DiaryDetailScreen", "weekStartDay 계산 (momProfile 사용): pregnancyWeek=${momProfile.pregnancyWeek} -> $calculated")
+        Log.d(
+            "DiaryDetailScreen",
+            "weekStartDay 계산 (momProfile 사용): pregnancyWeek=${momProfile.pregnancyWeek} -> $calculated"
+        )
         calculated
     } else {
         // 로딩 중일 때는 currentPregnancyDay 기준으로 계산
         if (currentPregnancyDay > 1) {
             val currentWeek = ((currentPregnancyDay - 1) / 7) + 1
             val calculated = (currentWeek - 1) * 7 + 1
-            Log.d("DiaryDetailScreen", "weekStartDay 계산 (currentPregnancyDay 사용): currentPregnancyDay=$currentPregnancyDay, currentWeek=$currentWeek -> $calculated")
+            Log.d(
+                "DiaryDetailScreen",
+                "weekStartDay 계산 (currentPregnancyDay 사용): currentPregnancyDay=$currentPregnancyDay, currentWeek=$currentWeek -> $calculated"
+            )
             calculated
         } else {
             Log.d("DiaryDetailScreen", "weekStartDay 계산: 기본값 1 사용")
@@ -91,28 +100,39 @@ fun DiaryDetailScreen(
     Log.d("DiaryDetailScreen", "주차 범위: ${weekStartDay}일 ~ ${weekEndDay}일")
 
     // 현재 표시할 일차를 상태로 관리 (네비게이션 없이 내부에서 변경)
-    var currentViewingDay by remember { mutableStateOf(
-        if (initialDay == -1) {
-            // 기본값: 현재 실제 임신 일수 사용, 하지만 현재 주차를 벗어나지 않도록 제한
-            if (currentPregnancyDay > 1) {
-                val calculated = minOf(currentPregnancyDay, weekEndDay)
-                Log.d("DiaryDetailScreen", "currentViewingDay 계산: initialDay=$initialDay, currentPregnancyDay=$currentPregnancyDay, weekEndDay=$weekEndDay -> $calculated")
-                calculated
+    var currentViewingDay by remember {
+        mutableStateOf(
+            if (initialDay == -1) {
+                // 기본값: 현재 실제 임신 일수 사용, 하지만 현재 주차를 벗어나지 않도록 제한
+                if (currentPregnancyDay > 1) {
+                    val calculated = minOf(currentPregnancyDay, weekEndDay)
+                    Log.d(
+                        "DiaryDetailScreen",
+                        "currentViewingDay 계산: initialDay=$initialDay, currentPregnancyDay=$currentPregnancyDay, weekEndDay=$weekEndDay -> $calculated"
+                    )
+                    calculated
+                } else {
+                    Log.d(
+                        "DiaryDetailScreen",
+                        "currentViewingDay 계산: weekStartDay=$weekStartDay (currentPregnancyDay=$currentPregnancyDay <= 1)"
+                    )
+                    weekStartDay
+                }
             } else {
-                Log.d("DiaryDetailScreen", "currentViewingDay 계산: weekStartDay=$weekStartDay (currentPregnancyDay=$currentPregnancyDay <= 1)")
-                weekStartDay
+                // 특정 일수가 지정된 경우 해당 값 사용
+                Log.d("DiaryDetailScreen", "currentViewingDay 계산: initialDay=$initialDay 사용")
+                initialDay
             }
-        } else {
-            // 특정 일수가 지정된 경우 해당 값 사용
-            Log.d("DiaryDetailScreen", "currentViewingDay 계산: initialDay=$initialDay 사용")
-            initialDay
-        }
-    ) }
+        )
+    }
 
     // 현재 보고 있는 날짜의 주차 계산
     val viewingWeek = remember(currentViewingDay) {
         val calculatedWeek = ((currentViewingDay - 1) / 7) + 1
-        Log.d("DiaryDetailScreen", "주차 계산: currentViewingDay=$currentViewingDay -> ${calculatedWeek}주차")
+        Log.d(
+            "DiaryDetailScreen",
+            "주차 계산: currentViewingDay=$currentViewingDay -> ${calculatedWeek}주차"
+        )
         calculatedWeek
     }
 
@@ -169,9 +189,15 @@ fun DiaryDetailScreen(
         diaryViewModel.clearDiaries()
 
         Log.d("DiaryDetailScreen", "API 호출 조건 체크:")
-        Log.d("DiaryDetailScreen", "  - actualDayNumber: $actualDayNumber (>= 1: ${actualDayNumber >= 1})")
+        Log.d(
+            "DiaryDetailScreen",
+            "  - actualDayNumber: $actualDayNumber (>= 1: ${actualDayNumber >= 1})"
+        )
         Log.d("DiaryDetailScreen", "  - coupleId: $coupleId (not null: ${coupleId != null})")
-        Log.d("DiaryDetailScreen", "  - menstrualDate: $menstrualDate (not null: ${menstrualDate != null})")
+        Log.d(
+            "DiaryDetailScreen",
+            "  - menstrualDate: $menstrualDate (not null: ${menstrualDate != null})"
+        )
 
         if (actualDayNumber >= 1 && coupleId != null && menstrualDate != null) {
             // 날짜 계산 디버깅 추가
@@ -182,7 +208,7 @@ fun DiaryDetailScreen(
                 Log.d("DiaryDetailScreen", "날짜 계산 확인:")
                 Log.d("DiaryDetailScreen", "  - LMP: $lmpDateString")
                 Log.d("DiaryDetailScreen", "  - 임신일수: ${actualDayNumber}일차")
-                Log.d("DiaryDetailScreen", "  - 계산식: LMP + ${actualDayNumber-1}일 (수정됨)")
+                Log.d("DiaryDetailScreen", "  - 계산식: LMP + ${actualDayNumber - 1}일 (수정됨)")
                 Log.d("DiaryDetailScreen", "  - 계산된 날짜: $calculatedDate")
                 Log.d("DiaryDetailScreen", "  - 오늘 날짜: ${java.time.LocalDate.now()}")
             } catch (e: Exception) {
@@ -204,8 +230,6 @@ fun DiaryDetailScreen(
     DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
-//                println("🔄 DiaryDetailScreen - 화면 복귀, 일기 새로고침")
-//                println("  - actualDayNumber: $actualDayNumber")
 
                 if (actualDayNumber > 0) {
                     // 일별 일기 조회
@@ -230,12 +254,10 @@ fun DiaryDetailScreen(
         // 디버깅: 각 일기의 role inference 확인
         apiDiaries.forEachIndexed { index, diary ->
             val inferredRole = diary.inferAuthorRole(userId, userGender)
-            println("🔍 DiaryDetailScreen - Diary[$index]: ID=${diary.diaryId}, authorId=${diary.authorId}, authorRole=${diary.authorRole}, inferredRole=${inferredRole}")
-            println("🔍 현재 사용자: userId=$userId, userGender=$userGender")
         }
 
-        val birthDiary = apiDiaries.find {
-            diary -> diary.inferAuthorRole(userId, userGender, null, null) == "FEMALE"  // TODO: 커플 정보 전달 필요
+        val birthDiary = apiDiaries.find { diary ->
+            diary.inferAuthorRole(userId, userGender, null, null) == "FEMALE"  // TODO: 커플 정보 전달 필요
         }?.let { diary ->
             Log.d("DiaryDetailScreen", "✅ 출산일기 찾음:")
             Log.d("DiaryDetailScreen", "  - 제목: ${diary.diaryTitle}")
@@ -248,8 +270,8 @@ fun DiaryDetailScreen(
                 imageUrl = diary.thumbnailUrl
             )
         }
-        val observationDiary = apiDiaries.find {
-            diary -> diary.inferAuthorRole(userId, userGender, null, null) == "MALE"  // TODO: 커플 정보 전달 필요
+        val observationDiary = apiDiaries.find { diary ->
+            diary.inferAuthorRole(userId, userGender, null, null) == "MALE"  // TODO: 커플 정보 전달 필요
         }?.let { diary ->
             Log.d("DiaryDetailScreen", "✅ 관찰일기 찾음:")
             Log.d("DiaryDetailScreen", "  - 제목: ${diary.diaryTitle}")
@@ -281,24 +303,15 @@ fun DiaryDetailScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(end = 48.dp), // navigationIcon 크기만큼 오른쪽 패딩 추가
+                        .padding(end = 40.dp), // navigationIcon 크기만큼 오른쪽 패딩 추가
                     contentAlignment = Alignment.Center
                 ) {
-                    if (viewingWeek > 0) {
-                        Text(
-                            text = "${viewingWeek}주차",
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Medium,
-                            textAlign = TextAlign.Center
-                        )
-                    } else {
-                        Text(
-                            text = "출산일기",
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Medium,
-                            textAlign = TextAlign.Center
-                        )
-                    }
+                    Text(
+                        text = "출산일기",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Medium,
+                        textAlign = TextAlign.Center
+                    )
                 }
             },
             navigationIcon = {
@@ -378,7 +391,10 @@ fun DiaryDetailScreen(
 
                     apiDiaries.forEachIndexed { index, diary ->
                         val role = diary.inferAuthorRole(userId, userGender, null, null)
-                        Log.d("DiaryDetailScreen", "Diary[$index]: ID=${diary.diaryId}, authorRole=${diary.authorRole}, inferredRole=$role")
+                        Log.d(
+                            "DiaryDetailScreen",
+                            "Diary[$index]: ID=${diary.diaryId}, authorRole=${diary.authorRole}, inferredRole=$role"
+                        )
                     }
 
                     val birthDiaryData = apiDiaries.find { diary ->
@@ -416,6 +432,8 @@ fun DiaryDetailScreen(
                     )
                 }
             )
+
+            Spacer(modifier = Modifier.height(2.dp))
 
             // 관찰일기 섹션
             DiarySection(
@@ -482,51 +500,68 @@ fun DayNavigationHeader(
     onPreviousDay: () -> Unit,
     onNextDay: () -> Unit
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp, horizontal = 0.dp),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        IconButton(
-            onClick = onPreviousDay,
-            enabled = canGoPrevious
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                Icons.Default.KeyboardArrowLeft,
-                contentDescription = "이전 날",
-                modifier = Modifier.size(28.dp),
-                tint = if (canGoPrevious) Color.Black else Color.Gray
-            )
-        }
+            // 이전 날 버튼 (조건부 표시)
+            if (canGoPrevious) {
+                IconButton(onClick = onPreviousDay) {
+                    Icon(
+                        Icons.Default.KeyboardArrowLeft,
+                        contentDescription = "이전 날",
+                        modifier = Modifier.size(28.dp),
+                        tint = Color.Black
+                    )
+                }
+            } else {
+                // 빈 공간으로 균형 맞추기
+                Spacer(modifier = Modifier.width(48.dp))
+            }
 
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = "${currentDay}일차",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Medium,
-                color = Color.Black,
-                textAlign = TextAlign.Center
-            )
-            Text(
-                text = "(${currentDayInWeek}/7일)",
-                fontSize = 12.sp,
-                color = Color.Gray,
-                textAlign = TextAlign.Center
-            )
-        }
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "${currentDay}일차",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.Black,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = "(${currentDayInWeek}/7일)",
+                    fontSize = 12.sp,
+                    color = Color.Gray,
+                    textAlign = TextAlign.Center
+                )
+            }
 
-        IconButton(
-            onClick = onNextDay,
-            enabled = canGoNext
-        ) {
-            Icon(
-                Icons.Default.KeyboardArrowRight,
-                contentDescription = "다음 날",
-                modifier = Modifier.size(28.dp),
-                tint = if (canGoNext) Color.Black else Color.Gray
-            )
+            // 다음 날 버튼 (조건부 표시)
+            if (canGoNext) {
+                IconButton(onClick = onNextDay) {
+                    Icon(
+                        Icons.Default.KeyboardArrowRight,
+                        contentDescription = "다음 날",
+                        modifier = Modifier.size(28.dp),
+                        tint = Color.Black
+                    )
+                }
+            } else {
+                // 빈 공간으로 균형 맞추기
+                Spacer(modifier = Modifier.width(48.dp))
+            }
         }
     }
 }
@@ -557,7 +592,7 @@ fun DiarySection(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(20.dp)
+                .padding(18.dp)
         ) {
             // 헤더 (제목 + 추가 버튼)
             Row(
@@ -565,12 +600,20 @@ fun DiarySection(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = title,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = borderColor
-                )
+                // 카테고리 스타일 제목
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = borderColor.copy(alpha = 0.15f),
+                    modifier = Modifier.wrapContentWidth()
+                ) {
+                    Text(
+                        text = title,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = borderColor,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
 
                 if (canAddOrEdit) {
                     IconButton(
@@ -578,10 +621,10 @@ fun DiarySection(
                         modifier = Modifier.size(24.dp)
                     ) {
                         Icon(
-                            if (diary != null) Icons.Default.Edit else Icons.Default.Add,
+                            painter = painterResource(if (diary != null) R.drawable.ic_modify else R.drawable.ic_add),
                             contentDescription = if (diary != null) "수정" else "추가",
                             modifier = Modifier.size(20.dp),
-                            tint = borderColor
+                            tint = Color.Unspecified
                         )
                     }
                 } else {
@@ -615,18 +658,20 @@ fun DiaryContent(
     Row(
         modifier = Modifier
             .fillMaxSize()
+            .padding(top = 8.dp)
             .clickable { onClick() },
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         // 왼쪽: 썸네일 공간 - 실제 이미지 또는 placeholder
         Box(
             modifier = Modifier
-                .width(120.dp)
-                .height(120.dp)
+                .width(140.dp)
+                .height(140.dp)
                 .background(
                     Color.Gray.copy(alpha = 0.1f),
-                    RoundedCornerShape(12.dp)
-                ),
+                    RoundedCornerShape(14.dp) // 더 둥글게
+                )
+                .clip(RoundedCornerShape(14.dp)), // 이미지도 둥글게 자르기
             contentAlignment = Alignment.Center
         ) {
             if (diary.imageUrl != null && diary.imageUrl.isNotEmpty()) {
@@ -637,13 +682,15 @@ fun DiaryContent(
                     contentScale = ContentScale.Crop
                 )
             } else {
-                Text(
-                    text = "📸",
-                    fontSize = 16.sp,
-                    color = Color.Gray
-                )
+               Icon(
+                   painter = painterResource(R.drawable.ic_noimage),
+                   contentDescription = "이미지 없음",
+                   tint = Color.Gray.copy(alpha = 0.5f),
+                   modifier = Modifier.size(70.dp),
+               )
             }
         }
+        Spacer(modifier = Modifier.width(2.dp))
 
         // 오른쪽: 제목, 내용, 날짜
         Column(
@@ -659,8 +706,8 @@ fun DiaryContent(
                 if (diary.title.isNotEmpty()) {
                     Text(
                         text = diary.title,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold,
                         color = Color.Black,
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
@@ -669,7 +716,7 @@ fun DiaryContent(
                 // 일기 내용
                 Text(
                     text = diary.content,
-                    fontSize = 13.sp,
+                    fontSize = 16.sp,
                     color = Color.Black,
                     lineHeight = 20.sp,
                     maxLines = 4,
@@ -680,7 +727,7 @@ fun DiaryContent(
             // 작성 날짜 (하단 우측)
             Text(
                 text = diary.date,
-                fontSize = 11.sp,
+                fontSize = 12.sp,
                 color = Color.Gray,
                 modifier = Modifier.align(Alignment.End)
             )
@@ -695,7 +742,7 @@ fun EmptyDiaryState() {
         contentAlignment = Alignment.Center
     ) {
         Text(
-            text = "아직 작성이 되어있지 않아요",
+            text = "아직 작성이 되어 있지 않아요",
             fontSize = 14.sp,
             color = Color.Gray,
             textAlign = TextAlign.Center
