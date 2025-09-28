@@ -73,9 +73,9 @@ public class YoutubeSearchClient {
                     .queryParam("type", "video")
                     .queryParam("maxResults", 10)   // Top-N (1분 필터용)
                     .queryParam("order", "relevance") // 명시
-                    .queryParam("regionCode", "KR")  // 한국 지역 코드 활성화
-                    .queryParam("relevanceLanguage", "ko") // 한국어 활성화
-                    .queryParam("safeSearch", "moderate") // 안전 검색
+//                    .queryParam("regionCode", "KR")  // 한국 지역 코드 활성화
+//                    .queryParam("relevanceLanguage", "ko") // 한국어 활성화
+//                    .queryParam("safeSearch", "moderate") // 안전 검색
                     .queryParam("q", query)          // 공백은 %20로 자동 인코딩
                     .queryParam("key", apiKey)
                     .encode(StandardCharsets.UTF_8)  // <- 공백 %20, 한글 %xx
