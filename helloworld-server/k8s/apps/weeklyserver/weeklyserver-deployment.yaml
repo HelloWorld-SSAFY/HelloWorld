@@ -63,6 +63,12 @@ spec:
               name: s3-credentials
               key: S3_SECRETKEY
 
+        - name: YOUTUBE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: youtube-credentials
+              key: YOUTUBE_API_KEY
+
         # Actuator가 있다면 /actuator/health 사용, 없으면 / 로 교체
         readinessProbe:
           httpGet: { path: /actuator/health, port: 8080 }

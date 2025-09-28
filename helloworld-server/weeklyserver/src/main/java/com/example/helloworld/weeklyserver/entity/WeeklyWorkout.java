@@ -22,6 +22,8 @@ public class WeeklyWorkout {
     @Column(length=500) private String videoUrl;
     @Column(length=500) private String thumbnailUrl;
     private Integer orderNo;
+    @Column(name = "video_synced_at")
+    private java.time.Instant videoSyncedAt;
 
     public String getInfoText() {
         return null;
