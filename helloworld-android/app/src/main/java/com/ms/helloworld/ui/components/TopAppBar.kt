@@ -50,7 +50,7 @@ fun CustomTopAppBar(
                 "profile" -> {
                     Text(
                         text = "프로필",
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.SemiBold,
                         textAlign = TextAlign.Center,
                         fontSize = 20.sp,
                         modifier = Modifier
@@ -61,7 +61,7 @@ fun CustomTopAppBar(
                 "wearable" -> {
                     Text(
                         text = "웨어러블 기반 추천",
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.SemiBold,
                         textAlign = TextAlign.Center,
                         fontSize = 20.sp,
                         modifier = Modifier
@@ -72,7 +72,7 @@ fun CustomTopAppBar(
                 "출산일기", "관찰일기", "임신 통계", "오늘의 명상", "오늘의 요가", "오늘의 음악", "오늘의 장소" -> {
                     Text(
                         text = title,
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.SemiBold,
                         textAlign = TextAlign.Center,
                         fontSize = 20.sp,
                         modifier = Modifier
@@ -83,7 +83,7 @@ fun CustomTopAppBar(
                 "알림" -> {
                     Text(
                         text = title,
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.SemiBold,
                         textAlign = TextAlign.Center,
                         fontSize = 20.sp,
                         modifier = Modifier
@@ -94,7 +94,7 @@ fun CustomTopAppBar(
                 "calendar" -> {
                     Text(
                         text = "캘린더",
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.SemiBold,
                         textAlign = TextAlign.Center,
                         fontSize = 20.sp,
                         modifier = Modifier
@@ -106,7 +106,7 @@ fun CustomTopAppBar(
                 else -> {
                     Text(
                         text = title,
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.SemiBold,
                         textAlign = TextAlign.Center,
                         fontSize = 20.sp,
                         modifier = Modifier

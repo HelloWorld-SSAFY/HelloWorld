@@ -254,10 +254,18 @@ fun HealthStatusScreen(
                     Icons.Default.ArrowBack,
                     contentDescription = "뒤로가기",
                     tint = Color.Black,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(24.dp)
                 )
             }
-            
+
+            // 중앙 타이틀
+            Text(
+                text = "산모 건강",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color.Black
+            )
+
             if (hasTodayData) {
                 // 오늘 데이터가 있으면 수정 버튼 표시
                 IconButton(
@@ -284,7 +292,7 @@ fun HealthStatusScreen(
                         Icons.Default.Edit,
                         contentDescription = "건강 데이터 수정",
                         tint = Color.Black,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(24.dp)
                     )
                 }
             } else {
@@ -297,7 +305,7 @@ fun HealthStatusScreen(
                         Icons.Default.Add,
                         contentDescription = "건강 데이터 추가",
                         tint = Color.Black,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(24.dp)
                     )
                 }
             }
@@ -308,7 +316,7 @@ fun HealthStatusScreen(
                 .fillMaxSize()
                 .background(backgroundColor)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .padding(horizontal = 16.dp, vertical = 16.dp)
                 .pointerInput(selectedHealthType) {
                     var totalDragAmount = 0f
                     detectHorizontalDragGestures(
@@ -567,13 +575,13 @@ fun HealthTypeSelector(
                 ) {
                     Text(
                         text = type.displayName,
-                        fontSize = 13.sp,
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        fontSize = 16.sp,
+                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
                         color = Color.Black,
                         textAlign = TextAlign.Center
                     )
 
-                    Spacer(modifier = Modifier.height(2.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
 
                     Text(
                         text = typeAverage,
@@ -616,7 +624,7 @@ fun HealthStatisticsChart(
         ) {
             Text(
                 text = "통계",
-                fontSize = 18.sp,
+                fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.Black
             )
@@ -639,12 +647,12 @@ fun HealthStatisticsChart(
                     ) {
                         Text(
                             text = getCurrentDateString(todayHealthData),
-                            fontSize = 12.sp,
+                            fontSize = 14.sp,
                             color = Color.Gray
                         )
                         Text(
                             text = "$pregnancyInfo | ${lastData.second}${selectedType.unit}",
-                            fontSize = 11.sp,
+                            fontSize = 12.sp,
                             color = Color(0xFFF49699),
                             fontWeight = FontWeight.Medium
                         )
@@ -700,7 +708,7 @@ fun YAxisLabels(
             val value = minValue + (stepValue * i)
             Text(
                 text = String.format("%.1f", value),
-                fontSize = 10.sp,
+                fontSize = 12.sp,
                 color = Color.Gray,
                 modifier = Modifier.width(35.dp),
                 textAlign = TextAlign.End
