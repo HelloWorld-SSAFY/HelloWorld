@@ -33,6 +33,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.filled.Face
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModelProvider
+import com.airbnb.lottie.compose.*
 import com.ms.wearos.repository.FcmRepository
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
@@ -70,7 +71,7 @@ class MainActivity : ComponentActivity() {
 
     // 화면 enum
     enum class Screen {
-        Main, HeartRate, FetalMovement, LaborRecord
+        Main, HeartRate, FetalMovement, LaborRecord, FetalMovementAnimation
     }
 
     // 서비스로부터 심박수 데이터를 받기 위한 브로드캐스트 리시버
@@ -814,6 +815,7 @@ class MainActivity : ComponentActivity() {
                 Screen.HeartRate -> HeartRateScreen(viewModel)
                 Screen.FetalMovement -> FetalMovementScreen(viewModel)
                 Screen.LaborRecord -> LaborRecordScreen(viewModel)
+                Screen.FetalMovementAnimation -> FetalMovementAnimationScreen(viewModel)
             }
         }
     }
@@ -1000,17 +1002,8 @@ class MainActivity : ComponentActivity() {
 
             Button(
                 onClick = {
-                    lifecycleScope.launch {
-                        if (recordFetalMovement(viewModel)) {
-                            fetalMovementCount++
-                            // 성공 시 토스트 메시지 표시
-                            Toast.makeText(
-                                this@MainActivity,
-                                "태동이 기록되었습니다",
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        }
-                    }
+                    // 애니메이션 화면으로 이동
+                    currentScreen.value = Screen.FetalMovementAnimation
                 },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1147,6 +1140,79 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    @Composable
+    fun FetalMovementAnimationScreen(viewModel: WearMainViewModel) {
+        var fetalMovementCount by remember { mutableStateOf(0) }
+        var isRecording by remember { mutableStateOf(false) }
+
+        BackHandler {
+            currentScreen.value = Screen.FetalMovement
+        }
+
+        LaunchedEffect(Unit) {
+            // 화면이 로드되면 자동으로 태동 기록 시작
+            isRecording = true
+
+            // 애니메이션 시간 (3초) 후에 태동 기록 실행
+            delay(3000)
+
+            if (recordFetalMovement(viewModel)) {
+                fetalMovementCount++
+                Toast.makeText(
+                    this@MainActivity,
+                    "태동이 기록되었습니다",
+                    Toast.LENGTH_SHORT
+                ).show()
+
+                // 1초 후 이전 화면으로 돌아가기
+                delay(1000)
+                currentScreen.value = Screen.FetalMovement
+            } else {
+                // 실패 시에도 이전 화면으로 돌아가기
+                delay(1000)
+                currentScreen.value = Screen.FetalMovement
+            }
+        }
+
+        if (isRecording) {
+            // Raw 폴더의 Lottie 애니메이션 사용
+            val composition by rememberLottieComposition(
+                LottieCompositionSpec.RawRes(com.ms.helloworld.R.raw.baby_kick_lottie)
+            )
+            val progress by animateLottieCompositionAsState(
+                composition = composition,
+                iterations = LottieConstants.IterateForever
+            )
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(color = Color(0xFFDDE0E7)),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // 애니메이션이 텍스트 위 공간을 모두 차지
+                LottieAnimation(
+                    composition = composition,
+                    progress = { progress },
+                    modifier = Modifier
+                        .weight(1f)  // 남은 공간을 모두 차지
+                        .padding(start = 65.dp, top = 10.dp)
+                        .fillMaxWidth(),
+                )
+
+                // 텍스트는 하단에 고정
+                Text(
+                    text = "태동 기록 중...",
+                    style = MaterialTheme.typography.title3,
+                    color = Color.White,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .padding(bottom = 24.dp)
+                )
             }
         }
     }
