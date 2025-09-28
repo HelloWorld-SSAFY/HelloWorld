@@ -334,8 +334,8 @@ public class FcmService {
         if (joined.contains("stress high"))                              return "STRESS_HIGH";
 
         // 기존 HR 패턴들
-        if (joined.contains("hr low"))                                   return "HR_LOW";
-        if (joined.contains("hr high"))                                  return "HR_HIGH";
+        if (joined.contains("HR low"))                                   return "HR_LOW";
+        if (joined.contains("HR high"))                                  return "HR_HIGH";
         if ((joined.contains("hr>=150") || joined.contains("hr >= 150")) && joined.contains("120s")) return "HR_HIGH_120S";
         if ((joined.contains("hr<=45")  || joined.contains("hr <= 45"))  && joined.contains("120s")) return "HR_LOW_120S";
         if (joined.contains("|hr_z|>=5") || joined.contains("hr_z") || joined.contains("z spike"))   return "HR_Z_SPIKE";
@@ -347,28 +347,28 @@ public class FcmService {
     private static TitleBody makeRestrictCopy(int hr, String reason){
         switch (reason) {
             case "STRESS_HIGH" -> {
-                String t = "스트레스 지수 높음 (제한 모드)";
-                String s = "지금 스트레스 지수가 높습니다. 잠시 휴식을 취하고 심호흡을 해보세요.";
-                String p = "파트너의 스트레스 지수가 높습니다. 상태를 확인해 주세요.";
+                String t = "스트레스 지수 높음";
+                String s = "스트레스 지수가 높습니다. 추천 카테고리를 이용해 보세요!";
+                String p = "산모의 스트레스 지수가 높습니다. 상태를 확인해 주세요.";
                 return new TitleBody(t, s, p);
             }
             case "HR_HIGH" -> {
-                String t = "심박수 상승 (제한 모드)";
-                String s = String.format("현재 심박수가 %dBPM 이상입니다. 활동을 줄이고 휴식하세요.", hr);
-                String p = String.format("파트너의 심박수가 %dBPM 이상으로 높습니다. 상태를 확인해 주세요.", hr);
+                String t = "심박수 상승";
+                String s = String.format("심박수가 %dBPM 이상입니다. 추천 카테고리를 이용해 보세요!", hr);
+                String p = String.format("산모의 심박수가 %dBPM 이상으로 높습니다. 상태를 확인해 주세요.", hr);
                 return new TitleBody(t, s, p);
             }
             case "HR_LOW" -> {
-                String t = "심박수 저하 (제한 모드)";
-                String s = String.format("현재 심박수가 %dBPM 이하입니다. 어지럼증 등 증상이 없는지 확인하세요.", hr);
-                String p = String.format("파트너의 심박수가 %dBPM 이하로 낮습니다. 상태를 확인해 주세요.", hr);
+                String t = "심박수 저하";
+                String s = String.format("심박수가 %dBPM 이하입니다. 추천 카테고리를 이용해 보세요!", hr);
+                String p = String.format("산모의 심박수가 %dBPM 이하로 낮습니다. 상태를 확인해 주세요.", hr);
                 return new TitleBody(t, s, p);
             }
             default -> {
                 String t = "위험 감지";
                 String s = String.format("위험이 감지되었습니다!");
 //                String s = String.format("현재 상태로 제한 모드가 적용되었습니다. (심박수 %dBPM)", hr);
-                String p = "파트너에게 위험이 감지되었습니다!";
+                String p = "산모에게 위험이 감지되었습니다!";
                 return new TitleBody(t, s, p);
             }
         }
@@ -478,10 +478,8 @@ public class FcmService {
             }
 
             // 알림 내용
-            String title = "활동 제한 알림";
-            String body  = (reasons != null && !reasons.isEmpty())
-                    ? "AI가 활동 제한(restrict)을 감지했습니다: " + String.join(", ", reasons)
-                    : "AI가 활동 제한(restrict)을 감지했습니다. 상태를 확인해 주세요.";
+            String title = "활동 알림";
+            String body  =  "활동량이 저조합니다! 추천 카테고리를 확인해 주세요.";
 
             // 공통 데이터
             Map<String,String> data = new java.util.HashMap<>();
