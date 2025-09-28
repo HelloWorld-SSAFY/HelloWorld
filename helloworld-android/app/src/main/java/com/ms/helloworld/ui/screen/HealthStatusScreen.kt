@@ -803,7 +803,7 @@ fun YAxisLabels(
                 text = String.format("%.1f", value),
                 fontSize = 12.sp,
                 color = Color.Gray,
-                modifier = Modifier.width(35.dp),
+                modifier = Modifier.width(37.dp),
                 textAlign = TextAlign.End
             )
         }
