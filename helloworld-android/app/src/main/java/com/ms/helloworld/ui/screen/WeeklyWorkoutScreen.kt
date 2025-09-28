@@ -1,6 +1,7 @@
 package com.ms.helloworld.ui.screen
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -21,6 +22,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -207,6 +210,16 @@ private fun WeeklyWorkoutHeader(
 
 @Composable
 private fun WorkoutCard(workout: WorkoutItem) {
+    val context = LocalContext.current
+
+    val openVideoUrl = { url: String ->
+        try {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            // URL을 열 수 없는 경우 처리
+        }
+    }
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -277,6 +290,9 @@ private fun WorkoutCard(workout: WorkoutItem) {
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .height(180.dp)
+                                        .clickable {
+                                            workout.url?.let { url -> openVideoUrl(url) }
+                                        }
                                 ) {
                                     AsyncImage(
                                         model = ImageRequest.Builder(LocalContext.current)
@@ -324,7 +340,9 @@ private fun WorkoutCard(workout: WorkoutItem) {
                                 if (workout.thumbnailUrl == null) {
                                     Spacer(modifier = Modifier.height(16.dp))
                                     Card(
-                                        modifier = Modifier.fillMaxWidth(),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { openVideoUrl(url) },
                                         colors = CardDefaults.cardColors(containerColor = Color(0xFFF3E5F5))
                                     ) {
                                         Row(
