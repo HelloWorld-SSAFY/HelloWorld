@@ -86,12 +86,12 @@ public class HealthDataService {
             Long alarmId = notif.getAlarmId();              // ★ 여기서 얻음
 
             // FCM 3건 발송 + 유저서버 recipients 업서트
-            fcmService.sendEmergencyTriple(
-                    alarmId,
+            fcmService.sendEmergencyTripleWithAiResponse(
                     user.getUserId(),
-                    Optional.ofNullable(req.heartrate()).orElse(0), // int로 넘김
-                    title,
-                    body
+                    Optional.ofNullable(req.heartrate()).orElse(0),
+                    resp.mode(),
+                    resp.riskLevel(),
+                    resp.reasons()
             );
         }else {
             String mode = (resp != null && resp.mode() != null) ? resp.mode() : "normal or null";
