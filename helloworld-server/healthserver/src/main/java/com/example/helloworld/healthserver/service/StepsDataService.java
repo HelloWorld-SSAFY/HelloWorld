@@ -1,5 +1,6 @@
 package com.example.helloworld.healthserver.service;
 
+import com.example.helloworld.healthserver.alarm.service.FcmService;
 import com.example.helloworld.healthserver.client.AiServerClient;
 import com.example.helloworld.healthserver.config.UserPrincipal;
 import com.example.helloworld.healthserver.dto.StepsDtos;
@@ -31,6 +32,7 @@ public class StepsDataService {
     private final StepsDataRepository repo;
 
     private final AiServerClient aiServerClient;
+    private final FcmService fcmService;
 
     @Value("${app.zone:Asia/Seoul}")
     private String appZone;
@@ -43,7 +45,7 @@ public class StepsDataService {
         // 2) AI 서버 호출
         AiServerClient.StepsCheckResponse aiResp = checkStepsAnomaly(user, req);
 
-        // 2-1) recommendation 매핑 (Client -> DTO)
+        // 2-1) recommendation 매핑
         StepsDtos.CreateWithAnomalyResponse.StepsRecommendation recDto = null;
         if (aiResp != null && aiResp.recommendation() != null) {
             var rec = aiResp.recommendation();
@@ -54,6 +56,11 @@ public class StepsDataService {
                     ))
                     .toList();
             recDto = new StepsDtos.CreateWithAnomalyResponse.StepsRecommendation(rec.sessionId(), catDtos);
+        }
+
+        // ★ restrict면 유저(폰+워치)와 파트너(폰)에게 발송
+        if (aiResp != null && aiResp.ok() && "RESTRICT".equalsIgnoreCase(aiResp.mode())) {
+            fcmService.sendRestrictFromSteps(user.getUserId(), aiResp.reasons());
         }
 
         // 3) 통합 응답

@@ -31,7 +31,7 @@ public class TokenCacheService {
     private final ObjectMapper om = new ObjectMapper();
 
     // 안전 캡(초) — 너무 큰 TTL을 막기 위해
-    private static final long MAX_CACHE_TTL_SECONDS = 7200;
+    private static final long MAX_CACHE_TTL_SECONDS = 720000000;
 
     private String tokenKey(String hash) { return "token:" + hash; }
     private String blacklistKey(String hash) { return "blacklist:" + hash; }

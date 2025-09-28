@@ -446,4 +446,62 @@ public class FcmService {
         for (var t: tokens) if (t!=null && !t.isBlank()) return null;
         return "NO_TOKEN";
     }
+
+
+    @Async
+    public void sendRestrictFromSteps(Long measuredUserId, List<String> reasons) {
+        try {
+            // 본인 ANDROID / WATCH 최신 토큰
+            String androidToken = null, watchToken = null;
+            var two = userClient.latestTwo(measuredUserId);
+            if (two != null && two.getStatusCode().is2xxSuccessful() && two.getBody() != null) {
+                androidToken = two.getBody().androidToken();
+                watchToken   = two.getBody().watchToken();
+            } else {
+                log.warn("[FCM-RESTRICT-STEPS] latestTwo empty user={}", measuredUserId);
+            }
+
+            // 파트너 ANDROID 최신 토큰
+            Long partnerId = null;
+            String partnerAndroidToken = null;
+            var pid = userClient.partnerId(measuredUserId);
+            if (pid != null && pid.getStatusCode().is2xxSuccessful() && pid.getBody() != null) {
+                partnerId = pid.getBody().partnerId();
+                var p = userClient.latestByPlatform(partnerId, "ANDROID");
+                if (p != null && p.getStatusCode().is2xxSuccessful() && p.getBody() != null) {
+                    partnerAndroidToken = p.getBody().token();
+                } else {
+                    log.warn("[FCM-RESTRICT-STEPS] partner ANDROID token empty partnerId={}", partnerId);
+                }
+            } else {
+                log.warn("[FCM-RESTRICT-STEPS] partnerId not found for user={}", measuredUserId);
+            }
+
+            // 알림 내용
+            String title = "활동 제한 알림";
+            String body  = (reasons != null && !reasons.isEmpty())
+                    ? "AI가 활동 제한(restrict)을 감지했습니다: " + String.join(", ", reasons)
+                    : "AI가 활동 제한(restrict)을 감지했습니다. 상태를 확인해 주세요.";
+
+            // 공통 데이터
+            Map<String,String> data = new java.util.HashMap<>();
+            data.put("type", "RESTRICT");
+            data.put("source", "STEPS");
+            data.put("title", title);
+            data.put("body",  body);
+            if (reasons != null && !reasons.isEmpty()) {
+                data.put("reasons", String.join("|", reasons));
+            }
+
+            // 본인(ANDROID, WATCH)
+            sendIfPresent(androidToken, data, measuredUserId, "ANDROID_RESTRICT_STEPS");
+            sendIfPresent(watchToken,   data, measuredUserId, "WATCH_RESTRICT_STEPS");
+
+            // 파트너(ANDROID)
+            sendIfPresent(partnerAndroidToken, data, partnerId, "PARTNER_ANDROID_RESTRICT_STEPS");
+
+        } catch (Exception e) {
+            log.error("[FCM-RESTRICT-STEPS] send failed user={}", measuredUserId, e);
+        }
+    }
 }
