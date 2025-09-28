@@ -86,7 +86,7 @@ public class HealthDataService {
             Long alarmId = notif.getAlarmId();              // ★ 여기서 얻음
 
             // FCM 3건 발송 + 유저서버 recipients 업서트
-            fcmService.sendEmergencyTripleAndRecord(
+            fcmService.sendEmergencyTriple(
                     alarmId,
                     user.getUserId(),
                     Optional.ofNullable(req.heartrate()).orElse(0), // int로 넘김

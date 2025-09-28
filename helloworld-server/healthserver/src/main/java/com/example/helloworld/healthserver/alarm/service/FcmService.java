@@ -22,63 +22,63 @@ public class FcmService {
     private final UserServerClient userClient;
 
     // === 응급 알림 + 결과 기록 (기존 유지) ===
-    @Async
-    public void sendEmergencyTripleAndRecord(Long alarmId, Long measuredUserId, int hr, String title, String body) {
-        try {
-            // 1) 본인 ANDROID/WATCH 토큰
-            String androidToken = null, watchToken = null;
-            var two = userClient.latestTwo(measuredUserId);
-            if (two != null && two.getStatusCode().is2xxSuccessful() && two.getBody() != null) {
-                androidToken = two.getBody().androidToken();
-                watchToken   = two.getBody().watchToken();
-            }
-
-            // 2) 파트너 ANDROID 토큰
-            Long partnerId = null;
-            String partnerAndroidToken = null;
-            var pid = userClient.partnerId(measuredUserId);
-            if (pid != null && pid.getStatusCode().is2xxSuccessful() && pid.getBody() != null) {
-                partnerId = pid.getBody().partnerId();
-                var p = userClient.latestByPlatform(partnerId, "ANDROID");
-                if (p != null && p.getStatusCode().is2xxSuccessful() && p.getBody() != null) {
-                    partnerAndroidToken = p.getBody().token();
-                }
-            }
-
-            // 3) 공통 데이터 (기본 카피)
-            Map<String,String> data = Map.of(
-                    "type","EMERGENCY",
-                    "title", title != null ? title : "심박수 이상 감지",
-                    "body",  body  != null ? body  : String.format("현재 심박수가 %dBPM입니다. 상태를 확인해주세요.", hr)
-            );
-
-            // 4) 3건 전송 + 결과 수집
-            var rMeA     = sendOne(androidToken,        data, measuredUserId, "ANDROID");
-            var rMeW     = sendOne(watchToken,          data, measuredUserId, "WATCH");
-            var rPartner = sendOne(partnerAndroidToken, data, partnerId,      "PARTNER_ANDROID");
-
-            // 5) 집계 후 유저서버에 업서트
-            boolean meSent = rMeA.success || rMeW.success;
-            String  meMsg  = firstNonNull(rMeA.messageId, rMeW.messageId);
-            String  meErr  = meSent ? null : firstNonNull(rMeA.errorCode, rMeW.errorCode, reasonIfEmpty(androidToken, watchToken));
-
-            userClient.upsertRecipient(new UserServerClient.UpsertReq(
-                    alarmId, measuredUserId, meSent ? "SENT" : "FAILED", meMsg, meErr));
-
-            if (partnerId != null) {
-                boolean pSent = rPartner.success;
-                String  pMsg  = rPartner.messageId;
-                String  pErr  = pSent ? null : firstNonNull(rPartner.errorCode, reasonIfEmpty(partnerAndroidToken));
-                userClient.upsertRecipient(new UserServerClient.UpsertReq(
-                        alarmId, partnerId, pSent ? "SENT" : "FAILED", pMsg, pErr));
-            } else {
-                log.warn("[FCM] partnerId not found for user={}", measuredUserId);
-            }
-
-        } catch (Exception e) {
-            log.error("[FCM] sendEmergencyTripleAndRecord error alarmId={} user={}", alarmId, measuredUserId, e);
-        }
-    }
+//    @Async
+//    public void sendEmergencyTripleAndRecord(Long alarmId, Long measuredUserId, int hr, String title, String body) {
+//        try {
+//            // 1) 본인 ANDROID/WATCH 토큰
+//            String androidToken = null, watchToken = null;
+//            var two = userClient.latestTwo(measuredUserId);
+//            if (two != null && two.getStatusCode().is2xxSuccessful() && two.getBody() != null) {
+//                androidToken = two.getBody().androidToken();
+//                watchToken   = two.getBody().watchToken();
+//            }
+//
+//            // 2) 파트너 ANDROID 토큰
+//            Long partnerId = null;
+//            String partnerAndroidToken = null;
+//            var pid = userClient.partnerId(measuredUserId);
+//            if (pid != null && pid.getStatusCode().is2xxSuccessful() && pid.getBody() != null) {
+//                partnerId = pid.getBody().partnerId();
+//                var p = userClient.latestByPlatform(partnerId, "ANDROID");
+//                if (p != null && p.getStatusCode().is2xxSuccessful() && p.getBody() != null) {
+//                    partnerAndroidToken = p.getBody().token();
+//                }
+//            }
+//
+//            // 3) 공통 데이터 (기본 카피)
+//            Map<String,String> data = Map.of(
+//                    "type","EMERGENCY",
+//                    "title", title != null ? title : "심박수 이상 감지",
+//                    "body",  body  != null ? body  : String.format("현재 심박수가 %dBPM입니다. 상태를 확인해주세요.", hr)
+//            );
+//
+//            // 4) 3건 전송 + 결과 수집
+//            var rMeA     = sendOne(androidToken,        data, measuredUserId, "ANDROID");
+//            var rMeW     = sendOne(watchToken,          data, measuredUserId, "WATCH");
+//            var rPartner = sendOne(partnerAndroidToken, data, partnerId,      "PARTNER_ANDROID");
+//
+//            // 5) 집계 후 유저서버에 업서트
+//            boolean meSent = rMeA.success || rMeW.success;
+//            String  meMsg  = firstNonNull(rMeA.messageId, rMeW.messageId);
+//            String  meErr  = meSent ? null : firstNonNull(rMeA.errorCode, rMeW.errorCode, reasonIfEmpty(androidToken, watchToken));
+//
+//            userClient.upsertRecipient(new UserServerClient.UpsertReq(
+//                    alarmId, measuredUserId, meSent ? "SENT" : "FAILED", meMsg, meErr));
+//
+//            if (partnerId != null) {
+//                boolean pSent = rPartner.success;
+//                String  pMsg  = rPartner.messageId;
+//                String  pErr  = pSent ? null : firstNonNull(rPartner.errorCode, reasonIfEmpty(partnerAndroidToken));
+//                userClient.upsertRecipient(new UserServerClient.UpsertReq(
+//                        alarmId, partnerId, pSent ? "SENT" : "FAILED", pMsg, pErr));
+//            } else {
+//                log.warn("[FCM] partnerId not found for user={}", measuredUserId);
+//            }
+//
+//        } catch (Exception e) {
+//            log.error("[FCM] sendEmergencyTripleAndRecord error alarmId={} user={}", alarmId, measuredUserId, e);
+//        }
+//    }
 
     // === 리마인더 발송 ===
     @Async
@@ -197,7 +197,7 @@ public class FcmService {
 
     // === 단순 응급 알림(기본 카피) ===
     @Async
-    public void sendEmergencyTriple(Long measuredUserId, int hr) {
+    public void sendEmergencyTriple(Long alarmId, Long measuredUserId, int hr, String title, String body) {
         try {
             // 1) 본인 ANDROID / WATCH 최신 토큰
             String androidToken = null, watchToken = null;
@@ -225,35 +225,53 @@ public class FcmService {
                 log.warn("[FCM] partnerId not found for user={}", measuredUserId);
             }
 
-            // 3) 기본(노멀) 카피
+            // 3) 기본(노멀) 카피 생성 (두 인자 버전과 동일 로직)
             TitleBody copy = makeNormalCopy(hr, "UNKNOWN", "low");
 
-            Map<String,String> selfData = Map.of(
-                    "type", "EMERGENCY",
-                    "mode", "normal",
-                    "reason_code", "UNKNOWN",
-                    "title", copy.title(),
-                    "body",  copy.selfBody(),
-                    "hr", Integer.toString(hr)
-            );
-            Map<String,String> partnerData = Map.of(
-                    "type", "EMERGENCY",
-                    "mode", "normal",
-                    "reason_code", "UNKNOWN",
-                    "title", copy.title(),
-                    "body",  copy.partnerBody(),
-                    "hr", Integer.toString(hr)
-            );
+            String finalTitle     = (title != null && !title.isBlank()) ? title : copy.title();
+            String finalSelfBody  = (body  != null && !body.isBlank())  ? body  : copy.selfBody();
+            String finalPartnBody = copy.partnerBody();
 
-            // 4) 본인에게 발송 (ANDROID, WATCH)
-            sendIfPresent(androidToken, selfData, measuredUserId, "ANDROID");
-            sendIfPresent(watchToken,   selfData, measuredUserId, "WATCH");
+            Map<String,String> selfData = new java.util.HashMap<>();
+            selfData.put("type", "EMERGENCY");
+            selfData.put("mode", "normal");
+            selfData.put("reason_code", "UNKNOWN");
+            selfData.put("title", finalTitle);
+            selfData.put("body",  finalSelfBody);
+            selfData.put("hr", Integer.toString(hr));
 
-            // 5) 파트너에게 발송
-            sendIfPresent(partnerAndroidToken, partnerData, partnerId, "PARTNER_ANDROID");
+            Map<String,String> partnerData = new java.util.HashMap<>();
+            partnerData.put("type", "EMERGENCY");
+            partnerData.put("mode", "normal");
+            partnerData.put("reason_code", "UNKNOWN");
+            partnerData.put("title", finalTitle);
+            partnerData.put("body",  finalPartnBody);
+            partnerData.put("hr", Integer.toString(hr));
+
+            // 4) 전송 + 결과 수집(업서트 목적이므로 sendOne 사용)
+            var rMeA = sendOne(androidToken,        selfData, measuredUserId, "ANDROID");
+            var rMeW = sendOne(watchToken,          selfData, measuredUserId, "WATCH");
+            var rPtn = sendOne(partnerAndroidToken, partnerData, partnerId,   "PARTNER_ANDROID");
+
+            // 5) recipients 업서트
+            boolean meSent = rMeA.success || rMeW.success;
+            String  meMsg  = firstNonNull(rMeA.messageId, rMeW.messageId);
+            String  meErr  = meSent ? null : firstNonNull(rMeA.errorCode, rMeW.errorCode, reasonIfEmpty(androidToken, watchToken));
+            userClient.upsertRecipient(new UserServerClient.UpsertReq(
+                    alarmId, measuredUserId, meSent ? "SENT" : "FAILED", meMsg, meErr
+            ));
+
+            if (partnerId != null) {
+                boolean pSent = rPtn.success;
+                String  pMsg  = rPtn.messageId;
+                String  pErr  = pSent ? null : firstNonNull(rPtn.errorCode, reasonIfEmpty(partnerAndroidToken));
+                userClient.upsertRecipient(new UserServerClient.UpsertReq(
+                        alarmId, partnerId, pSent ? "SENT" : "FAILED", pMsg, pErr
+                ));
+            }
 
         } catch (Exception e) {
-            log.error("[FCM] sendEmergencyTriple error user={}", measuredUserId, e);
+            log.error("[FCM] sendEmergencyTriple(5 args) error alarmId={} user={}", alarmId, measuredUserId, e);
         }
     }
 
