@@ -13,6 +13,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -58,11 +59,20 @@ public class YoutubeSearchClient {
         try {
             // 1) 검색 Top-N (원하는 만큼; 8~15 정도 권장)
             int max = 10;
-            String sUrl = "https://www.googleapis.com/youtube/v3/search"
-                    + "?part=snippet&type=video&maxResults=" + max
-                    + "&regionCode=KR&relevanceLanguage=ko"
-                    + "&q=" + URLEncoder.encode(query, StandardCharsets.UTF_8)
-                    + "&key=" + apiKey;
+            String sUrl = UriComponentsBuilder
+                    .fromHttpUrl("https://www.googleapis.com/youtube/v3/search")
+                    .queryParam("part", "snippet")
+                    .queryParam("type", "video")
+                    .queryParam("maxResults", 10)   // Top-N (1분 필터용)
+                    .queryParam("order", "relevance") // 명시
+                    //.queryParam("regionCode", "KR")  // 수동 테스트에 없었다면 주석
+                    //.queryParam("relevanceLanguage", "ko") // 수동 테스트에 없었다면 주석
+                    //.queryParam("safeSearch", "none") // 브라우저와 동일하게
+                    .queryParam("q", query)          // 공백은 %20로 자동 인코딩
+                    .queryParam("key", apiKey)
+                    .encode(StandardCharsets.UTF_8)  // <- 공백 %20, 한글 %xx
+                    .toUriString();
+            log.info("[YouTube] URL={}", sUrl);
 
             String raw = rest.get().uri(sUrl).accept(MediaType.APPLICATION_JSON)
                     .retrieve().body(String.class);
