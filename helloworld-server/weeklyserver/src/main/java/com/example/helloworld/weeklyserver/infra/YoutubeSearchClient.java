@@ -49,41 +49,76 @@ public class YoutubeSearchClient {
         }
     }
 
-    /** 검색어로 유튜브 결과 맨 위 1개만 그대로 반환 */
     public Optional<YoutubeVideo> searchFirst(String query) {
-        if (apiKey == null || apiKey.isBlank()) {
-            log.warn("[YouTube] API KEY missing");
-            return Optional.empty();
-        }
+        return searchFirstWithMinDuration(query, 60); // 1분 = 60초
+    }
+
+    public Optional<YoutubeVideo> searchFirstWithMinDuration(String query, int minSeconds) {
+        if (apiKey == null || apiKey.isBlank()) return Optional.empty();
         try {
-            String url = "https://www.googleapis.com/youtube/v3/search"
-                    + "?part=snippet&type=video&maxResults=1"
-                    + "&regionCode=KR&relevanceLanguage=ko"   // (선택) 약한 힌트만 남김
+            // 1) 검색 Top-N (원하는 만큼; 8~15 정도 권장)
+            int max = 10;
+            String sUrl = "https://www.googleapis.com/youtube/v3/search"
+                    + "?part=snippet&type=video&maxResults=" + max
+                    + "&regionCode=KR&relevanceLanguage=ko"
                     + "&q=" + URLEncoder.encode(query, StandardCharsets.UTF_8)
                     + "&key=" + apiKey;
 
-            String raw = rest.get().uri(url).accept(MediaType.APPLICATION_JSON)
+            String raw = rest.get().uri(sUrl).accept(MediaType.APPLICATION_JSON)
                     .retrieve().body(String.class);
-            // log.debug("[YouTube] raw={}", raw);
+            SearchResponse sr = mapper().readValue(raw, SearchResponse.class);
+            if (sr == null || sr.items == null || sr.items.length == 0) return Optional.empty();
 
-            SearchResponse res = mapper().readValue(raw, SearchResponse.class);
-            if (res == null || res.items == null || res.items.length == 0) {
-                log.warn("[YouTube] No items for query: {}", query);
-                return Optional.empty();
+            // 2) 상세 조회로 길이 확인
+            String ids = java.util.Arrays.stream(sr.items)
+                    .map(it -> it != null && it.id != null ? it.id.videoId : null)
+                    .filter(java.util.Objects::nonNull)
+                    .collect(java.util.stream.Collectors.joining(","));
+            if (ids.isEmpty()) return Optional.empty();
+
+            String vUrl = "https://www.googleapis.com/youtube/v3/videos"
+                    + "?part=snippet,contentDetails&id=" + ids + "&key=" + apiKey;
+
+            String vRaw = rest.get().uri(vUrl).accept(MediaType.APPLICATION_JSON)
+                    .retrieve().body(String.class);
+            VideosResponse vr = mapper().readValue(vRaw, VideosResponse.class);
+            if (vr == null || vr.items == null || vr.items.length == 0) return Optional.empty();
+
+            // 3) 검색 순서를 유지하며 'minSeconds 이상'인 첫 영상 선택
+            java.util.Map<String, VideoItem> byId = new java.util.HashMap<>();
+            for (VideoItem v : vr.items) byId.put(v.id, v);
+
+            for (Item it : sr.items) {
+                VideoItem v = byId.get(it.id.videoId);
+                if (v == null || v.contentDetails == null) continue;
+                long secs = parseDurationSec(v.contentDetails.duration); // ISO8601 → seconds
+                if (secs >= minSeconds) {
+                    String vid = v.id;
+                    String title = v.snippet != null ? v.snippet.title : null;
+                    String thumb = (v.snippet != null && v.snippet.thumbnails != null)
+                            ? firstThumb(v.snippet.thumbnails) : null;
+                    return Optional.of(new YoutubeVideo(vid, title, thumb));
+                }
             }
-            Item item = res.items[0];
-            if (item == null || item.id == null || item.id.videoId == null) return Optional.empty();
 
-            String vid   = item.id.videoId;
-            String title = (item.snippet != null) ? item.snippet.title : null;
-            String thumb = (item.snippet != null && item.snippet.thumbnails != null) ? firstThumb(item.snippet.thumbnails) : null;
-
+            // 4) 없으면 원래 1순위로 fallback
+            Item first = sr.items[0];
+            String vid = first.id.videoId;
+            String title = (first.snippet != null) ? first.snippet.title : null;
+            String thumb = (first.snippet != null && first.snippet.thumbnails != null) ? firstThumb(first.snippet.thumbnails) : null;
             return Optional.of(new YoutubeVideo(vid, title, thumb));
+
         } catch (Exception e) {
             log.warn("[YouTube] search failed", e);
             return Optional.empty();
         }
     }
+
+    private long parseDurationSec(String iso8601) {
+        if (iso8601 == null) return 0L;
+        return java.time.Duration.parse(iso8601).getSeconds();
+    }
+
 
     // === util ===
     private String firstThumb(Thumbnails t) {
