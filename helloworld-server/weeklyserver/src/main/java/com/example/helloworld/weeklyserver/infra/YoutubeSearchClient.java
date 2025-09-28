@@ -114,7 +114,7 @@ public class YoutubeSearchClient {
 
             // 길이 8~40분 가점 (쇼츠/초장편 회피)
             long secs = parseDurationSec(v.contentDetails != null ? v.contentDetails.duration : null);
-            if (secs >= 480 && secs <= 2400) score += 2;
+            if (secs >= 60 && secs <= 2400) score += 2;
 
             // 금지어 강한 패널티
             for (String b : bad) if (title.contains(lc(b))) score -= 8;
