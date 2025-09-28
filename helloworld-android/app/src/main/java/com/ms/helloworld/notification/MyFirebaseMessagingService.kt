@@ -5,7 +5,6 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.hardware.Sensor.TYPE_HEART_RATE
 import android.os.Build
 import android.util.Log
 import androidx.compose.ui.graphics.Color
@@ -17,7 +16,6 @@ import com.google.firebase.messaging.RemoteMessage
 import com.ms.helloworld.MainActivity
 import com.ms.helloworld.R
 import com.ms.helloworld.dto.request.Platforms
-import com.ms.helloworld.repository.AuthRepository
 import com.ms.helloworld.repository.FcmRepository
 import com.ms.helloworld.ui.theme.MainColor
 import com.ms.helloworld.util.TokenManager
@@ -34,22 +32,19 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
     @Inject lateinit var fcmRepository: FcmRepository
     @Inject lateinit var tokenManager: TokenManager
 
-    // Service에서 사용할 CoroutineScope
     private val serviceScope = CoroutineScope(Dispatchers.IO)
 
     companion object {
-        const val TYPE_REMINDER = "REMINDER"           // 일정 알림
-        const val TYPE_EMERGENCY = "EMERGENCY"       // 심박수,스트레스 지수, 활동량 이상 알림
+        const val TYPE_REMINDER = "REMINDER"
+        const val TYPE_EMERGENCY = "EMERGENCY"
         private const val FCM_PREFS = "fcm_prefs"
         private const val FCM_TOKEN_KEY = "fcm_token"
     }
 
     override fun onNewToken(token: String) {
         Log.i("FCM", "새 토큰: $token")
-
         saveTokenToLocal(token)
 
-        // 로그인 상태면 즉시 등록 시도
         serviceScope.launch {
             try {
                 val accessToken = tokenManager.getAccessToken()
@@ -78,7 +73,6 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
         Log.d("FCM", "FCM 메시지 수신: ${message.data}")
 
-        // 메시지 데이터 추출
         val type = message.data["type"] ?: ""
         val title = message.data["title"] ?: ""
         val coupleId = message.data["coupleId"] ?: ""
@@ -92,10 +86,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             return
         }
 
-        // 타입별 알림 설정
         val notificationConfig = createNotificationConfig(type, title, body)
-
-        // 딥링크 Intent 생성
         val intent = createDeepLinkIntent(type)
         val pendingIntent = PendingIntent.getActivity(
             this,
@@ -104,24 +95,26 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-
-        // 알림 생성 및 표시
-        val notification = NotificationCompat.Builder(this, NotificationChannels.DEFAULT)
+        // 헤드업 알림을 위한 설정 강화
+        val notification = NotificationCompat.Builder(this, notificationConfig.channelId)
             .setSmallIcon(notificationConfig.iconRes)
             .setContentTitle(notificationConfig.title)
             .setContentText(notificationConfig.body)
             .setAutoCancel(true)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setPriority(NotificationCompat.PRIORITY_HIGH) // HIGH 필수
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE) // 카테고리 추가
             .setContentIntent(pendingIntent)
             .setStyle(NotificationCompat.BigTextStyle().bigText(notificationConfig.body))
+            .setDefaults(NotificationCompat.DEFAULT_ALL) // 기본 설정 모두 사용
+            .setVibrate(longArrayOf(0, 500, 200, 500)) // 진동 패턴
+            .setLights(0xFF00FF00.toInt(), 3000, 3000) // LED 설정
+            .setFullScreenIntent(pendingIntent, false) // 전체 화면은 false
             .build()
 
         NotificationManagerCompat.from(this).notify(Random.nextInt(), notification)
+        Log.d("FCM", "알림 표시 완료 - 타입: $type")
     }
 
-    /**
-     * 알림 타입별 설정 정보 생성
-     */
     private fun createNotificationConfig(type: String, title: String, body: String): NotificationConfig {
         return when (type) {
             TYPE_REMINDER -> {
@@ -129,8 +122,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                     title = title.ifEmpty { "일정 알림" },
                     body = body.ifEmpty { "예정된 일정이 있습니다." },
                     iconRes = R.drawable.ic_calendar,
-                    priority = NotificationCompat.PRIORITY_DEFAULT,
-                    colorRes = MainColor
+                    channelId = NotificationChannels.REMINDER
                 )
             }
             TYPE_EMERGENCY -> {
@@ -138,8 +130,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                     title = title.ifEmpty { "위험 알림" },
                     body = body.ifEmpty { "웨어러블 데이터가 정상 범위를 초과했습니다." },
                     iconRes = R.drawable.ic_wear_noti,
-                    priority = NotificationCompat.PRIORITY_DEFAULT,
-                    colorRes = MainColor
+                    channelId = NotificationChannels.EMERGENCY
                 )
             }
             else -> {
@@ -147,26 +138,19 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                     title = title.ifEmpty { "알림" },
                     body = body.ifEmpty { "새로운 알림이 도착했습니다" },
                     iconRes = R.drawable.ic_noti,
-                    priority = NotificationCompat.PRIORITY_DEFAULT,
-                    colorRes = MainColor
+                    channelId = NotificationChannels.DEFAULT
                 )
             }
         }
     }
 
-    /**
-     * 딥링크 Intent 생성 - type에 따라 이동할 화면 결정, coupleId로 데이터 조회
-     */
     private fun createDeepLinkIntent(type: String): Intent {
         return Intent(this, MainActivity::class.java).apply {
             action = "FCM_NOTIFICATION_$type"
             putExtra("notification_timestamp", System.currentTimeMillis())
             putExtra("notification_type", type)
-
-            // 앱이 이미 실행 중일 때 새 액티비티를 생성하지 않고 기존 액티비티로 이동
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
 
-            // 타입별 딥링크 설정
             when (type) {
                 TYPE_REMINDER -> {
                     putExtra("deeplink_type", "REMINDER")
@@ -181,14 +165,10 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         }
     }
 
-    /**
-     * 알림 설정 데이터 클래스
-     */
     private data class NotificationConfig(
         val title: String,
         val body: String,
         val iconRes: Int,
-        val priority: Int,
-        val colorRes: Color
+        val channelId: String
     )
 }
