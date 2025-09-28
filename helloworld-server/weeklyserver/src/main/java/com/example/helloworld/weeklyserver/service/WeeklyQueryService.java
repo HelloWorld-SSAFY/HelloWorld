@@ -7,6 +7,7 @@ import com.example.helloworld.weeklyserver.repository.WeeklyInfoRepo;
 import com.example.helloworld.weeklyserver.repository.WeeklyWorkoutRepo;
 import com.example.helloworld.weeklyserver.infra.YoutubeSearchClient;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,6 +15,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.NoSuchElementException;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class WeeklyQueryService {
@@ -46,9 +48,14 @@ public class WeeklyQueryService {
     }
 
     private WorkoutItemRes toWorkoutItemResWithYoutube(WeeklyWorkout w, boolean refresh) {
+        log.info("[Service] Processing workout - id: {}, type: {}, existing title: {}, existing url: {}",
+                w.getWorkoutId(), w.getType(), w.getVideoTitle(), w.getVideoUrl());
+
         if (w.getType() == WorkoutType.VIDEO) {
             boolean missing = isBlank(w.getVideoUrl()) || isBlank(w.getThumbnailUrl()) || isBlank(w.getVideoTitle());
             boolean needLookup = refresh || missing || isExpired(w);
+
+            log.info("[Service] Video workout - missing: {}, needLookup: {}, refresh: {}", missing, needLookup, refresh);
 
             if (needLookup) {
                 String base = !isBlank(w.getVideoTitle()) ? w.getVideoTitle()
@@ -58,16 +65,36 @@ public class WeeklyQueryService {
 
                 String query = "임산부를 위한 " + base;   // ← 맨 위 결과 그대로 사용
 
+                log.info("[Service] Searching YouTube with query: '{}'", query);
 
-                youtube.searchFirst(query).ifPresent(result -> {
+                youtube.searchFirst(query).ifPresentOrElse(result -> {
                     // 검색 성공시에만 값/타임스탬프 갱신
-                    w.setVideoTitle(isBlank(w.getVideoTitle()) ? result.getTitle() : w.getVideoTitle());
+                    log.info("[Service] YouTube search SUCCESS - videoId: {}, title: {}, url: {}, thumbnail: {}",
+                            result.getVideoId(), result.getTitle(), result.getUrl(), result.getThumbnailUrl());
+
+                    String originalTitle = w.getVideoTitle();
+                    String newTitle = isBlank(w.getVideoTitle()) ? result.getTitle() : w.getVideoTitle();
+
+                    w.setVideoTitle(newTitle);
                     w.setVideoUrl(result.getUrl());
                     w.setThumbnailUrl(result.getThumbnailUrl());
                     w.setVideoSyncedAt(Instant.now());
-                    workoutRepo.save(w);
+
+                    log.info("[Service] About to SAVE - original title: '{}', new title: '{}', url: '{}', thumbnail: '{}'",
+                            originalTitle, newTitle, result.getUrl(), result.getThumbnailUrl());
+
+                    WeeklyWorkout saved = workoutRepo.save(w);
+
+                    log.info("[Service] SAVED workout - id: {}, saved title: '{}', saved url: '{}', saved thumbnail: '{}'",
+                            saved.getWorkoutId(), saved.getVideoTitle(), saved.getVideoUrl(), saved.getThumbnailUrl());
+
+                }, () -> {
+                    log.warn("[Service] YouTube search FAILED for query: '{}'", query);
                 });
             }
+
+            log.info("[Service] Returning video result - title: '{}', url: '{}', thumbnail: '{}'",
+                    w.getVideoTitle(), w.getVideoUrl(), w.getThumbnailUrl());
 
             return new WorkoutItemRes(
                     w.getType(),
@@ -80,6 +107,7 @@ public class WeeklyQueryService {
         }
 
         // TEXT
+        log.info("[Service] Returning text result - textBody: '{}'", w.getTextBody());
         return new WorkoutItemRes(
                 w.getType(),
                 w.getTextBody(),
