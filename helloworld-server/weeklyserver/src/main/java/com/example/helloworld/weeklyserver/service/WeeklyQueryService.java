@@ -51,8 +51,16 @@ public class WeeklyQueryService {
             boolean needLookup = refresh || missing || isExpired(w);
 
             if (needLookup) {
-                String base = w.getTextBody();
-                String query = "임산부를 위한 " + base;
+                String base = !isBlank(w.getVideoTitle()) ? w.getVideoTitle()
+                        : !isBlank(w.getTextBody())  ? w.getTextBody()
+                        : "임산부 스트레칭";
+
+                base = base.replaceAll("\\s*영상\\d*$","")
+                        .replaceAll("\\s*video\\s*\\d*$","")
+                        .replaceAll("\\s+"," ").trim();
+
+                String query = "임산부를 위한 " + base + " 임산부 임신 prenatal pregnant 요가 스트레칭 운동 분유";
+
 
                 youtube.searchFirst(query).ifPresent(result -> {
                     // 검색 성공시에만 값/타임스탬프 갱신
