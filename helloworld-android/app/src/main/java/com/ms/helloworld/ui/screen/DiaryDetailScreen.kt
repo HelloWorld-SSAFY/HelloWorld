@@ -73,22 +73,40 @@ fun DiaryDetailScreen(
     // 현재 주차의 총 일수 (1주 = 7일, 하지만 임신 마지막 주는 더 적을 수 있음)
     val totalDaysInWeek = 7
 
-    // 현재 주차의 시작일과 끝일 계산 (UI 표시용)
-    val weekStartDay = if (momProfile?.pregnancyWeek != null && momProfile.pregnancyWeek > 0) {
-        val calculated = (momProfile.pregnancyWeek - 1) * 7 + 1
-        Log.d(
-            "DiaryDetailScreen",
-            "weekStartDay 계산 (momProfile 사용): pregnancyWeek=${momProfile.pregnancyWeek} -> $calculated"
+    // 현재 표시할 일차를 상태로 관리 (네비게이션 없이 내부에서 변경)
+    var currentViewingDay by remember {
+        mutableStateOf(
+            if (initialDay == -1) {
+                // 기본값: 현재 실제 임신 일수 사용
+                if (currentPregnancyDay > 1) {
+                    Log.d(
+                        "DiaryDetailScreen",
+                        "currentViewingDay 계산: initialDay=$initialDay, currentPregnancyDay=$currentPregnancyDay 사용"
+                    )
+                    currentPregnancyDay
+                } else {
+                    Log.d(
+                        "DiaryDetailScreen",
+                        "currentViewingDay 계산: 기본값 1 사용 (currentPregnancyDay=$currentPregnancyDay <= 1)"
+                    )
+                    1
+                }
+            } else {
+                // 특정 일수가 지정된 경우 해당 값 사용
+                Log.d("DiaryDetailScreen", "currentViewingDay 계산: initialDay=$initialDay 사용")
+                initialDay
+            }
         )
-        calculated
-    } else {
-        // 로딩 중일 때는 currentPregnancyDay 기준으로 계산
-        if (currentPregnancyDay > 1) {
-            val currentWeek = ((currentPregnancyDay - 1) / 7) + 1
-            val calculated = (currentWeek - 1) * 7 + 1
+    }
+
+    // 현재 보고 있는 일차를 기준으로 주차 범위 계산
+    val weekStartDay = remember(currentViewingDay) {
+        if (currentViewingDay > 0) {
+            val viewingWeek = ((currentViewingDay - 1) / 7) + 1
+            val calculated = (viewingWeek - 1) * 7 + 1
             Log.d(
                 "DiaryDetailScreen",
-                "weekStartDay 계산 (currentPregnancyDay 사용): currentPregnancyDay=$currentPregnancyDay, currentWeek=$currentWeek -> $calculated"
+                "weekStartDay 계산 (currentViewingDay 기준): currentViewingDay=$currentViewingDay, viewingWeek=$viewingWeek -> $calculated"
             )
             calculated
         } else {
@@ -98,33 +116,6 @@ fun DiaryDetailScreen(
     }
     val weekEndDay = weekStartDay + 6
     Log.d("DiaryDetailScreen", "주차 범위: ${weekStartDay}일 ~ ${weekEndDay}일")
-
-    // 현재 표시할 일차를 상태로 관리 (네비게이션 없이 내부에서 변경)
-    var currentViewingDay by remember {
-        mutableStateOf(
-            if (initialDay == -1) {
-                // 기본값: 현재 실제 임신 일수 사용, 하지만 현재 주차를 벗어나지 않도록 제한
-                if (currentPregnancyDay > 1) {
-                    val calculated = minOf(currentPregnancyDay, weekEndDay)
-                    Log.d(
-                        "DiaryDetailScreen",
-                        "currentViewingDay 계산: initialDay=$initialDay, currentPregnancyDay=$currentPregnancyDay, weekEndDay=$weekEndDay -> $calculated"
-                    )
-                    calculated
-                } else {
-                    Log.d(
-                        "DiaryDetailScreen",
-                        "currentViewingDay 계산: weekStartDay=$weekStartDay (currentPregnancyDay=$currentPregnancyDay <= 1)"
-                    )
-                    weekStartDay
-                }
-            } else {
-                // 특정 일수가 지정된 경우 해당 값 사용
-                Log.d("DiaryDetailScreen", "currentViewingDay 계산: initialDay=$initialDay 사용")
-                initialDay
-            }
-        )
-    }
 
     // 현재 보고 있는 날짜의 주차 계산
     val viewingWeek = remember(currentViewingDay) {
@@ -343,17 +334,19 @@ fun DiaryDetailScreen(
                     currentDayInWeek = currentDayInWeek,
                     totalDaysInWeek = totalDaysInWeek,
                     canGoPrevious = actualDayNumber > weekStartDay,
-                    canGoNext = actualDayNumber < weekEndDay, // 주차 내 전체 날짜 이동 허용
+                    canGoNext = actualDayNumber < weekEndDay,
                     onPreviousDay = {
                         // 현재 주차 내에서 이전 날로 이동 (상태 변경만, 네비게이션 없음)
                         if (actualDayNumber > weekStartDay) {
                             currentViewingDay = actualDayNumber - 1
+                            Log.d("DiaryDetailScreen", "이전 날로 이동: ${actualDayNumber} -> ${actualDayNumber - 1}")
                         }
                     },
                     onNextDay = {
                         // 현재 주차 내에서 다음 날로 이동 (상태 변경만, 네비게이션 없음)
-                        if (actualDayNumber < weekEndDay) { // currentPregnancyDay 제한 제거
+                        if (actualDayNumber < weekEndDay) {
                             currentViewingDay = actualDayNumber + 1
+                            Log.d("DiaryDetailScreen", "다음 날로 이동: ${actualDayNumber} -> ${actualDayNumber + 1}")
                         }
                     }
                 )

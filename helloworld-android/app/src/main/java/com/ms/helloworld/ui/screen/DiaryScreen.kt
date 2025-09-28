@@ -77,6 +77,9 @@ fun DiaryScreen(
     val menstrualDate by homeViewModel.menstrualDate.collectAsState()
     val healthState by healthViewModel.state.collectAsStateWithLifecycle()
 
+    // 현재 보여지는 주차를 별도로 관리
+    var viewingWeek by remember { mutableStateOf<Int?>(null) }
+
     // 스크린이 시작될 때 HomeViewModel과 HealthViewModel 데이터 로딩
     LaunchedEffect(Unit) {
         homeViewModel.forceRefreshProfile()
@@ -85,75 +88,68 @@ fun DiaryScreen(
         healthViewModel.loadHealthHistory()
     }
 
+    // 화면 진입/복귀 시 현재 주차로 리셋 (DiaryDetailScreen에서 돌아올 때)
+    LaunchedEffect(navController.currentBackStackEntry) {
+        viewingWeek = null
+        viewModel.clearDiaries()
+    }
+
     // 실제 임신 정보 사용 (currentPregnancyDay를 우선 사용)
-    val currentWeek = homeState?.let { profile ->
+    val actualCurrentWeek = homeState?.let { profile ->
         Log.d(
             "DiaryScreen",
             "MomProfile 데이터: 주차=${profile.pregnancyWeek}, 기존currentDay=${profile.currentDay}, 닉네임=${profile.nickname}"
         )
-
-        val homeState by homeViewModel.momProfile.collectAsState()
-        val currentPregnancyDay by homeViewModel.currentPregnancyDay.collectAsState()
-        val coupleId by homeViewModel.coupleId.collectAsState()
-        val menstrualDate by homeViewModel.menstrualDate.collectAsState()
-        val userId by homeViewModel.userId.collectAsState()
-        val userGender by homeViewModel.userGender.collectAsState()
-
-        // 현재 보여지는 주차를 별도로 관리
-        var viewingWeek by remember { mutableStateOf<Int?>(null) }
-
-        // 실제 임신 정보 사용 (currentPregnancyDay를 우선 사용)
-        val actualCurrentWeek = homeState?.let { profile ->
-            val calculatedWeek = ((currentPregnancyDay - 1) / 7) + 1
-            PregnancyWeek(
-                week = calculatedWeek,
-                dayCount = currentPregnancyDay  // HomeViewModel의 정확한 계산값 사용
-            )
-        } ?: run {
-            val calculatedWeek = ((currentPregnancyDay - 1) / 7) + 1
-            PregnancyWeek(week = calculatedWeek, dayCount = currentPregnancyDay)
-        }
-
-        // 표시할 주차 결정: viewingWeek가 설정되어 있으면 그것을 사용, 아니면 현재 주차
-        val displayWeek = if (viewingWeek != null) {
-            PregnancyWeek(week = viewingWeek!!, dayCount = currentPregnancyDay)
-        } else {
-            actualCurrentWeek
-        }
-
-        // API에서 받은 주간 일기 상태를 기존 형식으로 변환
-        val weeklyDiaryStatus = state.weeklyDiaryStatus.map { weeklyStatus ->
-            DiaryStatus(
-                day = weeklyStatus.day,
-                momWritten = weeklyStatus.momWritten,
-                dadWritten = weeklyStatus.dadWritten
-            )
-        }.takeIf { it.isNotEmpty() } ?: listOf(
-            // 기본값 (로딩 중이거나 데이터 없을 때)
-            DiaryStatus(1, false, false),
-            DiaryStatus(2, false, false),
-            DiaryStatus(3, false, false),
-            DiaryStatus(4, false, false),
-            DiaryStatus(5, false, false),
-            DiaryStatus(6, false, false),
-            DiaryStatus(7, false, false)
+        val calculatedWeek = ((currentPregnancyDay - 1) / 7) + 1
+        PregnancyWeek(
+            week = calculatedWeek,
+            dayCount = currentPregnancyDay  // HomeViewModel의 정확한 계산값 사용
         )
+    } ?: run {
+        val calculatedWeek = ((currentPregnancyDay - 1) / 7) + 1
+        PregnancyWeek(week = calculatedWeek, dayCount = currentPregnancyDay)
+    }
 
-        // 현재 주차의 건강 데이터 계산 (HealthStatusScreen 로직 참고)
-        val weekStartDay = if (actualCurrentWeek.week > 0) {
-            (actualCurrentWeek.week - 1) * 7 + 1
-        } else {
-            if (currentPregnancyDay > 1) {
-                val currentWeek = ((currentPregnancyDay - 1) / 7) + 1
-                (currentWeek - 1) * 7 + 1
-            } else 1
-        }
-        val weekEndDay = weekStartDay + 6
+    // 표시할 주차 결정: viewingWeek가 설정되어 있으면 그것을 사용, 아니면 현재 주차
+    val displayWeek = if (viewingWeek != null) {
+        PregnancyWeek(week = viewingWeek!!, dayCount = currentPregnancyDay)
+    } else {
+        actualCurrentWeek
+    }
 
-        // 건강 데이터를 HealthStatusScreen과 동일한 방식으로 변환
-        val healthDataList = if (menstrualDate == null) {
-            emptyList()
-        } else {
+    // API에서 받은 주간 일기 상태를 기존 형식으로 변환
+    val weeklyDiaryStatus = state.weeklyDiaryStatus.map { weeklyStatus ->
+        DiaryStatus(
+            day = weeklyStatus.day,
+            momWritten = weeklyStatus.momWritten,
+            dadWritten = weeklyStatus.dadWritten
+        )
+    }.takeIf { it.isNotEmpty() } ?: listOf(
+        // 기본값 (로딩 중이거나 데이터 없을 때)
+        DiaryStatus(1, false, false),
+        DiaryStatus(2, false, false),
+        DiaryStatus(3, false, false),
+        DiaryStatus(4, false, false),
+        DiaryStatus(5, false, false),
+        DiaryStatus(6, false, false),
+        DiaryStatus(7, false, false)
+    )
+
+    // 현재 주차의 건강 데이터 계산 (HealthStatusScreen 로직 참고)
+    val weekStartDay = if (actualCurrentWeek.week > 0) {
+        (actualCurrentWeek.week - 1) * 7 + 1
+    } else {
+        if (currentPregnancyDay > 1) {
+            val currentWeek = ((currentPregnancyDay - 1) / 7) + 1
+            (currentWeek - 1) * 7 + 1
+        } else 1
+    }
+    val weekEndDay = weekStartDay + 6
+
+    // 건강 데이터를 HealthStatusScreen과 동일한 방식으로 변환
+    val healthDataList = if (menstrualDate == null) {
+        emptyList()
+    } else {
             val historyDataMap = mutableMapOf<String, com.ms.helloworld.dto.response.MaternalHealthItem>()
             val todayDataMap = mutableMapOf<String, com.ms.helloworld.dto.response.MaternalHealthGetResponse>()
 
@@ -248,43 +244,29 @@ fun DiaryScreen(
             bloodSugar = avgBloodSugar
         )
 
-        // HomeViewModel의 실제 데이터를 DiaryViewModel에 전달
-        LaunchedEffect(menstrualDate) {
+    // HomeViewModel의 실제 데이터를 DiaryViewModel에 전달
+    LaunchedEffect(menstrualDate) {
+        val actualMenstrualDate = menstrualDate
+        if (actualMenstrualDate != null) {
+            viewModel.setLmpDate(actualMenstrualDate)
+        }
+    }
+
+    // HomeViewModel에서 임신 주차가 업데이트될 때 DiaryViewModel 새로고침
+    LaunchedEffect(currentPregnancyDay, menstrualDate) {
+        homeState?.let { profile ->
             val actualMenstrualDate = menstrualDate
             if (actualMenstrualDate != null) {
+                val calculatedWeek = ((currentPregnancyDay - 1) / 7) + 1
                 viewModel.setLmpDate(actualMenstrualDate)
+                viewModel.loadWeeklyDiaries(calculatedWeek)
             }
         }
+    }
 
-        // 사용자 정보를 DiaryViewModel에 전달
-        LaunchedEffect(userId, userGender) {
-            if (userId != null && userGender != null) {
-                viewModel.setUserInfo(userId, userGender)
-
-                // 사용자 정보가 업데이트되면 기존 데이터를 다시 처리
-                homeState?.let { profile ->
-                    viewModel.loadWeeklyDiaries(profile.pregnancyWeek)
-                    val calculatedWeek = ((currentPregnancyDay - 1) / 7) + 1
-                    viewModel.loadWeeklyDiaries(calculatedWeek)
-                }
-            }
-        }
-
-        // HomeViewModel에서 임신 주차가 업데이트될 때 DiaryViewModel 새로고침
-        LaunchedEffect(currentPregnancyDay, menstrualDate) {
-            homeState?.let { profile ->
-                val actualMenstrualDate = menstrualDate
-                if (actualMenstrualDate != null) {
-                    val calculatedWeek = ((currentPregnancyDay - 1) / 7) + 1
-                    viewModel.setLmpDate(actualMenstrualDate)
-                    viewModel.loadWeeklyDiaries(calculatedWeek)
-                }
-            }
-        }
-
-        Column(
-            modifier = Modifier.fillMaxWidth()
-        ) {
+    Column(
+        modifier = Modifier.fillMaxWidth()
+    ) {
             CustomTopAppBar(
                 title = "${actualCurrentWeek.week}주차 (${actualCurrentWeek.dayCount}일째)",
                 navController = navController
@@ -305,20 +287,23 @@ fun DiaryScreen(
                     onPreviousWeek = {
                         if (displayWeek.week > 1) {
                             viewingWeek = displayWeek.week - 1
-
+                            // 이전 데이터 클리어 후 새로운 데이터 로드
+                            viewModel.clearDiaries()
                             viewModel.loadWeeklyDiaries(displayWeek.week - 1)
                         }
                     },
                     onNextWeek = {
                         if (displayWeek.week < actualCurrentWeek.week) {
                             viewingWeek = displayWeek.week + 1
-
+                            // 이전 데이터 클리어 후 새로운 데이터 로드
+                            viewModel.clearDiaries()
                             viewModel.loadWeeklyDiaries(displayWeek.week + 1)
                         }
                     },
                     onCurrentWeek = {
                         viewingWeek = null
-
+                        // 이전 데이터 클리어 후 새로운 데이터 로드
+                        viewModel.clearDiaries()
                         viewModel.loadWeeklyDiaries(actualCurrentWeek.week)
                     }
                 )
@@ -347,7 +332,6 @@ fun DiaryScreen(
             }
         }
     }
-}
 
 @Composable
 fun PregnancyWeekHeader(
