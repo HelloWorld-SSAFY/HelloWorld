@@ -64,6 +64,7 @@ public class YoutubeSearchClient {
         try {
             // API 키 일부 로그 (디버깅용)
             log.info("[YouTube] Using API Key: {}...", apiKey.substring(0, Math.min(10, apiKey.length())));
+            log.info("[YouTube] Original query: '{}'", query);
 
             // 1) 검색 Top-N (원하는 만큼; 8~15 정도 권장)
             int max = 10;
@@ -80,6 +81,7 @@ public class YoutubeSearchClient {
                     .queryParam("key", apiKey)
                     .encode(StandardCharsets.UTF_8)  // <- 공백 %20, 한글 %xx
                     .toUriString();
+            log.info("[YouTube] Final search query: '{}'", query);
             log.info("[YouTube] Search URL: {}", sUrl);
 
             // 실제 응답 원문 확인
@@ -87,8 +89,7 @@ public class YoutubeSearchClient {
                     .retrieve().body(String.class);
 
             log.info("[YouTube] Raw response length: {}", raw != null ? raw.length() : 0);
-            log.info("[YouTube] Raw response preview (first 500 chars): {}",
-                    raw != null ? raw.substring(0, Math.min(500, raw.length())) + "..." : "null");
+            log.info("[YouTube] Raw response FULL: {}", raw); // 전체 응답 로그
 
             SearchResponse sr = mapper().readValue(raw, SearchResponse.class);
             if (sr == null || sr.items == null || sr.items.length == 0) {
@@ -98,12 +99,12 @@ public class YoutubeSearchClient {
 
             log.info("[YouTube] Parsed {} search results", sr.items.length);
 
-            // 첫 번째 결과 상세 로깅
-            if (sr.items.length > 0) {
-                Item first = sr.items[0];
-                log.info("[YouTube] First result - videoId: {}, title: {}",
-                        first.id != null ? first.id.videoId : "null",
-                        first.snippet != null ? first.snippet.title : "null");
+            // 모든 파싱된 결과 상세 로깅
+            for (int i = 0; i < sr.items.length; i++) {
+                Item item = sr.items[i];
+                String videoId = (item != null && item.id != null) ? item.id.videoId : "null";
+                String title = (item != null && item.snippet != null) ? item.snippet.title : "null";
+                log.info("[YouTube] Item[{}] - videoId: {}, title: {}", i, videoId, title);
             }
 
             // 2) 상세 조회로 길이 확인
