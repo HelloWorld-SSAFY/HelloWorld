@@ -53,13 +53,10 @@ public class WeeklyQueryService {
             if (needLookup) {
                 String base = !isBlank(w.getVideoTitle()) ? w.getVideoTitle()
                         : !isBlank(w.getTextBody())  ? w.getTextBody()
-                        : "임산부 스트레칭";
+                        : "스트레칭";
+                base = base.replaceAll("\\s*영상\\d*$","").replaceAll("\\s+"," ").trim();
 
-                base = base.replaceAll("\\s*영상\\d*$","")
-                        .replaceAll("\\s*video\\s*\\d*$","")
-                        .replaceAll("\\s+"," ").trim();
-
-                String query = "임산부를 위한 " + base + " 임산부 임신 prenatal pregnant 요가 스트레칭 운동 분유";
+                String query = "임산부를 위한 " + base;   // ← 맨 위 결과 그대로 사용
 
 
                 youtube.searchFirst(query).ifPresent(result -> {
