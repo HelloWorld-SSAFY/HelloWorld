@@ -43,47 +43,93 @@ public class YoutubeSearchClient {
         }
     }
 
-    // YoutubeSearchClient.java
+    // YoutubeSearchClient.java (핵심 변경)
     public Optional<YoutubeVideo> searchFirst(String query) {
         if (apiKey == null || apiKey.isBlank()) {
             log.warn("[YouTube] API KEY missing");
             return Optional.empty();
         }
         try {
+            // 검색 옵션 강화 + TopN
+            int max = 8;
             String q = URLEncoder.encode(query, StandardCharsets.UTF_8);
             String url = "https://www.googleapis.com/youtube/v3/search"
-                    + "?part=snippet&type=video&maxResults=1&q=" + q + "&key=" + apiKey;
+                    + "?part=snippet&type=video"
+                    + "&maxResults=" + max
+                    + "&regionCode=KR"
+                    + "&relevanceLanguage=ko"
+                    + "&safeSearch=moderate"
+                    + "&videoEmbeddable=true"
+                    + "&videoDuration=medium"  // shorts 회피 (필요에 따라 long)
+                    + "&q=" + q
+                    + "&key=" + apiKey;
 
-            // 1) 원문 JSON 로깅
             String raw = restClient.get().uri(url)
                     .accept(MediaType.APPLICATION_JSON)
                     .retrieve()
                     .body(String.class);
-            log.info("[YouTube] raw={}", raw);   // ← 여기까지 보이면 HTTP/네트워크 OK
+            log.debug("[YouTube] raw={}", raw);
 
-            // 2) 안전 파싱
             ObjectMapper mapper = new ObjectMapper()
                     .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
-                    .setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY); // ← 핵심
+                    .setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY);
 
             SearchResponse res = mapper.readValue(raw, SearchResponse.class);
-
             if (res == null || res.items == null || res.items.length == 0) {
                 log.warn("[YouTube] No items for query: {}", query);
                 return Optional.empty();
             }
-            var item  = res.items[0];
-            var vid   = (item.id != null) ? item.id.videoId : null;
-            var title = (item.snippet != null) ? item.snippet.title : null;
-            var thumb = (item.snippet != null && item.snippet.thumbnails != null) ? firstThumb(item.snippet.thumbnails) : null;
 
-            if (vid == null) { log.warn("[YouTube] Missing videoId"); return Optional.empty(); }
+            // 후보들 중에서 점수 가장 높은 영상 선택
+            Optional<Item> best = pickBest(res.items, query);
+            if (best.isEmpty() || best.get().id == null || best.get().id.videoId == null) {
+                log.warn("[YouTube] No good match for query: {}", query);
+                return Optional.empty();
+            }
+
+            Item item = best.get();
+            String vid = item.id.videoId;
+            String title = item.snippet != null ? item.snippet.title : null;
+            String thumb = (item.snippet != null && item.snippet.thumbnails != null) ? firstThumb(item.snippet.thumbnails) : null;
+
             return Optional.of(new YoutubeVideo(vid, title, thumb));
         } catch (Exception e) {
             log.warn("[YouTube] search failed", e);
             return Optional.empty();
         }
     }
+
+    // 간단한 스코어링(한글/영문 임신 관련 키워드 가중치 + 원 쿼리 토큰 매칭)
+    private Optional<Item> pickBest(Item[] items, String query) {
+        String q = query.toLowerCase();
+        String[] musts = {"임산부", "임신", "산모", "prenatal", "pregnant"};
+        String[] hints  = tokenize(q); // 원 쿼리 토큰
+
+        Item best = null;
+        int bestScore = Integer.MIN_VALUE;
+
+        for (Item it : items) {
+            if (it == null || it.snippet == null) continue;
+            String t = safeLower(it.snippet.title);
+
+            int score = 0;
+            for (String m : musts) if (t.contains(m)) score += 5; // 핵심 키워드
+            for (String h : hints) if (h.length() >= 2 && t.contains(h)) score += 2; // 쿼리 토큰
+
+            // 너무 동떨어진(핵심키워드 전혀 없음) 결과는 패스
+            if (score < 3) continue;
+
+            if (score > bestScore) { bestScore = score; best = it; }
+        }
+        // 그래도 없으면 첫 번째로 fallback
+        return (best != null) ? Optional.of(best) : Optional.ofNullable(items[0]);
+    }
+
+    private String[] tokenize(String s) {
+        return safeLower(s).replaceAll("[^0-9a-zA-Z가-힣\\s]", " ").split("\\s+");
+    }
+    private String safeLower(String s) { return s == null ? "" : s.toLowerCase(); }
+
 
 
     private String firstThumb(Thumbnails t) {
