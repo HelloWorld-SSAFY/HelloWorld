@@ -785,7 +785,7 @@ fun RegisterButton(
         shape = RoundedCornerShape(8.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = themeColor,
-            disabledContainerColor = Color.Gray
+            disabledContainerColor = Color.Gray.copy(alpha = 0.5f)
         )
     ) {
         Text(
