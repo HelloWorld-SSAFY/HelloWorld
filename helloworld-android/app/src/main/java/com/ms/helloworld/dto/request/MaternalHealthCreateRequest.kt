@@ -14,5 +14,11 @@ data class MaternalHealthCreateRequest(
     val minBloodPressure: Int,
 
     @SerializedName("blood_sugar")
-    val bloodSugar: Int
+    val bloodSugar: Int,
+
+    @SerializedName("created_at")
+    val createdAt: String,
+
+    @SerializedName("updated_at")
+    val updatedAt: String
 )
