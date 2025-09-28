@@ -360,8 +360,10 @@ public class FcmService {
                 return new TitleBody(t, s, p);
             }
             default -> {
-                String t = "건강 제한 모드";
-                String s = String.format("현재 상태로 제한 모드가 적용되었습니다. (심박수 %dBPM)", hr);
+                String t = "나들이 장소 추천";
+
+                String s = String.format("활동량이 저조합니다. 추천된 나들이 장소는 어떠세요?");
+//                String s = String.format("현재 상태로 제한 모드가 적용되었습니다. (심박수 %dBPM)", hr);
                 String p = "파트너에게 제한 모드가 적용되었습니다. 상태를 확인해 주세요.";
                 return new TitleBody(t, s, p);
             }
