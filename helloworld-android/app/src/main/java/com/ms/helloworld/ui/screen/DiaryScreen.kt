@@ -102,15 +102,17 @@ fun DiaryScreen(
 
         // 실제 임신 정보 사용 (currentPregnancyDay를 우선 사용)
         val actualCurrentWeek = homeState?.let { profile ->
-            println("📊 DiaryScreen - MomProfile 데이터: 주차=${profile.pregnancyWeek}, 기존currentDay=${profile.currentDay}, 닉네임=${profile.nickname}")
+            val calculatedWeek = ((currentPregnancyDay - 1) / 7) + 1
+            println("📊 DiaryScreen - MomProfile 데이터: 서버주차=${profile.pregnancyWeek}, 계산된주차=${calculatedWeek}, 기존currentDay=${profile.currentDay}, 닉네임=${profile.nickname}")
             println("📊 DiaryScreen - HomeViewModel currentPregnancyDay: ${currentPregnancyDay}")
             println("📊 DiaryScreen - homeState 객체 해시: ${profile.hashCode()}")
             PregnancyWeek(
-                week = profile.pregnancyWeek,
+                week = calculatedWeek,
                 dayCount = currentPregnancyDay  // HomeViewModel의 정확한 계산값 사용
             )
         } ?: run {
-            PregnancyWeek(week = 1, dayCount = currentPregnancyDay)
+            val calculatedWeek = ((currentPregnancyDay - 1) / 7) + 1
+            PregnancyWeek(week = calculatedWeek, dayCount = currentPregnancyDay)
         }
 
         // 표시할 주차 결정: viewingWeek가 설정되어 있으면 그것을 사용, 아니면 현재 주차
@@ -263,19 +265,22 @@ fun DiaryScreen(
 
                 // 사용자 정보가 업데이트되면 기존 데이터를 다시 처리
                 homeState?.let { profile ->
-                    println("🔄 DiaryScreen - 사용자 정보 업데이트 후 주간 일기 재로딩")
-                    viewModel.loadWeeklyDiaries(profile.pregnancyWeek)
+                    val calculatedWeek = ((currentPregnancyDay - 1) / 7) + 1
+                    println("🔄 DiaryScreen - 사용자 정보 업데이트 후 주간 일기 재로딩: ${calculatedWeek}주차")
+                    viewModel.loadWeeklyDiaries(calculatedWeek)
                 }
             }
         }
 
         // HomeViewModel에서 임신 주차가 업데이트될 때 DiaryViewModel 새로고침
-        LaunchedEffect(homeState?.pregnancyWeek, menstrualDate) {
+        LaunchedEffect(currentPregnancyDay, menstrualDate) {
             homeState?.let { profile ->
                 val actualMenstrualDate = menstrualDate
                 if (actualMenstrualDate != null) {
+                    val calculatedWeek = ((currentPregnancyDay - 1) / 7) + 1
                     viewModel.setLmpDate(actualMenstrualDate)
-                    viewModel.loadWeeklyDiaries(profile.pregnancyWeek)
+                    viewModel.loadWeeklyDiaries(calculatedWeek)
+                    println("🔄 DiaryScreen - LaunchedEffect: ${calculatedWeek}주차 로딩")
                 }
             }
         }

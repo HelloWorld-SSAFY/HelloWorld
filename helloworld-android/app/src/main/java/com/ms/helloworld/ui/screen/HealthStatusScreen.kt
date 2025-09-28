@@ -81,16 +81,14 @@ fun HealthStatusScreen(
     val menstrualDate by homeViewModel.menstrualDate.collectAsState()
     val currentPregnancyDay by homeViewModel.currentPregnancyDay.collectAsState()
 
-    // 현재 주차의 시작일과 끝일 계산 (DiaryDetailScreen과 동일)
-    val weekStartDay = if (momProfile.pregnancyWeek > 0) {
-        (momProfile.pregnancyWeek - 1) * 7 + 1
-    } else {
-        if (currentPregnancyDay > 1) {
-            val currentWeek = ((currentPregnancyDay - 1) / 7) + 1
-            (currentWeek - 1) * 7 + 1
-        } else 1
-    }
+    // 현재 주차의 시작일과 끝일 계산 (currentPregnancyDay 기준)
+    val weekStartDay = if (currentPregnancyDay > 1) {
+        val currentWeek = ((currentPregnancyDay - 1) / 7) + 1
+        (currentWeek - 1) * 7 + 1
+    } else 1
     val weekEndDay = weekStartDay + 6
+
+    Log.d("HealthStatusScreen", "🔍 주차 계산: currentPregnancyDay=$currentPregnancyDay, weekStartDay=$weekStartDay, weekEndDay=$weekEndDay")
 
     // 애니메이션 상태
     var targetHealthType by remember { mutableStateOf(selectedHealthType) }
@@ -124,16 +122,33 @@ fun HealthStatusScreen(
 
             // 오늘 데이터 추가 (MaternalHealthGetResponse)
             healthState.todayHealthData?.let { todayData ->
+                Log.d("HealthStatusScreen", "🔍 todayHealthData 있음: ${todayData.recordDate}")
                 todayDataMap[todayData.recordDate] = todayData
+            } ?: run {
+                Log.d("HealthStatusScreen", "🔍 todayHealthData 없음")
             }
 
             // 현재 주차의 1일~7일 순서대로 HealthData 생성
             val weeklyData = mutableListOf<HealthData>()
+            val today = java.time.LocalDate.now().toString()
+            Log.d("HealthStatusScreen", "🔍 오늘 날짜: $today, 현재 주차 범위: ${weekStartDay}~${weekEndDay}일")
+
+            // 생성될 날짜 범위 미리 확인
+            val dateRange = (weekStartDay..weekEndDay).map { day ->
+                try {
+                    val lmpDate = LocalDate.parse(menstrualDate)
+                    day to lmpDate.plusDays(day.toLong()).toString()
+                } catch (e: Exception) {
+                    day to "error"
+                }
+            }
+            Log.d("HealthStatusScreen", "🔍 생성될 날짜 범위: $dateRange")
+
             for (day in weekStartDay..weekEndDay) {
                 // 임신 일수를 날짜로 변환
                 val targetDate = try {
                     val lmpDate = LocalDate.parse(menstrualDate)
-                    lmpDate.plusDays((day - 1).toLong())
+                    lmpDate.plusDays(day.toLong())
                 } catch (e: Exception) {
                     Log.e("HealthStatusScreen", "날짜 계산 오류: ${e.message}")
                     null
@@ -142,16 +157,24 @@ fun HealthStatusScreen(
                 val targetDateString = targetDate?.toString()
                 Log.d("HealthStatusScreen", "${day}일차 -> 날짜: $targetDateString")
 
+                if (targetDateString == today) {
+                    Log.d("HealthStatusScreen", "🎯 오늘 날짜 발견: ${day}일차 = $targetDateString")
+                }
+
                 // 해당 날짜의 서버 데이터 찾기 (히스토리 우선, 없으면 오늘 데이터)
                 val historyData = targetDateString?.let { historyDataMap[it] }
                 val todayData = targetDateString?.let { todayDataMap[it] }
+
+                if (targetDateString == today) {
+                    Log.d("HealthStatusScreen", "🎯 오늘 데이터 검색 결과: historyData=$historyData, todayData=$todayData")
+                }
 
                 when {
                     historyData != null -> {
                         // 히스토리 데이터가 있는 경우 (MaternalHealthItem)
                         val bloodPressure = healthViewModel.parseBloodPressure(historyData.bloodPressure)
                         weeklyData.add(HealthData(
-                            day = ((day - weekStartDay) % 7) + 1, // 주차 내 1~7일
+                            day = (day - weekStartDay) + 1, // 주차 내 1~7일
                             weight = historyData.weight.toFloat(),
                             bloodPressureHigh = bloodPressure?.first?.toFloat(),
                             bloodPressureLow = bloodPressure?.second?.toFloat(),
@@ -164,7 +187,7 @@ fun HealthStatusScreen(
                         // 오늘 데이터가 있는 경우 (MaternalHealthGetResponse)
                         val bloodPressure = healthViewModel.parseBloodPressure(todayData.bloodPressure)
                         weeklyData.add(HealthData(
-                            day = ((day - weekStartDay) % 7) + 1, // 주차 내 1~7일
+                            day = (day - weekStartDay) + 1, // 주차 내 1~7일
                             weight = todayData.weight.toFloat(),
                             bloodPressureHigh = bloodPressure?.first?.toFloat(),
                             bloodPressureLow = bloodPressure?.second?.toFloat(),
@@ -176,7 +199,7 @@ fun HealthStatusScreen(
                     else -> {
                         // 데이터가 없는 경우 - null 값으로 HealthData 생성
                         weeklyData.add(HealthData(
-                            day = ((day - weekStartDay) % 7) + 1, // 주차 내 1~7일
+                            day = (day - weekStartDay) + 1, // 주차 내 1~7일
                             weight = null,
                             bloodPressureHigh = null,
                             bloodPressureLow = null,
@@ -197,6 +220,12 @@ fun HealthStatusScreen(
     LaunchedEffect(Unit) {
         Log.d("HealthStatusScreen", "HomeViewModel 데이터 로드 시작")
         homeViewModel.refreshProfile()
+        healthViewModel.loadHealthHistory()
+    }
+
+    // 화면이 다시 보일 때마다 데이터 새로고침 (등록 후 돌아올 때)
+    LaunchedEffect(navController.currentBackStackEntry) {
+        Log.d("HealthStatusScreen", "화면 포커스 - 데이터 새로고침")
         healthViewModel.loadHealthHistory()
     }
 
@@ -441,7 +470,11 @@ fun HealthStatusScreen(
                     },
                     onDataPointClick = { dataPoint ->
                         selectedDataPoint = dataPoint
-                    }
+                    },
+                    menstrualDate = menstrualDate,
+                    healthState = healthState,
+                    homeViewModel = homeViewModel,
+                    healthViewModel = healthViewModel
                 )
 
                 // 선택된 데이터 점 정보 표시
@@ -512,7 +545,11 @@ fun HealthTypeSelector(
     healthDataList: List<HealthData>,
     selectedType: HealthType,
     onTypeSelected: (HealthType) -> Unit,
-    onDataPointClick: (HealthData) -> Unit
+    onDataPointClick: (HealthData) -> Unit,
+    menstrualDate: String?,
+    healthState: com.ms.helloworld.viewmodel.HealthState,
+    homeViewModel: HomeViewModel,
+    healthViewModel: HealthViewModel
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -528,21 +565,69 @@ fun HealthTypeSelector(
                     .height(80.dp)
                     .clickable {
                         if (selectedType == type) {
-                            // 이미 선택된 타입을 다시 클릭하면 오늘 데이터 표시
-                            val today = LocalDate.now().toString()
-                            val todayData = healthDataList.find { it.recordDate == today }
+                            // 이미 선택된 타입을 다시 클릭하면 가장 최근 데이터로 이동
+                            Log.d("HealthStatusScreen", "더블클릭 - 가장 최근 데이터 찾기")
+                            Log.d("HealthStatusScreen", "더블클릭 - 현재 healthDataList 날짜들: ${healthDataList.map { it.recordDate }}")
 
-                            Log.d("HealthStatusScreen", "더블클릭 - 오늘 날짜: $today")
-                            Log.d("HealthStatusScreen", "더블클릭 - 찾은 오늘 데이터: ${todayData?.recordDate}")
+                            // 현재 화면의 데이터 중에서 가장 최근 데이터 찾기
+                            val latestData = healthDataList
+                                .filter { data ->
+                                    // 선택된 타입에 해당하는 데이터가 있는지 확인
+                                    when (selectedType) {
+                                        HealthType.WEIGHT -> data.weight != null
+                                        HealthType.BLOOD_PRESSURE -> data.bloodPressureHigh != null
+                                        HealthType.BLOOD_SUGAR -> data.bloodSugar != null
+                                    }
+                                }
+                                .maxByOrNull { it.recordDate ?: "" }
 
-                            if (todayData != null) {
-                                onDataPointClick(todayData)
-                            } else {
-                                Log.d("HealthStatusScreen", "더블클릭 - 오늘 데이터가 없어서 가장 최근 데이터 선택")
-                                // 오늘 데이터가 없으면 가장 최근 데이터 선택
-                                val latestData = healthDataList.maxByOrNull { it.recordDate ?: "" }
-                                latestData?.let { onDataPointClick(it) }
+                            if (latestData != null) {
+                                Log.d("HealthStatusScreen", "더블클릭 - 최근 데이터 발견: ${latestData.recordDate}")
+                                onDataPointClick(latestData)
+                                return@clickable
                             }
+
+                            // 현재 화면에 데이터가 없으면 전체 서버 데이터에서 가장 최근 데이터 찾기
+                            Log.d("HealthStatusScreen", "더블클릭 - 현재 화면에 데이터 없음, 전체 데이터에서 검색")
+
+                            // 전체 서버 데이터에서 선택된 타입의 가장 최근 데이터 찾기
+                            val allServerData = mutableListOf<Pair<String, Any>>()
+
+                            // history 데이터 추가
+                            healthState.healthHistory.forEach { item ->
+                                val hasData = when (selectedType) {
+                                    HealthType.WEIGHT -> item.weight.toFloat() > 0f
+                                    HealthType.BLOOD_PRESSURE -> item.bloodPressure.isNotEmpty()
+                                    HealthType.BLOOD_SUGAR -> item.bloodSugar > 0
+                                }
+                                if (hasData) {
+                                    allServerData.add(item.recordDate to item)
+                                }
+                            }
+
+                            // todayHealthData 추가
+                            healthState.todayHealthData?.let { todayData ->
+                                val hasData = when (selectedType) {
+                                    HealthType.WEIGHT -> todayData.weight.toFloat() > 0f
+                                    HealthType.BLOOD_PRESSURE -> todayData.bloodPressure.isNotEmpty()
+                                    HealthType.BLOOD_SUGAR -> todayData.bloodSugar > 0
+                                }
+                                if (hasData) {
+                                    allServerData.add(todayData.recordDate to todayData)
+                                }
+                            }
+
+                            // 가장 최근 데이터 찾기
+                            val latestServerData = allServerData.maxByOrNull { it.first }
+                            if (latestServerData != null) {
+                                Log.d("HealthStatusScreen", "더블클릭 - 서버에서 최근 데이터 발견: ${latestServerData.first}")
+                                // 해당 날짜가 포함된 주차로 데이터 새로고침
+                                homeViewModel.refreshProfile()
+                                healthViewModel.loadHealthHistory()
+                                return@clickable
+                            }
+
+                            Log.d("HealthStatusScreen", "더블클릭 - 전체 데이터에서 해당 타입의 데이터 없음")
                         } else {
                             onTypeSelected(type)
                         }
@@ -630,9 +715,17 @@ fun HealthStatisticsChart(
             ) {
                 val lastData = chartData.lastOrNull()
                 if (lastData != null) {
-                    val pregnancyInfo = todayHealthData?.recordDate?.let {
-                        formatPregnancyWeeks(it, menstrualDate)
-                    } ?: "데이터 없음"
+                    // 실제 차트의 마지막 데이터 점에 해당하는 HealthData 찾기
+                    val lastHealthData = healthDataList.find { it.day == lastData.first }
+                    val pregnancyInfo = lastHealthData?.recordDate?.let { recordDate ->
+                        Log.d("HealthStatusScreen", "통계 차트 - 실제 마지막 데이터 날짜: $recordDate")
+                        formatPregnancyWeeks(recordDate, menstrualDate)
+                    } ?: run {
+                        // 실제 데이터가 없으면 오늘 날짜로 계산
+                        val today = java.time.LocalDate.now().toString()
+                        Log.d("HealthStatusScreen", "통계 차트 - 실제 데이터 없음, 오늘 날짜 사용: $today")
+                        formatPregnancyWeeks(today, menstrualDate)
+                    }
 
                     Column(
                         horizontalAlignment = Alignment.End
@@ -784,7 +877,8 @@ fun LineChart(
             data.zipWithNext().forEach { (current, next) ->
                 val (currentDay, currentValue) = current
                 val (nextDay, nextValue) = next
-                
+
+                // 1~7일을 0~6 위치에 배치 (7일을 6개 간격으로 나누기)
                 val currentX = ((currentDay - 1) * chartWidth.value / 6).dp
                 val currentY = ((maxValue - currentValue) / (maxValue - minValue) * chartHeight.value).dp
                 val nextX = ((nextDay - 1) * chartWidth.value / 6).dp
@@ -818,6 +912,7 @@ fun LineChart(
 
             // 데이터 점들 (격자 위에 배치)
             data.forEachIndexed { index, (day, value) ->
+                // 1~7일을 0~6 위치에 배치
                 val xPosition = ((day - 1) * chartWidth.value / 6).dp
                 val yPosition = ((maxValue - value) / (maxValue - minValue) * chartHeight.value).dp
                 
@@ -1149,13 +1244,25 @@ fun calculatePregnancyWeeks(recordDate: String, lastMenstrualPeriod: String? = n
         }
 
         val currentDate = LocalDate.parse(recordDate, DateTimeFormatter.ISO_LOCAL_DATE)
-        val daysDifference = ChronoUnit.DAYS.between(lmpDate, currentDate).toInt() + 1
+        val daysDifference = ChronoUnit.DAYS.between(lmpDate, currentDate).toInt()
 
-        // 임신 주차 계산 (7일 = 1주) - DiaryDetailScreen과 동일한 방식
-        val weeks = ((daysDifference - 1) / 7) + 1
-        val days = ((daysDifference - 1) % 7) + 1
+        // 임신 주차 계산
+        // 252일차 = 36주 7일이 되도록 계산
+        // 246~252일차 = 36주 1~7일
+        val weeks = if (daysDifference % 7 == 0) {
+            daysDifference / 7  // 7로 나누어떨어지는 경우
+        } else {
+            (daysDifference / 7) + 1  // 나머지가 있는 경우
+        }
+
+        val days = if (daysDifference % 7 == 0) {
+            7  // 7로 나누어떨어지는 경우 7일
+        } else {
+            daysDifference % 7  // 나머지
+        }
 
         Log.d("HealthStatusScreen", "임신 주차 계산: ${recordDate} -> ${weeks}주 ${days}일 (${daysDifference}일차)")
+        Log.d("HealthStatusScreen", "계산 상세: ${daysDifference}/7+1=${weeks}, ${daysDifference}%7+1=${days}")
         PregnancyWeeks(weeks, days)
     } catch (e: Exception) {
         Log.e("HealthStatusScreen", "임신 주차 계산 오류: ${e.message}")

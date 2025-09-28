@@ -36,7 +36,7 @@ fun ProfileSection(
         verticalAlignment = Alignment.CenterVertically
     ) {
         PregnancyProfileImage(
-            pregnancyWeek = momProfile.pregnancyWeek,
+            pregnancyWeek = ((currentPregnancyDay - 1) / 7) + 1,
             size = 80
         )
 
@@ -49,7 +49,7 @@ fun ProfileSection(
                 color = Color.Gray
             )
             Text(
-                text = "${currentPregnancyDay}일째 (${momProfile.pregnancyWeek}주차)",
+                text = "${currentPregnancyDay}일째 (${((currentPregnancyDay - 1) / 7) + 1}주차)",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Medium
             )
