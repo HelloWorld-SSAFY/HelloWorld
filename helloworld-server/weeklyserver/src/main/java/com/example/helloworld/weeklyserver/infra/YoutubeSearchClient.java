@@ -62,34 +62,35 @@ public class YoutubeSearchClient {
         }
 
         try {
-            // API 키 일부 로그 (디버깅용)
-            log.info("[YouTube] Using API Key: {}...", apiKey.substring(0, Math.min(10, apiKey.length())));
-            log.info("[YouTube] Original query: '{}'", query);
+            // 더 구체적인 검색어로 개선
+            String improvedQuery;
+            if (query.contains("임산부")) {
+                improvedQuery = "\"임산부 요가\" OR \"임산부 스트레칭\" OR \"prenatal yoga\"";
+            } else {
+                improvedQuery = "\"" + query + "\" 임산부 요가 스트레칭";
+            }
 
-            // 1) 검색 Top-N (원하는 만큼; 8~15 정도 권장)
-            int max = 10;
+            log.info("[YouTube] Original query: '{}', Improved query: '{}'", query, improvedQuery);
+
             String sUrl = UriComponentsBuilder
                     .fromHttpUrl("https://www.googleapis.com/youtube/v3/search")
                     .queryParam("part", "snippet")
                     .queryParam("type", "video")
-                    .queryParam("maxResults", 10)   // Top-N (1분 필터용)
-                    .queryParam("order", "relevance") // 명시
-//                    .queryParam("regionCode", "KR")  // 한국 지역 코드 활성화
-//                    .queryParam("relevanceLanguage", "ko") // 한국어 활성화
-//                    .queryParam("safeSearch", "moderate") // 안전 검색
-                    .queryParam("q", query)          // 공백은 %20로 자동 인코딩
+                    .queryParam("maxResults", 15)   // 더 많은 결과로 필터링 옵션 증가
+                    .queryParam("order", "relevance")
+                    .queryParam("videoCategoryId", "26") // Howto & Style 카테고리
+                    .queryParam("safeSearch", "moderate") // 안전 검색
+                    .queryParam("q", improvedQuery)
                     .queryParam("key", apiKey)
-                    .encode(StandardCharsets.UTF_8)  // <- 공백 %20, 한글 %xx
+                    .encode(StandardCharsets.UTF_8)
                     .toUriString();
-            log.info("[YouTube] Final search query: '{}'", query);
+
             log.info("[YouTube] Search URL: {}", sUrl);
 
-            // 실제 응답 원문 확인
             String raw = rest.get().uri(sUrl).accept(MediaType.APPLICATION_JSON)
                     .retrieve().body(String.class);
 
             log.info("[YouTube] Raw response length: {}", raw != null ? raw.length() : 0);
-            log.info("[YouTube] Raw response FULL: {}", raw); // 전체 응답 로그
 
             SearchResponse sr = mapper().readValue(raw, SearchResponse.class);
             if (sr == null || sr.items == null || sr.items.length == 0) {
@@ -107,7 +108,7 @@ public class YoutubeSearchClient {
                 log.info("[YouTube] Item[{}] - videoId: {}, title: {}", i, videoId, title);
             }
 
-            // 2) 상세 조회로 길이 확인
+            // 상세 조회로 길이 확인
             String ids = Arrays.stream(sr.items)
                     .filter(Objects::nonNull)
                     .filter(item -> item.id != null && item.id.videoId != null)
@@ -124,12 +125,8 @@ public class YoutubeSearchClient {
             String vUrl = "https://www.googleapis.com/youtube/v3/videos"
                     + "?part=snippet,contentDetails&id=" + ids + "&key=" + apiKey;
 
-            log.info("[YouTube] Videos detail URL: {}", vUrl);
-
             String vRaw = rest.get().uri(vUrl).accept(MediaType.APPLICATION_JSON)
                     .retrieve().body(String.class);
-
-            log.info("[YouTube] Videos detail response length: {}", vRaw != null ? vRaw.length() : 0);
 
             VideosResponse vr = mapper().readValue(vRaw, VideosResponse.class);
             if (vr == null || vr.items == null || vr.items.length == 0) {
@@ -139,15 +136,11 @@ public class YoutubeSearchClient {
 
             log.info("[YouTube] Found {} video details", vr.items.length);
 
-            // 3) 검색 순서를 유지하며 'minSeconds 이상'인 첫 영상 선택
+            // 검색 순서를 유지하며 임산부 관련 + 최소 길이 조건 확인
             Map<String, VideoItem> byId = new HashMap<>();
             for (VideoItem v : vr.items) {
                 if (v != null && v.id != null) {
                     byId.put(v.id, v);
-                    log.info("[YouTube] Video detail - id: {}, title: {}, duration: {}",
-                            v.id,
-                            v.snippet != null ? v.snippet.title : "null",
-                            v.contentDetails != null ? v.contentDetails.duration : "null");
                 }
             }
 
@@ -157,11 +150,13 @@ public class YoutubeSearchClient {
                 VideoItem v = byId.get(it.id.videoId);
                 if (v == null || v.contentDetails == null) continue;
 
-                long secs = parseDurationSec(v.contentDetails.duration); // ISO8601 → seconds
-                log.info("[YouTube] Checking video {} - duration: {} seconds (min required: {})",
-                        it.id.videoId, secs, minSeconds);
+                long secs = parseDurationSec(v.contentDetails.duration);
+                boolean isPregnancyRelated = isPregnancyRelated(v);
 
-                if (secs >= minSeconds) {
+                log.info("[YouTube] Checking video {} - duration: {} seconds, pregnancy related: {}",
+                        it.id.videoId, secs, isPregnancyRelated);
+
+                if (secs >= minSeconds && isPregnancyRelated) {
                     String vid = v.id;
                     String title = v.snippet != null ? v.snippet.title : null;
                     String thumb = (v.snippet != null && v.snippet.thumbnails != null)
@@ -170,38 +165,83 @@ public class YoutubeSearchClient {
                     log.info("[YouTube] SELECTED video - id: {}, title: {}, thumbnail: {}",
                             vid, title, thumb);
 
-                    YoutubeVideo result = new YoutubeVideo(vid, title, thumb);
-                    log.info("[YouTube] Created YoutubeVideo - videoId: {}, title: {}, url: {}, thumbnailUrl: {}",
-                            result.getVideoId(), result.getTitle(), result.getUrl(), result.getThumbnailUrl());
-
-                    return Optional.of(result);
+                    return Optional.of(new YoutubeVideo(vid, title, thumb));
                 }
             }
 
-            // 4) 없으면 원래 1순위로 fallback
+            // 임산부 관련 영상이 없으면 길이 조건만 확인
+            log.warn("[YouTube] No pregnancy-related videos found, checking by duration only");
+            for (Item it : sr.items) {
+                if (it == null || it.id == null || it.id.videoId == null) continue;
+
+                VideoItem v = byId.get(it.id.videoId);
+                if (v == null || v.contentDetails == null) continue;
+
+                long secs = parseDurationSec(v.contentDetails.duration);
+                if (secs >= minSeconds) {
+                    String vid = v.id;
+                    String title = v.snippet != null ? v.snippet.title : null;
+                    String thumb = (v.snippet != null && v.snippet.thumbnails != null)
+                            ? firstThumb(v.snippet.thumbnails) : null;
+
+                    log.info("[YouTube] FALLBACK SELECTED by duration - id: {}, title: {}", vid, title);
+                    return Optional.of(new YoutubeVideo(vid, title, thumb));
+                }
+            }
+
+            // 최종 fallback: 첫 번째 결과
             Item first = sr.items[0];
             if (first != null && first.id != null && first.id.videoId != null) {
                 String vid = first.id.videoId;
                 String title = (first.snippet != null) ? first.snippet.title : null;
-                String thumb = (first.snippet != null && first.snippet.thumbnails != null) ? firstThumb(first.snippet.thumbnails) : null;
+                String thumb = (first.snippet != null && first.snippet.thumbnails != null)
+                        ? firstThumb(first.snippet.thumbnails) : null;
 
-                log.info("[YouTube] FALLBACK to first result - id: {}, title: {}, thumbnail: {}",
-                        vid, title, thumb);
-
-                YoutubeVideo result = new YoutubeVideo(vid, title, thumb);
-                log.info("[YouTube] Created fallback YoutubeVideo - videoId: {}, title: {}, url: {}, thumbnailUrl: {}",
-                        result.getVideoId(), result.getTitle(), result.getUrl(), result.getThumbnailUrl());
-
-                return Optional.of(result);
+                log.warn("[YouTube] ULTIMATE FALLBACK to first result - id: {}, title: {}", vid, title);
+                return Optional.of(new YoutubeVideo(vid, title, thumb));
             }
 
-            log.warn("[YouTube] No valid results found even for fallback");
+            log.warn("[YouTube] No valid results found");
             return Optional.empty();
 
         } catch (Exception e) {
             log.error("[YouTube] Search failed for query: '{}'", query, e);
             return Optional.empty();
         }
+    }
+
+    private boolean isPregnancyRelated(VideoItem video) {
+        if (video.snippet == null) return false;
+
+        String title = video.snippet.title != null ? video.snippet.title.toLowerCase() : "";
+        String description = video.snippet.description != null ? video.snippet.description.toLowerCase() : "";
+        String text = title + " " + description;
+
+        boolean related = text.contains("임산부") ||
+                text.contains("임신") ||
+                text.contains("prenatal") ||
+                text.contains("pregnancy") ||
+                text.contains("요가") ||
+                text.contains("yoga") ||
+                text.contains("스트레칭") ||
+                text.contains("stretching") ||
+                text.contains("운동") ||
+                text.contains("exercise");
+
+        // IT, 낚시, 정치 등 관련 없는 키워드 제외
+        boolean excluded = text.contains("network") ||
+                text.contains("boot") ||
+                text.contains("ipv6") ||
+                text.contains("낚시") ||
+                text.contains("fishing") ||
+                text.contains("대통령") ||
+                text.contains("정치") ||
+                text.contains("헌법") ||
+                text.contains("재판") ||
+                text.contains("빈대") ||
+                text.contains("여성가족부");
+
+        return related && !excluded;
     }
 
     private long parseDurationSec(String iso8601) {
@@ -231,7 +271,7 @@ public class YoutubeSearchClient {
     @JsonIgnoreProperties(ignoreUnknown = true) static class SearchResponse { Item[] items; }
     @JsonIgnoreProperties(ignoreUnknown = true) static class Item { Id id; Snippet snippet; }
     @JsonIgnoreProperties(ignoreUnknown = true) static class Id { String kind; String videoId; }
-    @JsonIgnoreProperties(ignoreUnknown = true) static class Snippet { String title; Thumbnails thumbnails; }
+    @JsonIgnoreProperties(ignoreUnknown = true) static class Snippet { String title; String description; Thumbnails thumbnails; }
     @JsonIgnoreProperties(ignoreUnknown = true) static class Thumbnails {
         @JsonProperty("default") Thumb defaultThumb; Thumb medium; Thumb high; Thumb standard; Thumb maxres;
     }
