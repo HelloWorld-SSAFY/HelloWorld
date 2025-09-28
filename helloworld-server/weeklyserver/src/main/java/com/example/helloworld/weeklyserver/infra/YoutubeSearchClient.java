@@ -1,7 +1,11 @@
 package com.example.helloworld.weeklyserver.infra;
 
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.PropertyAccessor;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -58,9 +62,11 @@ public class YoutubeSearchClient {
             log.info("[YouTube] raw={}", raw);   // ← 여기까지 보이면 HTTP/네트워크 OK
 
             // 2) 안전 파싱
-            SearchResponse res = new com.fasterxml.jackson.databind.ObjectMapper()
-                    .configure(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
-                    .readValue(raw, SearchResponse.class);
+            ObjectMapper mapper = new ObjectMapper()
+                    .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+                    .setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY); // ← 핵심
+
+            SearchResponse res = mapper.readValue(raw, SearchResponse.class);
 
             if (res == null || res.items == null || res.items.length == 0) {
                 log.warn("[YouTube] No items for query: {}", query);
