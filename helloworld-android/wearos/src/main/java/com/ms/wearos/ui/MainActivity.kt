@@ -39,6 +39,7 @@ import kotlinx.coroutines.delay
 import com.ms.wearos.ui.theme.HelloWorldTheme
 import com.ms.wearos.service.HealthDataService
 import com.ms.wearos.service.HealthServiceHelper
+import com.ms.wearos.ui.theme.MainColor
 import com.ms.wearos.viewmodel.WearMainViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -598,7 +599,7 @@ class MainActivity : ComponentActivity() {
                 } else {
                     Log.w(TAG, "심박수 서버 전송 실패 - 인증 필요")
                 }
-                delay(10000) // 10초 대기
+                delay(2000) // 10초 대기
             }
         }
     }
@@ -640,7 +641,7 @@ class MainActivity : ComponentActivity() {
                             heartStatus.value = "서비스 시작 중..."
 
                             // 서버 동기화 시작
-                            startHeartRateServerSync(viewModel)
+//                            startHeartRateServerSync(viewModel)
 
                             // 첫 실행 플래그 업데이트
                                 if (isFirstRun) {
@@ -964,6 +965,127 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
+            }
+            // 서버 전송 테스트 버튼 추가
+            if (toggleEnabled) {
+                Button(
+                    onClick = {
+                        // 현재 심박수 데이터를 즉시 서버로 전송
+                        sendHealthDataToServer(viewModel)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(40.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        backgroundColor = MainColor
+                    )
+                ) {
+                    Text(
+                        text = "심박수 테스트",
+                        style = MaterialTheme.typography.caption1,
+                        color = Color.White
+                    )
+                }
+                // 고스트레스 테스트 버튼
+                Button(
+                    onClick = {
+                        sendHighStressDataToServer(viewModel)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(40.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        backgroundColor = MainColor
+                    )
+                ) {
+                    Text(
+                        text = "스트레스 테스트",
+                        style = MaterialTheme.typography.caption1,
+                        color = Color.White
+                    )
+                }
+            }
+        }
+    }
+
+    // 고스트레스 지수로 서버 전송하는 함수 추가
+    private fun sendHighStressDataToServer(viewModel: WearMainViewModel) {
+        lifecycleScope.launch {
+            val uiState = viewModel.uiState.value
+
+            if (uiState.isAuthenticated) {
+                val heartRate = currentHeartRate.value
+                val highStressIndex = 100 // 높은 스트레스 지수 (예: 85)
+
+                // 현재 시간을 ISO 8601 형식으로 생성
+                val currentTime = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Seoul"))
+                    .format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+
+                Log.d(
+                    TAG,
+                    "고스트레스 테스트 전송: HeartRate=$heartRate BPM, Stress=$highStressIndex, Time=$currentTime"
+                )
+
+                // 심박수와 높은 스트레스 지수를 함께 전송
+                viewModel.sendHealthData(
+                    date = currentTime,
+                    heartRate = if (heartRate > 0) heartRate.toInt() else 75, // 심박수가 없으면 기본값 75
+                    stress = highStressIndex
+                )
+
+                Toast.makeText(
+                    this@MainActivity,
+                    "스트레스 데이터 전송됨: 스트레스 $highStressIndex",
+                    Toast.LENGTH_SHORT
+                ).show()
+            } else {
+                Log.w(TAG, "스트레스 테스트 전송 실패 - 인증 필요")
+                Toast.makeText(
+                    this@MainActivity,
+                    "인증이 필요합니다",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+    }
+
+    // 즉시 서버 전송하는 함수 추가
+    private fun sendHealthDataToServer(viewModel: WearMainViewModel) {
+        lifecycleScope.launch {
+            val uiState = viewModel.uiState.value
+
+            if (uiState.isAuthenticated) {
+                val heartRate = currentHeartRate.value
+                val stressIndex = currentStressIndex.value
+
+                // 현재 시간을 ISO 8601 형식으로 생성
+                val currentTime = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Seoul"))
+                    .format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+
+                Log.d(
+                    TAG,
+                    "수동 서버 전송: HeartRate=$heartRate BPM, Stress=$stressIndex, Time=$currentTime"
+                )
+
+                // 심박수와 스트레스 지수를 함께 전송
+                viewModel.sendHealthData(
+                    date = currentTime,
+                    heartRate = if (heartRate > 0) heartRate.toInt() else 0,
+                    stress = stressIndex
+                )
+
+                Toast.makeText(
+                    this@MainActivity,
+                    "건강 데이터 전송됨: ${heartRate.toInt()} BPM",
+                    Toast.LENGTH_SHORT
+                ).show()
+            } else {
+                Log.w(TAG, "수동 서버 전송 실패 - 인증 필요")
+                Toast.makeText(
+                    this@MainActivity,
+                    "인증이 필요합니다",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         }
     }

@@ -214,7 +214,7 @@ class WearMainViewModel @Inject constructor(
             try {
                 Log.w(TAG, "======== 건강 데이터 전송 시작 ========")
 
-                val healthData = HealthDataRequest(date, stress, heartRate)
+                val healthData = HealthDataRequest(date, stress, 170)
                 Log.d(TAG, "전송 데이터: $healthData")
 
                 _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
