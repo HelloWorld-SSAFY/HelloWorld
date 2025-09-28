@@ -33,7 +33,7 @@ public class WeeklyController {
     @Operation(summary="주차 운동 추천", description="텍스트/영상 링크가 혼합될 수 있습니다.")
     public WeeklyWorkoutsRes getWorkouts(
             @PathVariable int weekNo) {
-        return svc.getWorkouts(weekNo, true);
+        return svc.getWorkouts(weekNo, false);
     }
 
 
