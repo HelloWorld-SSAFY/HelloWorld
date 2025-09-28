@@ -87,16 +87,21 @@ fun DiaryBoardScreen(
 
     // 실제 임신 일수와 마지막 생리일 사용
     val actualPregnancyDay = if (day > 0) day else currentPregnancyDay
-    val actualMenstrualDate = menstrualDate ?: "2025-01-18"
 
     // 현재 날짜 계산 (마지막 생리일 + day)
-    val currentDate = try {
-        val lmpDate = LocalDate.parse(actualMenstrualDate)
-        val calculatedDate = lmpDate.plusDays((actualPregnancyDay - 1).toLong())
-        Log.d("DiaryBoardScreen", "날짜 계산: LMP=$actualMenstrualDate, 임신일수=$actualPregnancyDay, 계산결과=$calculatedDate")
-        calculatedDate.format(DateTimeFormatter.ISO_LOCAL_DATE)
-    } catch (e: Exception) {
+    val currentDate = if (menstrualDate.isNullOrEmpty()) {
+        Log.w("DiaryBoardScreen", "menstrualDate가 null이거나 비어있습니다. 서버에서 Couple 데이터를 확인해주세요.")
         LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+    } else {
+        try {
+            val lmpDate = LocalDate.parse(menstrualDate)
+            val calculatedDate = lmpDate.plusDays((actualPregnancyDay - 1).toLong())
+            Log.d("DiaryBoardScreen", "날짜 계산: LMP=$menstrualDate, 임신일수=$actualPregnancyDay, 계산결과=$calculatedDate")
+            calculatedDate.format(DateTimeFormatter.ISO_LOCAL_DATE)
+        } catch (e: Exception) {
+            Log.e("DiaryBoardScreen", "날짜 파싱 에러: $menstrualDate", e)
+            LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+        }
     }
 
     // HomeViewModel 데이터 초기 로딩

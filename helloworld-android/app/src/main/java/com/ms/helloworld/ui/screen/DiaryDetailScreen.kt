@@ -164,7 +164,14 @@ fun DiaryDetailScreen(
     }
 
     // coupleId는 서버에서 토큰으로 자동 처리됨
-    val getLmpDate = { menstrualDate ?: "2025-01-18" } // menstrualDate 사용 (HomeViewModel과 동일한 기본값)
+    val getLmpDate = {
+        if (menstrualDate.isNullOrEmpty()) {
+            android.util.Log.w("DiaryDetailScreen", "menstrualDate가 null이거나 비어있습니다. 서버에서 Couple 데이터를 확인해주세요.")
+            null
+        } else {
+            menstrualDate
+        }
+    }
 
     // 필수 데이터 부족 시 재로딩
     LaunchedEffect(currentViewingDay) {
@@ -193,24 +200,28 @@ fun DiaryDetailScreen(
         if (actualDayNumber >= 1 && coupleId != null && menstrualDate != null) {
             // 날짜 계산 디버깅 추가
             val lmpDateString = getLmpDate()
-            try {
-                val lmpDate = java.time.LocalDate.parse(lmpDateString)
-                val calculatedDate = lmpDate.plusDays((actualDayNumber - 1).toLong())
-                Log.d("DiaryDetailScreen", "날짜 계산 확인:")
-                Log.d("DiaryDetailScreen", "  - LMP: $lmpDateString")
-                Log.d("DiaryDetailScreen", "  - 임신일수: ${actualDayNumber}일차")
-                Log.d("DiaryDetailScreen", "  - 계산식: LMP + ${actualDayNumber - 1}일 (수정됨)")
-                Log.d("DiaryDetailScreen", "  - 계산된 날짜: $calculatedDate")
-                Log.d("DiaryDetailScreen", "  - 오늘 날짜: ${java.time.LocalDate.now()}")
-            } catch (e: Exception) {
-                Log.e("DiaryDetailScreen", "날짜 계산 오류: ${e.message}")
-            }
+            if (lmpDateString != null) {
+                try {
+                    val lmpDate = java.time.LocalDate.parse(lmpDateString)
+                    val calculatedDate = lmpDate.plusDays((actualDayNumber - 1).toLong())
+                    Log.d("DiaryDetailScreen", "날짜 계산 확인:")
+                    Log.d("DiaryDetailScreen", "  - LMP: $lmpDateString")
+                    Log.d("DiaryDetailScreen", "  - 임신일수: ${actualDayNumber}일차")
+                    Log.d("DiaryDetailScreen", "  - 계산식: LMP + ${actualDayNumber - 1}일 (수정됨)")
+                    Log.d("DiaryDetailScreen", "  - 계산된 날짜: $calculatedDate")
+                    Log.d("DiaryDetailScreen", "  - 오늘 날짜: ${java.time.LocalDate.now()}")
+                } catch (e: Exception) {
+                    Log.e("DiaryDetailScreen", "날짜 계산 오류: ${e.message}")
+                }
 
-            Log.d("DiaryDetailScreen", "API 호출 시작: ${actualDayNumber}일차")
-            diaryViewModel.loadDiariesByDay(
-                day = actualDayNumber,
-                lmpDate = getLmpDate()
-            )
+                Log.d("DiaryDetailScreen", "API 호출 시작: ${actualDayNumber}일차")
+                diaryViewModel.loadDiariesByDay(
+                    day = actualDayNumber,
+                    lmpDate = lmpDateString
+                )
+            } else {
+                Log.w("DiaryDetailScreen", "menstrualDate가 null이어서 일기 로딩을 건너뜁니다.")
+            }
         } else {
             Log.d("DiaryDetailScreen", "데이터 로딩 대기 중 (조건 미충족)")
         }
@@ -224,10 +235,15 @@ fun DiaryDetailScreen(
 
                 if (actualDayNumber > 0) {
                     // 일별 일기 조회
-                    diaryViewModel.loadDiariesByDay(
-                        day = actualDayNumber,
-                        lmpDate = getLmpDate()
-                    )
+                    val lmpDateString = getLmpDate()
+                    if (lmpDateString != null) {
+                        diaryViewModel.loadDiariesByDay(
+                            day = actualDayNumber,
+                            lmpDate = lmpDateString
+                        )
+                    } else {
+                        Log.w("DiaryDetailScreen", "OnResume: menstrualDate가 null이어서 일기 로딩을 건너뜁니다.")
+                    }
                 }
             }
         }
