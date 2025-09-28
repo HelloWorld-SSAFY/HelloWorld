@@ -338,7 +338,7 @@ fun DiaryRegisterScreen(
                     DiaryTitleInput(
                         value = diaryTitle,
                         onValueChange = { diaryTitle = it },
-                        placeholder = "${currentDiaryType.displayName} 제목을 입력해주세요...",
+                        placeholder = "제목을 입력해주세요.",
                         focused = titleFocused,
                         onFocusChange = { titleFocused = it },
                         themeColor = currentDiaryType.primaryColor
@@ -395,7 +395,7 @@ fun DiaryRegisterScreen(
                     DiaryTextInput(
                         value = diaryContent,
                         onValueChange = { diaryContent = it },
-                        placeholder = "${currentDiaryType.displayName}를 작성해주세요...",
+                        placeholder = "일기를 작성해주세요.",
                         focused = contentFocused,
                         onFocusChange = { contentFocused = it },
                         themeColor = currentDiaryType.primaryColor
@@ -531,10 +531,10 @@ fun PhotoUploadButton(
         modifier = modifier.height(48.dp),
         shape = RoundedCornerShape(12.dp),
         colors = ButtonDefaults.buttonColors(
-            containerColor = color.copy(alpha = 0.1f),
-            contentColor = color
+            containerColor = Color.Gray.copy(alpha = 0.1f),
+            contentColor = Color.Gray
         ),
-        border = BorderStroke(1.dp, color.copy(alpha = 0.3f)),
+        border = BorderStroke(1.dp, Color.Gray.copy(alpha = 0.3f)),
         elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
     ) {
         Icon(
