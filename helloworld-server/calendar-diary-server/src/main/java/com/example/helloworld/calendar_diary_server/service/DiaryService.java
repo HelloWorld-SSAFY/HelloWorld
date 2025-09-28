@@ -135,6 +135,7 @@ public class DiaryService {
                 .findAllByDiary_DiaryIdOrderByDiaryPhotoIdAsc(diaryId)
                 .stream()
                 .map(p -> DiaryDetailPhotoDto.builder()
+                        .diaryPhotoId(p.getDiaryPhotoId())
                         .imageUrl(presignGet(p.getImageKey()))
                         .isUltrasound(p.isUltrasound())
                         .build())

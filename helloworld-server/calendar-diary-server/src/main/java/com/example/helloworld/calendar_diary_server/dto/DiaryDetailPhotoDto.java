@@ -9,6 +9,7 @@ import lombok.*;
 @AllArgsConstructor
 @Builder
 public class DiaryDetailPhotoDto {
+    private long diaryPhotoId;
     private String imageUrl;
     private boolean isUltrasound;
 }
