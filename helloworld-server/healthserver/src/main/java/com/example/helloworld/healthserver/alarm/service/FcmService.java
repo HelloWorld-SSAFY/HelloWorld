@@ -84,6 +84,7 @@ public class FcmService {
     @Async
     public void sendReminderNotification(Long userId, String title, String body) {
         try {
+            // 본인 ANDROID / WATCH
             String androidToken = null, watchToken = null;
             var resp = userClient.latestTwo(userId);
             if (resp != null && resp.getStatusCode().is2xxSuccessful() && resp.getBody() != null) {
@@ -93,14 +94,35 @@ public class FcmService {
                 log.warn("[FCM-REMINDER] latestTwo empty user={}", userId);
             }
 
+            // 파트너 ANDROID
+            Long partnerId = null;
+            String partnerAndroidToken = null;
+            var pidResp = userClient.partnerId(userId);
+            if (pidResp != null && pidResp.getStatusCode().is2xxSuccessful() && pidResp.getBody() != null) {
+                partnerId = pidResp.getBody().partnerId();
+                if (partnerId != null && !partnerId.equals(userId)) {
+                    var pResp = userClient.latestByPlatform(partnerId, "ANDROID");
+                    if (pResp != null && pResp.getStatusCode().is2xxSuccessful() && pResp.getBody() != null) {
+                        partnerAndroidToken = pResp.getBody().token();
+                    } else {
+                        log.warn("[FCM-REMINDER] partner ANDROID token empty partnerId={}", partnerId);
+                    }
+                }
+            } else {
+                log.warn("[FCM-REMINDER] partnerId not found for user={}", userId);
+            }
+
+            // 공통 페이로드 (본인/파트너 동일)
             Map<String,String> data = Map.of(
-                    "type", "REMINDER",
+                    "type",  "REMINDER",
                     "title", title,
                     "body",  body
             );
 
-            sendIfPresent(androidToken, data, userId, "ANDROID_REMINDER");
-            sendIfPresent(watchToken,   data, userId, "WATCH_REMINDER");
+            // 발송: 본인(모바일, 워치) + 파트너(모바일)
+            sendIfPresent(androidToken,        data, userId,    "ANDROID_REMINDER");
+            sendIfPresent(watchToken,          data, userId,    "WATCH_REMINDER");
+            sendIfPresent(partnerAndroidToken, data, partnerId, "PARTNER_ANDROID_REMINDER");
 
         } catch (Exception e) {
             log.error("[FCM-REMINDER] send failed user={}", userId, e);
