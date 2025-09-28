@@ -247,9 +247,9 @@ fun HealthMetricsSection(
                 }
                 wearableData != null -> {
                     // 데이터가 있을 때
-                    val heartRate = wearableData!!.heartrate.hr
-                    val stressScore = wearableData!!.heartrate.stress
-                    val steps = wearableData!!.step.steps
+                    val heartRate = wearableData!!.heartrate?.hr ?: 0
+                    val stressScore = wearableData!!.heartrate?.stress ?: 0
+                    val steps = wearableData!!.step?.steps ?: 0
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),

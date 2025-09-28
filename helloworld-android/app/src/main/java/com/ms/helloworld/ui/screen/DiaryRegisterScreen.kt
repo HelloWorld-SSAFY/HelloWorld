@@ -82,7 +82,7 @@ fun DiaryRegisterScreen(
 
     // coupleId는 서버에서 토큰으로 자동 처리됨
     val getLmpDate = {
-        menstrualDate ?: "2025-01-18" // HomeViewModel과 동일한 기본값 사용
+        menstrualDate ?: "2025-09-17" // HomeViewModel과 동일한 기본값 사용
     }
 
     // 날짜 계산 (임신 일수 -> 실제 날짜) - 네겔레 법칙 사용

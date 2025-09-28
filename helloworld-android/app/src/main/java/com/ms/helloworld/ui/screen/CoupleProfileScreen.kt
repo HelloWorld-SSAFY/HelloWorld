@@ -119,126 +119,186 @@ fun CoupleProfileScreen(
                     .padding(top = 20.dp, bottom = 8.dp)
             ) {
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    // 아내 프로필 (왼쪽)
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally
+                // 연동 상태에 따라 다른 레이아웃 표시
+                if (isPartnerConnected) {
+                    // 연동된 경우: 기존 커플 프로필 표시
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(80.dp)
-                                .background(
-                                    Color(0xFFA8D5A8),
-                                    CircleShape
-                                )
-                            .clip(CircleShape),
-                            contentAlignment = Alignment.Center
+                        // 아내 프로필 (왼쪽)
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(80.dp)
+                                    .background(
+                                        Color(0xFFA8D5A8),
+                                        CircleShape
+                                    )
+                                    .clip(CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.pregnant_woman),
+                                    contentDescription = "아내 프로필 이미지",
+                                    tint = Color.Unspecified,
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Text(
+                                    text = state.userA?.nickname ?: "",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color.Black,
+                                    textAlign = TextAlign.Center
+                                )
+
+                                Spacer(modifier = Modifier.width(4.dp))
+
+                                // 여성 사용자만 아내 프로필 수정 버튼 표시
+                                if (currentUserGender == "FEMALE") {
+                                    IconButton(
+                                        onClick = { showProfileEditDialog = true },
+                                        modifier = Modifier.size(20.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Edit,
+                                            contentDescription = "프로필 수정",
+                                            tint = Color.Gray,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.width(30.dp)
+                        ) {
+                            Spacer(modifier = Modifier.height(40.dp)) // 프로필 이미지 중앙에 맞추기 위한 여백
+
                             Icon(
-                                painter = painterResource(R.drawable.pregnant_woman),
-                                contentDescription = "아내 프로필 이미지",
-                                tint = Color.Unspecified,
+                                imageVector = Icons.Default.Favorite, // 하트 아이콘
+                                contentDescription = "커플 연결",
+                                tint = Color(0xFFF49699), // 핑크 색상
+                                modifier = Modifier.size(24.dp)
                             )
                         }
-                        
-                        Spacer(modifier = Modifier.height(8.dp))
 
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
+                        // 남편 프로필 (오른쪽)
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Text(
-                                text = state.userA?.nickname ?: "",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = Color.Black,
-                                textAlign = TextAlign.Center
-                            )
-
-                            Spacer(modifier = Modifier.width(4.dp))
-
-                            // 여성 사용자만 아내 프로필 수정 버튼 표시
-                            if (currentUserGender == "FEMALE") {
-                                IconButton(
-                                    onClick = { showProfileEditDialog = true },
-                                    modifier = Modifier.size(20.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Edit,
-                                        contentDescription = "프로필 수정",
-                                        tint = Color.Gray,
-                                        modifier = Modifier.size(14.dp)
+                            Box(
+                                modifier = Modifier
+                                    .size(80.dp)
+                                    .background(
+                                        Color(0xFFB5D3F7),
+                                        CircleShape
                                     )
+                                    .clip(CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_man),
+                                    contentDescription = "남편 프로필 이미지",
+                                    tint = Color.Unspecified,
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Text(
+                                    text = state.userB?.nickname ?: "",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color.Black,
+                                    textAlign = TextAlign.Center
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+
+                                // 남성 사용자만 남편 프로필 수정 버튼 표시
+                                if (currentUserGender == "MALE") {
+                                    IconButton(
+                                        onClick = { showProfileEditDialog = true },
+                                        modifier = Modifier.size(20.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Edit,
+                                            contentDescription = "프로필 수정",
+                                            tint = Color.Gray,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
-
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.width(30.dp)
+                } else {
+                    // 연동되지 않은 경우: 산모 프로필만 가운데 표시
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center
                     ) {
-                        Spacer(modifier = Modifier.height(40.dp)) // 프로필 이미지 중앙에 맞추기 위한 여백
-
-                        Icon(
-                            imageVector = Icons.Default.Favorite, // 하트 아이콘
-                            contentDescription = "커플 연결",
-                            tint = Color(0xFFF49699), // 핑크 색상
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                    
-                    // 남편 프로필 (오른쪽)
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(80.dp)
-                                .background(
-                                    Color(0xFFB5D3F7),
-                                    CircleShape
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(100.dp) // 혼자일 때는 조금 더 크게
+                                    .background(
+                                        Color(0xFFA8D5A8),
+                                        CircleShape
+                                    )
+                                    .clip(CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.pregnant_woman),
+                                    contentDescription = "산모 프로필 이미지",
+                                    tint = Color.Unspecified,
+                                    modifier = Modifier.fillMaxSize() // 아이콘도 조금 더 크게
                                 )
-                                .clip(CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_man),
-                                contentDescription = "남편 프로필 이미지",
-                                tint = Color.Unspecified,
-                            )
-                        }
+                            }
 
-                        Spacer(modifier = Modifier.height(8.dp))
-                                                
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Text(
-                                text = state.userB?.nickname ?: "",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = Color.Black,
-                                textAlign = TextAlign.Center
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Spacer(modifier = Modifier.height(12.dp))
 
-                            // 남성 사용자만 남편 프로필 수정 버튼 표시
-                            if (currentUserGender == "MALE") {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Text(
+                                    text = state.momProfile?.nickname ?: state.userA?.nickname ?: "",
+                                    fontSize = 18.sp, // 폰트도 조금 더 크게
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color.Black,
+                                    textAlign = TextAlign.Center
+                                )
+
+                                Spacer(modifier = Modifier.width(8.dp))
+
                                 IconButton(
                                     onClick = { showProfileEditDialog = true },
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(24.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Edit,
                                         contentDescription = "프로필 수정",
                                         tint = Color.Gray,
-                                        modifier = Modifier.size(14.dp)
+                                        modifier = Modifier.size(18.dp)
                                     )
                                 }
                             }
@@ -246,6 +306,7 @@ fun CoupleProfileScreen(
                     }
                 }
             }
+
 
             // 공통 임신 정보 섹션
             Column(

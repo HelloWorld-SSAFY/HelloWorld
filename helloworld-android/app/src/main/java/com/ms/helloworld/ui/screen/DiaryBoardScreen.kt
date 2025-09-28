@@ -87,7 +87,7 @@ fun DiaryBoardScreen(
 
     // 실제 임신 일수와 마지막 생리일 사용
     val actualPregnancyDay = if (day > 0) day else currentPregnancyDay
-    val actualMenstrualDate = menstrualDate ?: "2025-01-18"
+    val actualMenstrualDate = menstrualDate ?: "2025-09-17"
 
     // 현재 날짜 계산 (마지막 생리일 + day)
     val currentDate = try {

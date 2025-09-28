@@ -164,7 +164,7 @@ fun DiaryDetailScreen(
     }
 
     // coupleId는 서버에서 토큰으로 자동 처리됨
-    val getLmpDate = { menstrualDate ?: "2025-01-18" } // menstrualDate 사용 (HomeViewModel과 동일한 기본값)
+    val getLmpDate = { menstrualDate ?: "2025-09-17" } // menstrualDate 사용 (HomeViewModel과 동일한 기본값)
 
     // 필수 데이터 부족 시 재로딩
     LaunchedEffect(currentViewingDay) {
