@@ -56,8 +56,8 @@ class AnomalyConfig:
     supported_metrics: Tuple[str, ...] = ("hr", "stress")
 
     # 쿨다운(초)
-    restrict_cooldown_sec: int = 30
-    emergency_cooldown_sec: int = 30
+    restrict_cooldown_sec: int = 1
+    emergency_cooldown_sec: int = 1
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 상태 / 결과
