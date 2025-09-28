@@ -329,12 +329,17 @@ public class FcmService {
         if (reasons == null || reasons.isEmpty()) return "UNKNOWN";
         String joined = String.join("|", reasons).toLowerCase();
 
-        if (joined.contains("stress high"))                           return "STRESS_HIGH";
-        if (joined.contains("hr low"))                                 return "HR_LOW";
-        if (joined.contains("hr high"))                                return "HR_HIGH";
+//        // 스트레스 관련 패턴들 추가
+//        if (joined.contains("stress_z") || joined.contains("|stress_z|")) return "STRESS_HIGH";
+//        if (joined.contains("stress high"))                              return "STRESS_HIGH";
+
+        // 기존 HR 패턴들
+        if (joined.contains("hr low"))                                   return "HR_LOW";
+        if (joined.contains("hr high"))                                  return "HR_HIGH";
         if ((joined.contains("hr>=150") || joined.contains("hr >= 150")) && joined.contains("120s")) return "HR_HIGH_120S";
         if ((joined.contains("hr<=45")  || joined.contains("hr <= 45"))  && joined.contains("120s")) return "HR_LOW_120S";
         if (joined.contains("|hr_z|>=5") || joined.contains("hr_z") || joined.contains("z spike"))   return "HR_Z_SPIKE";
+
         return "UNKNOWN";
     }
 
@@ -361,10 +366,9 @@ public class FcmService {
             }
             default -> {
                 String t = "나들이 장소 추천";
-
                 String s = String.format("활동량이 저조합니다. 추천된 나들이 장소는 어떠세요?");
 //                String s = String.format("현재 상태로 제한 모드가 적용되었습니다. (심박수 %dBPM)", hr);
-                String p = "파트너에게 제한 모드가 적용되었습니다. 상태를 확인해 주세요.";
+                String p = "파트너의 활동량이 저조합니다. 추천된 나들이 장소를 제안해보면 어떨까요?";
                 return new TitleBody(t, s, p);
             }
         }
