@@ -11,5 +11,8 @@ data class MaternalHealthUpdateRequest(
     val bloodPressure: String? = null, // "120/80" format
 
     @SerializedName("blood_sugar")
-    val bloodSugar: Int? = null
+    val bloodSugar: Int? = null,
+
+    @SerializedName("updated_at")
+    val updatedAt: String
 )

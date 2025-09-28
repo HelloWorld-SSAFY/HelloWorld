@@ -114,11 +114,14 @@ class HealthViewModel @Inject constructor(
             try {
                 _state.value = _state.value.copy(isLoading = true, errorMessage = null)
 
+                val currentTimestamp = java.time.Instant.now().toString()
                 val request = MaternalHealthCreateRequest(
                     weight = weight,
                     maxBloodPressure = maxBloodPressure,
                     minBloodPressure = minBloodPressure,
-                    bloodSugar = bloodSugar
+                    bloodSugar = bloodSugar,
+                    createdAt = currentTimestamp,
+                    updatedAt = currentTimestamp
                 )
 
                 val result = maternalHealthRepository.createMaternalHealth(request)
@@ -158,10 +161,12 @@ class HealthViewModel @Inject constructor(
             try {
                 _state.value = _state.value.copy(isLoading = true, errorMessage = null)
 
+                val currentTimestamp = java.time.Instant.now().toString()
                 val request = MaternalHealthUpdateRequest(
                     weight = weight,
                     bloodPressure = bloodPressure,
-                    bloodSugar = bloodSugar
+                    bloodSugar = bloodSugar,
+                    updatedAt = currentTimestamp
                 )
 
                 val result = maternalHealthRepository.updateMaternalHealth(maternalId, request)
@@ -263,23 +268,32 @@ class HealthViewModel @Inject constructor(
     // HealthData를 MaternalHealthItem으로 변환하여 수정용 데이터 설정
     fun setEditingDataFromHealthData(healthData: com.ms.helloworld.ui.screen.HealthData) {
         try {
-            // HealthData를 MaternalHealthItem으로 변환
-            val maternalHealthItem = MaternalHealthItem(
-                maternalId = 0L, // HealthData에는 ID가 없으므로 0으로 설정 (실제 수정 시 다른 방법으로 ID를 찾아야 함)
-                recordDate = healthData.recordDate ?: "",
-                weight = java.math.BigDecimal(healthData.weight?.toDouble() ?: 0.0),
-                bloodPressure = "${healthData.bloodPressureHigh?.toInt() ?: 0}/${healthData.bloodPressureLow?.toInt() ?: 0}",
-                bloodSugar = healthData.bloodSugar?.toInt() ?: 0,
-                createdAt = ""
-            )
+            // healthHistory에서 같은 recordDate를 가진 항목을 찾아서 실제 maternalId를 가져옴
+            val existingItem = _state.value.healthHistory.find { it.recordDate == healthData.recordDate }
 
-            _state.value = _state.value.copy(
-                editingData = maternalHealthItem,
-                isEditMode = true
-            )
-            Log.d(TAG, "📝 HealthData에서 수정용 데이터 설정: 체중=${maternalHealthItem.weight}, 혈압=${maternalHealthItem.bloodPressure}, 혈당=${maternalHealthItem.bloodSugar}")
+            if (existingItem != null) {
+                // 기존 데이터가 있으면 그대로 사용 (실제 maternalId 포함)
+                _state.value = _state.value.copy(
+                    editingData = existingItem,
+                    isEditMode = true
+                )
+                Log.d(TAG, "📝 기존 데이터로 수정용 데이터 설정: ID=${existingItem.maternalId}, 체중=${existingItem.weight}, 혈압=${existingItem.bloodPressure}, 혈당=${existingItem.bloodSugar}")
+            } else {
+                // 새로운 데이터인 경우 (이 경우는 수정이 아니라 생성이어야 함)
+                Log.e(TAG, "❌ 수정하려는 데이터를 healthHistory에서 찾을 수 없음: recordDate=${healthData.recordDate}")
+                _state.value = _state.value.copy(
+                    editingData = null,
+                    isEditMode = false,
+                    errorMessage = "수정할 데이터를 찾을 수 없습니다."
+                )
+            }
         } catch (e: Exception) {
             Log.e(TAG, "HealthData 변환 실패: ${e.message}", e)
+            _state.value = _state.value.copy(
+                editingData = null,
+                isEditMode = false,
+                errorMessage = "데이터 변환 중 오류가 발생했습니다."
+            )
         }
     }
 }

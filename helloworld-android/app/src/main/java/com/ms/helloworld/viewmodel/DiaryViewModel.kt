@@ -62,7 +62,10 @@ class DiaryViewModel @Inject constructor(
     }
 
     fun clearDiaries() {
-        _state.value = _state.value.copy(diaries = emptyList())
+        _state.value = _state.value.copy(
+            diaries = emptyList(),
+            weeklyDiaryStatus = emptyList()
+        )
     }
 
     fun setUserInfo(userId: Long?, userGender: String?) {
