@@ -82,30 +82,51 @@ fun DiaryRegisterScreen(
 
     // coupleId는 서버에서 토큰으로 자동 처리됨
     val getLmpDate = {
-        menstrualDate ?: "2025-01-18" // HomeViewModel과 동일한 기본값 사용
+        if (menstrualDate.isNullOrEmpty()) {
+            Log.w("DiaryRegisterScreen", "menstrualDate가 null이거나 비어있습니다. 서버에서 Couple 데이터를 확인해주세요.")
+            null
+        } else {
+            menstrualDate
+        }
     }
 
     // 날짜 계산 (임신 일수 -> 실제 날짜) - 네겔레 법칙 사용
-    val targetDate = remember(day) {
+    val targetDate = remember(day, menstrualDate) {
         val lmpDateString = getLmpDate()
-        val lmpDate = LocalDate.parse(lmpDateString)
-
-        // 수정된 계산: day일차는 LMP + day일 (1일차 = LMP + 1일)
-        val actualDate = lmpDate.plusDays(day.toLong())
-        actualDate.format(DateTimeFormatter.ofPattern("yyyy년 MM월 dd일"))
+        if (lmpDateString.isNullOrEmpty()) {
+            "날짜 로딩 중..."
+        } else {
+            try {
+                val lmpDate = LocalDate.parse(lmpDateString)
+                // 수정된 계산: day일차는 LMP + day일 (1일차 = LMP + 1일)
+                val actualDate = lmpDate.plusDays(day.toLong())
+                actualDate.format(DateTimeFormatter.ofPattern("yyyy년 MM월 dd일"))
+            } catch (e: Exception) {
+                Log.e("DiaryRegisterScreen", "날짜 파싱 에러: $lmpDateString", e)
+                "날짜 오류"
+            }
+        }
     }
 
-    val targetDateForApi = remember(day) {
+    val targetDateForApi = remember(day, menstrualDate) {
         val lmpDateString = getLmpDate()
-        val lmpDate = LocalDate.parse(lmpDateString)
+        if (lmpDateString.isNullOrEmpty()) {
+            Log.w("DiaryRegisterScreen", "API용 날짜 계산 불가: menstrualDate가 null")
+            null
+        } else {
+            try {
+                val lmpDate = LocalDate.parse(lmpDateString)
+                // 수정된 계산: day일차는 LMP + day일 (1일차 = LMP + 1일)
+                val actualDate = lmpDate.plusDays(day.toLong())
+                val result = actualDate.toString() // yyyy-MM-dd 형식
 
-        // 수정된 계산: day일차는 LMP + day일 (1일차 = LMP + 1일)
-        val actualDate = lmpDate.plusDays(day.toLong())
-        val result = actualDate.toString() // yyyy-MM-dd 형식
-
-        Log.d("DiaryRegisterScreen", "targetDate 계산: day=$day, lmp=$lmpDateString, result=$result")
-
-        result
+                Log.d("DiaryRegisterScreen", "targetDate 계산: day=$day, lmp=$lmpDateString, result=$result")
+                result
+            } catch (e: Exception) {
+                Log.e("DiaryRegisterScreen", "API용 날짜 파싱 에러: $lmpDateString", e)
+                null
+            }
+        }
     }
 
     // 편집할 일기 데이터 가져오기
@@ -123,7 +144,12 @@ fun DiaryRegisterScreen(
         if (isEdit && diaryId != null && diaryId != -1L && editingDiary == null) {
             Log.d("DiaryRegisterScreen", "diaryId로 편집할 일기 찾는 중: diaryId=$diaryId")
             // 먼저 일기 데이터를 로드
-            diaryViewModel.loadDiariesByDay(day, getLmpDate())
+            val lmpDate = getLmpDate()
+            if (lmpDate != null) {
+                diaryViewModel.loadDiariesByDay(day, lmpDate)
+            } else {
+                Log.w("DiaryRegisterScreen", "menstrualDate가 null이어서 편집용 일기 로딩을 건너뜁니다.")
+            }
         }
     }
 
@@ -424,10 +450,10 @@ fun DiaryRegisterScreen(
             // 등록 버튼
             RegisterButton(
                 text = if (isEdit) "수정" else "등록",
-                enabled = !diaryState.isLoading && diaryTitle.isNotBlank() && diaryContent.isNotBlank(),
+                enabled = !diaryState.isLoading && diaryTitle.isNotBlank() && diaryContent.isNotBlank() && targetDateForApi != null,
                 themeColor = currentDiaryType.primaryColor,
                 onClick = {
-                    if (!isSubmitting) {
+                    if (!isSubmitting && targetDateForApi != null) {
                         isSubmitting = true
                         Log.d("DiaryRegisterScreen", "일기 등록 시작")
                         Log.d("DiaryRegisterScreen", "제목: $diaryTitle")

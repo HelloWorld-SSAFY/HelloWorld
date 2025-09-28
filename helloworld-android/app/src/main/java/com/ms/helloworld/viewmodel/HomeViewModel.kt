@@ -57,6 +57,13 @@ class HomeViewModel @Inject constructor(
     private val _currentPregnancyDay = MutableStateFlow<Int>(1)
     val currentPregnancyDay: StateFlow<Int> = _currentPregnancyDay.asStateFlow()
 
+    init {
+        // ViewModel 생성 시 초기 데이터 로딩
+        loadUserGender() // 사용자 정보 로딩 (내부에서 커플 정보도 로딩)
+        loadMomProfile() // 프로필 정보 로딩
+        loadCurrentMonthEvents() // 캘린더 이벤트 로딩
+    }
+
     // 임시 테스트용 - API 호출이 실패할 경우 기본값 설정
     private fun setTestGender() {
         _userGender.value = "FEMALE" // 임시로 여성으로 설정
@@ -86,10 +93,13 @@ class HomeViewModel @Inject constructor(
     private fun loadUserGender() {
         viewModelScope.launch {
             try {
+                android.util.Log.d("HomeViewModel", "사용자 정보 로딩 시작...")
                 val userInfo = momProfileRepository.getUserInfo()
 
                 val gender = userInfo.member.gender
                 val userId = userInfo.member.id
+
+                android.util.Log.d("HomeViewModel", "사용자 정보 로딩 성공: gender=$gender, userId=$userId")
 
                 _userGender.value = gender
                 _userId.value = userId
@@ -98,6 +108,7 @@ class HomeViewModel @Inject constructor(
                 loadCoupleInfo()
 
             } catch (e: Exception) {
+                android.util.Log.e("HomeViewModel", "사용자 정보 로딩 중 에러 발생", e)
                 e.printStackTrace()
                 // API 호출 실패 시 임시로 테스트 성별 설정
                 setTestGender()
@@ -108,6 +119,7 @@ class HomeViewModel @Inject constructor(
     private fun loadCoupleInfo() {
         viewModelScope.launch {
             try {
+                android.util.Log.d("HomeViewModel", "Couple 정보 로딩 시작...")
                 val response = momProfileRepository.getCoupleDetailInfo()
 
                 if (response.isSuccessful) {
@@ -116,21 +128,28 @@ class HomeViewModel @Inject constructor(
                         val coupleId = coupleDetail.couple.coupleId
                         val menstrualDate = coupleDetail.couple.menstrualDate
 
+                        android.util.Log.d("HomeViewModel", "Couple 정보 로딩 성공: coupleId=$coupleId, menstrualDate=$menstrualDate")
 
                         _coupleId.value = coupleId
-                        _menstrualDate.value = menstrualDate
+
+                        if (menstrualDate.isNullOrEmpty()) {
+                            android.util.Log.w("HomeViewModel", "서버에서 받은 menstrualDate가 null 또는 빈 문자열입니다")
+                            _menstrualDate.value = null
+                        } else {
+                            _menstrualDate.value = menstrualDate
+                        }
 
                         // 현재 임신 일수 계산 (네겔레 법칙)
                         calculateCurrentPregnancyDay(menstrualDate)
 
                     } else {
-
+                        android.util.Log.w("HomeViewModel", "Couple 정보 응답이 null입니다")
                     }
                 } else {
-
+                    android.util.Log.e("HomeViewModel", "Couple 정보 로딩 실패: ${response.code()} - ${response.message()}")
                 }
             } catch (e: Exception) {
-
+                android.util.Log.e("HomeViewModel", "Couple 정보 로딩 중 에러 발생", e)
                 e.printStackTrace()
             }
         }
