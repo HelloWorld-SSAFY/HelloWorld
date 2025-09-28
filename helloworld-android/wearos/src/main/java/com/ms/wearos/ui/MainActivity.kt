@@ -1034,12 +1034,6 @@ class MainActivity : ComponentActivity() {
                     heartRate = if (heartRate > 0) heartRate.toInt() else 75, // 심박수가 없으면 기본값 75
                     stress = highStressIndex
                 )
-
-                Toast.makeText(
-                    this@MainActivity,
-                    "스트레스 데이터 전송됨: 스트레스 $highStressIndex",
-                    Toast.LENGTH_SHORT
-                ).show()
             } else {
                 Log.w(TAG, "스트레스 테스트 전송 실패 - 인증 필요")
                 Toast.makeText(
@@ -1076,11 +1070,6 @@ class MainActivity : ComponentActivity() {
                     stress = stressIndex
                 )
 
-                Toast.makeText(
-                    this@MainActivity,
-                    "건강 데이터 전송됨: ${heartRate.toInt()} BPM",
-                    Toast.LENGTH_SHORT
-                ).show()
             } else {
                 Log.w(TAG, "수동 서버 전송 실패 - 인증 필요")
                 Toast.makeText(
