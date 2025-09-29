@@ -1,0 +1,44 @@
+spring:
+  application:
+    name: "health-server"
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: none   # create, update, validate, none 중 선택
+    properties:
+      hibernate:
+        format_sql: true
+        show_sql: true
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+
+ai:
+  server:
+    base-url: http://aiserver-svc:8000
+  telemetry-path: /v1/telemetry
+  app-token: ${APP_TOKEN}
+
+feign:
+  client:
+    config:
+      default:
+        loggerLevel: FULL   # NONE/BASIC/HEADERS/FULL
+
+logging:
+  level:
+    com.example.helloworld.healthserver.client.AiServerClient: DEBUG
+    org.springframework.cloud.openfeign: DEBUG
+    feign: DEBUG
+    com.example.helloworld.healthserver.config: DEBUG
+
+db-scheduler:
+  enabled: true
+  table-name: scheduled_tasks
+
+userserver:
+  base-url: http://userserver-svc:8080
+  app-token: ${APP_TOKEN}
