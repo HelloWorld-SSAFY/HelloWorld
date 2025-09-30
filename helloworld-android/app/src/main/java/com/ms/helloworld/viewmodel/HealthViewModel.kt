@@ -1,0 +1,299 @@
+package com.ms.helloworld.viewmodel
+
+import android.util.Log
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.ms.helloworld.dto.request.MaternalHealthCreateRequest
+import com.ms.helloworld.dto.request.MaternalHealthUpdateRequest
+import com.ms.helloworld.dto.response.MaternalHealthGetResponse
+import com.ms.helloworld.dto.response.MaternalHealthItem
+import com.ms.helloworld.repository.MaternalHealthRepository
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import java.math.BigDecimal
+import javax.inject.Inject
+
+private const val TAG = "HealthViewModel"
+
+data class HealthState(
+    val isLoading: Boolean = false,
+    val errorMessage: String? = null,
+    val todayHealthData: MaternalHealthGetResponse? = null,
+    val healthHistory: List<MaternalHealthItem> = emptyList(),
+    val editingData: MaternalHealthItem? = null,
+    val isEditMode: Boolean = false
+)
+
+@HiltViewModel
+class HealthViewModel @Inject constructor(
+    private val maternalHealthRepository: MaternalHealthRepository
+) : ViewModel() {
+
+    private val _state = MutableStateFlow(HealthState())
+    val state: StateFlow<HealthState> = _state.asStateFlow()
+
+    init {
+        loadTodayHealthData()
+    }
+
+    fun loadTodayHealthData() {
+        viewModelScope.launch {
+            try {
+                _state.value = _state.value.copy(isLoading = true, errorMessage = null)
+
+                val result = maternalHealthRepository.getTodayMaternalHealth()
+                if (result.isSuccess) {
+                    val healthData = result.getOrNull()
+                    _state.value = _state.value.copy(
+                        isLoading = false,
+                        todayHealthData = healthData
+                    )
+                    Log.d(TAG, "✅ 오늘 건강 데이터 로딩 완료: $healthData")
+                } else {
+                    val error = result.exceptionOrNull()?.message ?: "건강 데이터 로딩 실패"
+                    _state.value = _state.value.copy(
+                        isLoading = false,
+                        errorMessage = error
+                    )
+                    Log.e(TAG, "❌ 오늘 건강 데이터 로딩 실패: $error")
+                }
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(
+                    isLoading = false,
+                    errorMessage = e.message ?: "네트워크 오류"
+                )
+                Log.e(TAG, "💥 예외 발생: ${e.message}", e)
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun loadHealthHistory(from: String? = null, to: String? = null) {
+        viewModelScope.launch {
+            try {
+                _state.value = _state.value.copy(isLoading = true, errorMessage = null)
+
+                val result = maternalHealthRepository.getMaternalHealthList(from, to)
+                if (result.isSuccess) {
+                    val historyData = result.getOrNull()?.records ?: emptyList()
+                    _state.value = _state.value.copy(
+                        isLoading = false,
+                        healthHistory = historyData
+                    )
+                    Log.d(TAG, "✅ 건강 히스토리 로딩 완료: ${historyData.size}개")
+                } else {
+                    val error = result.exceptionOrNull()?.message ?: "건강 히스토리 로딩 실패"
+                    _state.value = _state.value.copy(
+                        isLoading = false,
+                        errorMessage = error
+                    )
+                    Log.e(TAG, "❌ 건강 히스토리 로딩 실패: $error")
+                }
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(
+                    isLoading = false,
+                    errorMessage = e.message ?: "네트워크 오류"
+                )
+                Log.e(TAG, "💥 히스토리 로딩 예외 발생: ${e.message}", e)
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun createHealthRecord(
+        weight: BigDecimal,
+        maxBloodPressure: Int,
+        minBloodPressure: Int,
+        bloodSugar: Int,
+        onSuccess: () -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            try {
+                _state.value = _state.value.copy(isLoading = true, errorMessage = null)
+
+                val currentTimestamp = java.time.Instant.now().toString()
+                val request = MaternalHealthCreateRequest(
+                    weight = weight,
+                    maxBloodPressure = maxBloodPressure,
+                    minBloodPressure = minBloodPressure,
+                    bloodSugar = bloodSugar,
+                    createdAt = currentTimestamp,
+                    updatedAt = currentTimestamp
+                )
+
+                val result = maternalHealthRepository.createMaternalHealth(request)
+                if (result.isSuccess) {
+                    Log.d(TAG, "✅ 건강 데이터 생성 성공")
+                    _state.value = _state.value.copy(isLoading = false)
+                    // 성공 시 오늘 데이터 다시 로드
+                    loadTodayHealthData()
+                    // 성공 콜백 실행
+                    onSuccess()
+                } else {
+                    val error = result.exceptionOrNull()?.message ?: "건강 데이터 생성 실패"
+                    _state.value = _state.value.copy(
+                        isLoading = false,
+                        errorMessage = error
+                    )
+                    Log.e(TAG, "❌ 건강 데이터 생성 실패: $error")
+                }
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(
+                    isLoading = false,
+                    errorMessage = e.message ?: "네트워크 오류"
+                )
+                Log.e(TAG, "💥 생성 예외 발생: ${e.message}", e)
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun updateHealthRecord(
+        maternalId: Long,
+        weight: BigDecimal? = null,
+        bloodPressure: String? = null,
+        bloodSugar: Int? = null
+    ) {
+        viewModelScope.launch {
+            try {
+                _state.value = _state.value.copy(isLoading = true, errorMessage = null)
+
+                val currentTimestamp = java.time.Instant.now().toString()
+                val request = MaternalHealthUpdateRequest(
+                    weight = weight,
+                    bloodPressure = bloodPressure,
+                    bloodSugar = bloodSugar,
+                    updatedAt = currentTimestamp
+                )
+
+                val result = maternalHealthRepository.updateMaternalHealth(maternalId, request)
+                if (result.isSuccess) {
+                    Log.d(TAG, "✅ 건강 데이터 수정 성공")
+                    // 성공 시 오늘 데이터 다시 로드
+                    loadTodayHealthData()
+                } else {
+                    val error = result.exceptionOrNull()?.message ?: "건강 데이터 수정 실패"
+                    _state.value = _state.value.copy(
+                        isLoading = false,
+                        errorMessage = error
+                    )
+                    Log.e(TAG, "❌ 건강 데이터 수정 실패: $error")
+                }
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(
+                    isLoading = false,
+                    errorMessage = e.message ?: "네트워크 오류"
+                )
+                Log.e(TAG, "💥 수정 예외 발생: ${e.message}", e)
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun deleteHealthRecord(maternalId: Long) {
+        viewModelScope.launch {
+            try {
+                _state.value = _state.value.copy(isLoading = true, errorMessage = null)
+
+                val result = maternalHealthRepository.deleteMaternalHealth(maternalId)
+                if (result.isSuccess) {
+                    Log.d(TAG, "✅ 건강 데이터 삭제 성공")
+                    // 성공 시 오늘 데이터 다시 로드
+                    loadTodayHealthData()
+                } else {
+                    val error = result.exceptionOrNull()?.message ?: "건강 데이터 삭제 실패"
+                    _state.value = _state.value.copy(
+                        isLoading = false,
+                        errorMessage = error
+                    )
+                    Log.e(TAG, "❌ 건강 데이터 삭제 실패: $error")
+                }
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(
+                    isLoading = false,
+                    errorMessage = e.message ?: "네트워크 오류"
+                )
+                Log.e(TAG, "💥 삭제 예외 발생: ${e.message}", e)
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun clearError() {
+        _state.value = _state.value.copy(errorMessage = null)
+    }
+
+    // 혈압 파싱 헬퍼 함수
+    fun parseBloodPressure(bloodPressure: String): Pair<Int, Int>? {
+        return try {
+            val parts = bloodPressure.split("/")
+            if (parts.size == 2) {
+                val systolic = parts[0].toInt()
+                val diastolic = parts[1].toInt()
+                Pair(systolic, diastolic)
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    // 혈압 포맷 헬퍼 함수
+    fun formatBloodPressure(systolic: Int, diastolic: Int): String {
+        return "$systolic/$diastolic"
+    }
+
+    // 수정용 데이터 설정
+    fun setEditingData(data: MaternalHealthItem) {
+        _state.value = _state.value.copy(
+            editingData = data,
+            isEditMode = true
+        )
+        Log.d(TAG, "📝 수정용 데이터 설정: ID=${data.maternalId}, 체중=${data.weight}, 혈압=${data.bloodPressure}, 혈당=${data.bloodSugar}")
+    }
+
+    // 수정 모드 초기화
+    fun clearEditingData() {
+        _state.value = _state.value.copy(
+            editingData = null,
+            isEditMode = false
+        )
+        Log.d(TAG, "🧹 수정 모드 초기화")
+    }
+
+    // HealthData를 MaternalHealthItem으로 변환하여 수정용 데이터 설정
+    fun setEditingDataFromHealthData(healthData: com.ms.helloworld.ui.screen.HealthData) {
+        try {
+            // healthHistory에서 같은 recordDate를 가진 항목을 찾아서 실제 maternalId를 가져옴
+            val existingItem = _state.value.healthHistory.find { it.recordDate == healthData.recordDate }
+
+            if (existingItem != null) {
+                // 기존 데이터가 있으면 그대로 사용 (실제 maternalId 포함)
+                _state.value = _state.value.copy(
+                    editingData = existingItem,
+                    isEditMode = true
+                )
+                Log.d(TAG, "📝 기존 데이터로 수정용 데이터 설정: ID=${existingItem.maternalId}, 체중=${existingItem.weight}, 혈압=${existingItem.bloodPressure}, 혈당=${existingItem.bloodSugar}")
+            } else {
+                // 새로운 데이터인 경우 (이 경우는 수정이 아니라 생성이어야 함)
+                Log.e(TAG, "❌ 수정하려는 데이터를 healthHistory에서 찾을 수 없음: recordDate=${healthData.recordDate}")
+                _state.value = _state.value.copy(
+                    editingData = null,
+                    isEditMode = false,
+                    errorMessage = "수정할 데이터를 찾을 수 없습니다."
+                )
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "HealthData 변환 실패: ${e.message}", e)
+            _state.value = _state.value.copy(
+                editingData = null,
+                isEditMode = false,
+                errorMessage = "데이터 변환 중 오류가 발생했습니다."
+            )
+        }
+    }
+}
