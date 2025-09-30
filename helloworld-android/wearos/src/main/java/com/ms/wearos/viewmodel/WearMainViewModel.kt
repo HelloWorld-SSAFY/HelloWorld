@@ -1,6 +1,5 @@
 package com.ms.wearos.viewmodel
 
-import android.app.Application
 import android.content.Context
 import android.util.Log
 import androidx.lifecycle.ViewModel
@@ -17,7 +16,6 @@ import com.ms.wearos.dto.response.SafeTemplate
 import com.ms.wearos.repository.AuthRepository
 import com.ms.wearos.repository.WearApiRepository
 import com.ms.wearos.util.WearTokenManager
-import dagger.hilt.android.internal.Contexts.getApplication
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.delay
