@@ -334,36 +334,6 @@ fun DiaryScreen(
     }
 
 @Composable
-fun PregnancyWeekHeader(
-    currentWeek: PregnancyWeek,
-    onWeekListClick: () -> Unit
-) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-
-        // 주차 리스트로 이동 버튼 (선택사항)
-        TextButton(
-            onClick = onWeekListClick,
-            colors = ButtonDefaults.textButtonColors(
-                contentColor = Color.Gray
-            )
-        ) {
-            Text(
-                text = "다른 주차 보기",
-                fontSize = 12.sp
-            )
-            Icon(
-                Icons.Default.KeyboardArrowRight,
-                contentDescription = "주차 리스트",
-                modifier = Modifier.size(16.dp)
-            )
-        }
-    }
-}
-
-@Composable
 fun WeeklyDiaryCard(
     weeklyStatus: List<DiaryStatus>,
     onDayClick: (Int) -> Unit

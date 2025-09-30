@@ -78,16 +78,24 @@ fun DiaryRegisterScreen(
     val userId by homeViewModel.userId.collectAsState()
     val coupleId by homeViewModel.coupleId.collectAsState()
     val menstrualDate by homeViewModel.menstrualDate.collectAsState()
-    val currentPregnancyDay by homeViewModel.currentPregnancyDay.collectAsState()
+    // DiaryRegisterScreen.kt
+    LaunchedEffect(menstrualDate) {
+        if (menstrualDate == null) {
+            homeViewModel.refreshProfile()
+            Log.w("DiaryRegisterScreen", "menstrualDate가 아직 로드되지 않음, 재시도")
+        }
+    }
 
     // coupleId는 서버에서 토큰으로 자동 처리됨
     val getLmpDate = {
-        menstrualDate ?: "2025-09-17" // HomeViewModel과 동일한 기본값 사용
+        menstrualDate ?: "2025-09-18" // HomeViewModel과 동일한 기본값 사용
+
     }
+    Log.d("lmp","lmpdate : ${menstrualDate}")
 
     // 날짜 계산 (임신 일수 -> 실제 날짜) - 네겔레 법칙 사용
-    val targetDate = remember(day) {
-        val lmpDateString = getLmpDate()
+    val targetDate = remember(day, menstrualDate) {
+        val lmpDateString = menstrualDate ?: "2025-09-16"
         val lmpDate = LocalDate.parse(lmpDateString)
 
         // 수정된 계산: day일차는 LMP + day일 (1일차 = LMP + 1일)
@@ -95,8 +103,8 @@ fun DiaryRegisterScreen(
         actualDate.format(DateTimeFormatter.ofPattern("yyyy년 MM월 dd일"))
     }
 
-    val targetDateForApi = remember(day) {
-        val lmpDateString = getLmpDate()
+    val targetDateForApi = remember(day, menstrualDate) {
+        val lmpDateString = menstrualDate ?: "2025-09-17"
         val lmpDate = LocalDate.parse(lmpDateString)
 
         // 수정된 계산: day일차는 LMP + day일 (1일차 = LMP + 1일)

@@ -251,7 +251,12 @@ class HomeViewModel @Inject constructor(
             }
         }
     }
-
+    init {
+        viewModelScope.launch {
+            loadUserGender() // 이게 loadCoupleInfo()도 호출함
+            loadMomProfile()
+        }
+    }
     fun refreshCalendarEvents() {
         loadCurrentMonthEvents()
     }

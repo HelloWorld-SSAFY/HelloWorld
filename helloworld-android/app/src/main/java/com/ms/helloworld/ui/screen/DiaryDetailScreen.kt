@@ -59,7 +59,6 @@ fun DiaryDetailScreen(
 
     // HomeViewModel에서 모든 데이터 가져오기
     val homeViewModel: HomeViewModel = hiltViewModel()
-    val momProfile by homeViewModel.momProfile.collectAsState()
     val userGender by homeViewModel.userGender.collectAsState()
     val userId by homeViewModel.userId.collectAsState()
     val coupleId by homeViewModel.coupleId.collectAsState()
