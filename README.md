@@ -180,7 +180,7 @@
 |---|---|---|
 | 최윤수 | 팀장, Android |  gews300255@gmail.com |
 | 이상헌 | Android | rntehr2@naver.com |
-| 송진우 | Android · DevOps/Backend 보조 | rkddkwl059@naver.com |
+| 송진우 | DevOps/Backend 보조 | rkddkwl059@naver.com |
 | 정보균 | Backend | a01071521583@gmail.com |
 | 홍은솔 | Backend | eunsolhh@gmail.com |
 | 최혜정 | BigData | hhaa0423@gmail.com |
