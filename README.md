@@ -18,7 +18,7 @@
 
 ## 📋 프로젝트 소개
 
-<img src="assets/helloworld_icon.png" height="200" />
+<img src="assets/helloworld_icon.png" height="500" />
 
 **HelloWorld** 는 임산부의 일상 기록과 가족 연동을 중심으로, **주차별/상태별 맞춤 추천**을 제공하는 케어 서비스입니다.  
 산모/남편(보호자) 일기, 캘린더, 초음파·음식 사진 등 **미디어를 안전하게 저장**하고 공유합니다.  
