@@ -31,8 +31,7 @@
 | 팀명 | HelloWorld |
 | 서비스명 | HelloWorld |
 | 개발 기간 | 2025.08 ~ 2025.09 (6주) |
-| 개발 인원 | 6명 / Android(2), Backend(2), BigData(1), 나 DevOps(1) |
-| 내 역할 | **DevOps & Backend** (CI/CD, 관찰성, S3 Presigned API, DALL·E-3 연동) |
+| 개발 인원 | 6명 / Android(2), Backend(2), BigData(1), DevOps/Infra(1) |
 
 <br>
 
@@ -133,7 +132,7 @@
 # 📚 기술 스택
 
 ## 📱 Android
-- **Kotlin** 2. / **Android SDK** 35  
+- **Kotlin** 2.0.0 / **Android SDK** 35  
 - **Jetpack**: Compose, DataStore, Lifecycle, Navigation  
 - **Hilt(DI)**, **Retrofit/OkHttp**, **Firebase(FCM)**  
 
@@ -144,6 +143,7 @@
 - **Spring Boot** 3.5.5, **REST API**  
 - **JPA**  
 - **S3 Presigned** API, **OpenAI(DALL·E-3)** 연동  
+- **Microsoft Service Architecture**
 - DB: **PostgreSQL** 16.10  
 - IDE: IntelliJ IDEA 2025.02.01
 
@@ -179,8 +179,8 @@
 | 🧑‍💻 이름 | 🏆 역할 | ✉️ 이메일 |
 |---|---|---|
 | 최윤수 | 팀장, Android |  gews300255@gmail.com |
-| 이상헌 | Android | rntehr2@gmail.com |
-| **송진우** | **Android · DevOps/Backend 보조** | rkddkwl059@naver.com |
+| 이상헌 | Android | rntehr2@naver.com |
+| 송진우 | Android · DevOps/Backend 보조 | rkddkwl059@naver.com |
 | 정보균 | Backend | a01071521583@gmail.com |
 | 홍은솔 | Backend | eunsolhh@gmail.com |
 | 최혜정 | BigData | hhaa0423@gmail.com |
@@ -191,3 +191,4 @@
 - [ERD](https://www.erdcloud.com/d/AAFYetJsXD6wbeZff)
 - [API 명세](https://www.notion.so/API-261b8bebd93a802cac7af64894acbfde)
 - [대시보드 샷](assets/helloworld_grafana.png)
+- [Figma](https://www.figma.com/design/bb6lEz4gMiUPYgojDH7ahQ/D204-%ED%8A%B9%ED%99%94%ED%94%84%EB%A1%9C%EC%A0%9D%ED%8A%B8?node-id=0-1&p=f&t=tQR18bzMntOYVA85-0)
