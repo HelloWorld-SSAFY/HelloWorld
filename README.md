@@ -28,7 +28,7 @@
 
 | 항목 | 내용 |
 | --- | --- |
-| 팀명 | HelloWorld |
+| 팀명 | 마미손 |
 | 서비스명 | HelloWorld |
 | 개발 기간 | 2025.08 ~ 2025.09 (6주) |
 | 개발 인원 | 6명 / Android(2), Backend(2), BigData(1), DevOps/Infra(1) |
