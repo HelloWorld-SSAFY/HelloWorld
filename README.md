@@ -133,6 +133,21 @@
 - 결과: 서비스(Deploy) **1m18s → 58s**, 메모리 튜닝(OOM 방지) 후 안정성↑
 </details>
 
+<details>
+<summary><strong>개인화 추천 알고리즘</strong></summary>
+- **이상탐지**: 사용자의 데이터를 4시간 간격으로 버킷화 한 후, 버킷 기준값으로 z-score 기준 이상 탐지 
+- **Contextual Thmopson Sampling**: 컨텐츠를 수집 후, 사용자의 정보(context)를 반영하여 가중치를 주고, thompson sampling 기법으로 탐색과 활용을 반복하며 추천 알고리즘을 고도화
+- **추천 컨텐츠**: youtube API, spotify API, meteo weather API를 통해 사용자의 상태를 고려한 컨텐츠 수집 후 알고리즘 기반 추천
+
+</details>
+
+<details>
+<summary><strong>웨어러블 데이터 수집</strong></summary>
+- **심박수**: Health Services API를 사용하여 10초 간격으로 심박수 측정
+- **걸음수**: Health Connect를 통해 Samsung Health에 기록된 걸음수 수집
+- **스트레스 수치**: 최근 심박수 데이터로 HRV 지표를 계산 후, 가중치를 추합해 스트레스 수치 측정
+</details>
+
 <br>
 
 # 📚 기술 스택
