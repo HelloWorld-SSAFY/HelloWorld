@@ -146,7 +146,8 @@
 - **Microsoft Service Architecture**
 - DB: **PostgreSQL** 16.10  
 - IDE: IntelliJ IDEA 2025.02.01
-
+- OAUTH 2.0 , 
+- Json Web Token
 ---
 
 ## ☁️ Infra & DevOps
