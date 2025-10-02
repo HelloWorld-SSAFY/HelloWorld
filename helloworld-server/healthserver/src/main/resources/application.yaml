@@ -1,7 +1,0 @@
-spring:
-  application:
-    name: "health-server"
-  config:
-    import: "configserver:"
-  cloud:
-    config:

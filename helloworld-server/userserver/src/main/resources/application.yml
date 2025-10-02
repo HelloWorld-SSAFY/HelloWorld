@@ -1,9 +1,0 @@
-spring:
-  application:
-    name: "user-server"
-  config:
-    import: "configserver:"
-  cloud:
-    config:
-      #      uri: http://config-server:8888
-      #uri: http://i13d106.p.ssafy.io:8888
