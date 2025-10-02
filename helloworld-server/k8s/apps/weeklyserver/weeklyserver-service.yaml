@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: weeklyserver-svc
+  namespace: apps
+spec:
+  selector:
+    app: weeklyserver
+  ports:
+  - port: 8080
+    targetPort: 8080
+  type: ClusterIP

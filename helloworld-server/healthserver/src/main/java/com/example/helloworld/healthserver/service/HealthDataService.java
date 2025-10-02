@@ -1,0 +1,244 @@
+package com.example.helloworld.healthserver.service;
+
+import com.example.helloworld.healthserver.alarm.repository.NotificationRepository;
+import com.example.helloworld.healthserver.client.AiServerClient;
+import com.example.helloworld.healthserver.alarm.service.FcmService;
+import com.example.helloworld.healthserver.config.UserPrincipal;
+import com.example.helloworld.healthserver.dto.HealthDtos;
+import com.example.helloworld.healthserver.dto.HealthDtos.*;
+import com.example.helloworld.healthserver.entity.HealthData;
+import com.example.helloworld.healthserver.persistence.HealthDataRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.time.*;
+import java.time.format.DateTimeFormatter;
+import java.util.*;
+
+@Service
+@Slf4j
+@RequiredArgsConstructor
+public class HealthDataService {
+
+    private final HealthDataRepository repo;
+    private final NotificationRepository notificationRepository;
+    private final AiServerClient aiServerClient;
+    private final FcmService fcmService;
+
+    @Value("${app.zone:Asia/Seoul}")
+    private String appZone;
+
+    /** 프론트 /api/wearable 진입점: DB 저장 후 AI 호출, AI 응답을 그대로 리턴 */
+    private static final Set<String> ANOMALY_MODES = Set.of("RESTRICT", "EMERGENCY");
+
+    @Transactional
+    public AiServerClient.AnomalyResponse createAndCheckHealthData(UserPrincipal user, HealthDtos.CreateRequest req) {
+        // 1) DB 저장
+        Instant timestamp = (req.date() != null) ? req.date() : Instant.now();
+        HealthData healthData = HealthData.builder()
+                .coupleId(user.getCoupleId())
+                .date(timestamp)
+                .stress(req.stress())
+                .heartrate(req.heartrate())
+                .build();
+        repo.save(healthData);
+
+        // 2) AI 서버 요청 바디 생성
+        String userRef = "u" + user.getUserId();
+        String isoTimestamp = timestamp.atZone(ZoneId.of("Asia/Seoul"))
+                .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+
+        AiServerClient.Metrics metrics = new AiServerClient.Metrics(req.heartrate(), req.stress());
+        AiServerClient.TelemetryRequest telemetryRequest = new AiServerClient.TelemetryRequest(userRef, isoTimestamp, metrics);
+
+        // 3) AI 서버 호출
+        AiServerClient.AnomalyResponse resp;
+        try {
+            resp = aiServerClient.checkTelemetry(user.getCoupleId(), telemetryRequest);
+        } catch (feign.FeignException.Unauthorized e) {
+            log.debug("AI server 401 Unauthorized (check app token): {}", e.contentUTF8());
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "AI server unauthorized");
+        } catch (feign.FeignException e) {
+            log.debug("AI server error status={}, body={}", e.status(), e.contentUTF8());
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "AI server error");
+        }
+
+        // 4) 이상 징후면 FCM (총 3건: 본인 ANDROID 1, 본인 WATCH 1, 파트너 ANDROID 1)
+        if (resp != null && resp.mode() != null && ANOMALY_MODES.contains(resp.mode().toUpperCase())) {
+            String title = "심박수 이상 감지";
+            String body  = String.format("현재 심박수가 %dBPM을 초과했습니다. 상태를 확인해주세요.",
+                    Optional.ofNullable(req.heartrate()).orElse(0));
+
+            var notif = com.example.helloworld.healthserver.alarm.entity.Notification.builder()
+                    .alarmType(com.example.helloworld.healthserver.alarm.domain.AlarmType.EMERGENCY) // import 주의
+                    .coupleId(user.getCoupleId())
+                    .alarmTitle(title)
+                    .alarmMsg(body)
+                    .createdAt(java.sql.Timestamp.from(Instant.now()))
+                    .build();
+
+            notif = notificationRepository.save(notif);     // ★ DB insert
+            Long alarmId = notif.getAlarmId();              // ★ 여기서 얻음
+
+            // FCM 3건 발송 + 유저서버 recipients 업서트
+            fcmService.sendEmergencyTripleWithAiResponse(
+                    user.getUserId(),
+                    Optional.ofNullable(req.heartrate()).orElse(0),
+                    resp.mode(),
+                    resp.riskLevel(),
+                    resp.reasons()
+            );
+        }else {
+            String mode = (resp != null && resp.mode() != null) ? resp.mode() : "normal or null";
+            log.debug("AI server reported mode '{}'. No FCM notification is needed.", mode);
+        }
+
+        return resp;
+    }
+
+    @Transactional
+    public GetResponse create(Long coupleId, CreateRequest req) {
+        HealthData hd = HealthData.builder()
+                .coupleId(coupleId)
+                .date(req.date())
+                .stress(req.stress())
+                .heartrate(req.heartrate())
+//                .steps(req.steps())
+                .build();
+        hd = repo.save(hd);
+        return toGet(hd);
+    }
+
+    @Transactional(readOnly = true)
+    public GetResponse getById(Long coupleId, Long healthId) {
+        var hd = repo.findByHealthIdAndCoupleId(healthId, coupleId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Record not found"));
+        return toGet(hd);
+    }
+
+//    @Transactional(readOnly = true)
+//    public ListResponse list(Long coupleId, LocalDate from, LocalDate to) {
+//        List<HealthData> rows;
+//        if (from == null && to == null) {
+//            rows = repo.findByCoupleIdOrderByDateDesc(coupleId);
+//        } else {
+//            ZoneId zone = ZoneId.of(appZone);
+//            LocalDate start = (from != null) ? from : LocalDate.of(1970, 1, 1);
+//            LocalDate end   = (to   != null) ? to   : LocalDate.of(9999, 12, 31);
+//            Instant fromI = start.atStartOfDay(zone).toInstant();
+//            Instant toI   = end.plusDays(1).atStartOfDay(zone).toInstant();
+//            rows = repo.findByCoupleIdAndDateBetweenOrderByDateDesc(coupleId, fromI, toI);
+//        }
+//
+//        var items = rows.stream().map(this::toItem).toList();
+//        return new ListResponse(items);
+//    }
+
+//    @Transactional(readOnly = true)
+//    public HrDailyStatsResponse hrDailyStats(Long coupleId, LocalDate from, LocalDate to) {
+//        ZoneId zone = ZoneId.of(appZone);
+//        LocalDate end = (to != null) ? to : LocalDate.now(zone);
+//        LocalDate start = (from != null) ? from : end.minusDays(13);
+//
+//        Instant fromI = start.atStartOfDay(zone).toInstant();
+//        Instant toI   = end.plusDays(1).atStartOfDay(zone).toInstant();
+//
+//        List<Object[]> rows = repo.aggregateHrDailyStats(coupleId, fromI, toI);
+//        List<HrDailyStatsResponse.Item> items = new ArrayList<>(rows.size());
+//        for (Object[] r : rows) {
+//            java.sql.Date day = (java.sql.Date) r[0];
+//            Double avg = (r[1] != null) ? ((Number) r[1]).doubleValue() : null;
+//            Double std = (r[2] != null) ? ((Number) r[2]).doubleValue() : null;
+//            Long cnt   = (r[3] != null) ? ((Number) r[3]).longValue()   : 0L;
+//            items.add(new HrDailyStatsResponse.Item(
+//                    day.toLocalDate().toString(), avg, std, cnt
+//            ));
+//        }
+//        return new HrDailyStatsResponse(items);
+//    }
+
+
+
+    //
+    @Transactional(readOnly = true)
+    public GlobalDailyStatsResponse getGlobalDailyStats(LocalDate date) {
+        if (date == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "date is required (YYYY-MM-DD)");
+        }
+
+        ZoneId zone = ZoneId.of(appZone);
+        Instant from = date.atStartOfDay(zone).toInstant();
+        Instant to = date.plusDays(1).atStartOfDay(zone).toInstant();
+
+        List<HealthDataRepository.GlobalDailyBucketStats> results = repo.aggregateGlobalDailyBuckets(from, to);
+
+        List<StatsRow> finalRows = new ArrayList<>();
+        for (HealthDataRepository.GlobalDailyBucketStats row : results) {
+            String userRef = "c" + row.getCoupleId();
+
+            // 1. Heart Rate - Average
+            finalRows.add(new StatsRow(
+                    userRef, date, "hr", "avg",
+                    row.getAvgHr0(), row.getAvgHr1(), row.getAvgHr2(),
+                    row.getAvgHr3(), row.getAvgHr4(), row.getAvgHr5()
+            ));
+            // 2. Heart Rate - Standard Deviation
+            finalRows.add(new StatsRow(
+                    userRef, date, "hr", "stddev",
+                    row.getStdHr0(), row.getStdHr1(), row.getStdHr2(),
+                    row.getStdHr3(), row.getStdHr4(), row.getStdHr5()
+            ));
+            // 3. Stress - Average
+            finalRows.add(new StatsRow(
+                    userRef, date, "stress", "avg",
+                    row.getAvgSt0(), row.getAvgSt1(), row.getAvgSt2(),
+                    row.getAvgSt3(), row.getAvgSt4(), row.getAvgSt5()
+            ));
+            // 4. Stress - Standard Deviation
+            finalRows.add(new StatsRow(
+                    userRef, date, "stress", "stddev",
+                    row.getStdSt0(), row.getStdSt1(), row.getStdSt2(),
+                    row.getStdSt3(), row.getStdSt4(), row.getStdSt5()
+            ));
+        }
+
+        return new GlobalDailyStatsResponse(finalRows);
+    }
+
+
+
+
+    private record Stat(Double avg, Double std, Long cnt) {
+        static final Stat EMPTY = new Stat(null, null, 0L);
+    }
+
+
+
+    // ---- mappers ----
+    private GetResponse toGet(HealthData hd) {
+        return new GetResponse(
+                hd.getHealthId(),
+                hd.getDate(),
+                hd.getStress(),
+                hd.getHeartrate()
+//                hd.getSteps()
+        );
+    }
+
+//    private ListResponse.Item toItem(HealthData hd) {
+//        return new ListResponse.Item(
+//                hd.getHealthId(),
+//                hd.getDate(),
+//                hd.getStress(),
+//                hd.getSleepHours(),
+//                hd.getHeartrate(),
+//                hd.getSteps(),
+//                hd.getIsDanger()
+//        );
+//    }
+}

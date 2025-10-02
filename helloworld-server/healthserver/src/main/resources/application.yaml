@@ -1,0 +1,25 @@
+
+spring:
+  application:
+    name: "health-server"
+  config:
+    # Config Server에서 원격 설정을 끌어오도록 지시 (필수)
+    import: "configserver:"
+
+  cloud:
+    # K8s 서비스 DNS로 Config Server 위치 명시
+    config:
+      uri: http://configserver-svc:8888
+      enabled: true
+  jpa:
+    properties:
+      hibernate.jdbc.time_zone:UTC
+
+
+userserver:
+  base-url: http://userserver-svc:8080
+
+
+
+fcm:
+  service-account-file:firebase-service-account.json

@@ -1,0 +1,130 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gatewayserver
+  namespace: apps
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
+  selector:
+    matchLabels: { app: gatewayserver }
+  template:
+    metadata:
+      labels: { app: gatewayserver }
+    spec:
+      imagePullSecrets:
+      - name: dockerhub-cred
+      terminationGracePeriodSeconds: 30
+      # 서로 다른 노드에 분산 배치 권장
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector: { matchLabels: { app: gatewayserver } }
+      containers:
+      - name: gatewayserver
+        image: docker.io/opensongce/msa:gatewayserver-latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+
+        - name: SPRING_CONFIG_IMPORT
+          value: "optional:configserver:http://configserver-svc.apps.svc.cluster.local:8888"
+        - name: SPRING_CLOUD_CONFIG_FAIL_FAST
+          value: "true"
+        - name: SPRING_CLOUD_CONFIG_RETRY_INITIAL_INTERVAL
+          value: "1000"
+        - name: SPRING_CLOUD_CONFIG_RETRY_MAX_ATTEMPTS
+          value: "10"
+        - name: SPRING_CLOUD_CONFIG_RETRY_MULTIPLIER
+          value: "1.5"
+        - name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
+          value: "http://eurekaserver-svc.apps.svc.cluster.local:8761/eureka/"
+
+        - name: MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED
+          value: "true"
+        - name: MANAGEMENT_HEALTH_LIVENESSSTATE_ENABLED
+          value: "true"
+        - name: MANAGEMENT_HEALTH_READINESSSTATE_ENABLED
+          value: "true"
+        - name: GATEWAY_HMAC_SECRET
+          value: "ahCwnX3I9VuzLSYtQVn0cztXZrd4zhXSqgCy8j4q57o="
+        - name: GATEWAY_AUTH_SKIP_PATHS
+          value: "/user/login,/user/refresh,/user/register,/swagger-ui,/swagger-ui/**,/v3/api-docs,/v3/api-docs/**,/user/v3/api-docs,/user/v3/api-docs/**,/calendar/v3/api-docs,/calendar/v3/api-docs/**,/health/v3/api-docs,/health/v3/api-docs/**,/weekly/v3/api-docs,/weekly/v3/api-docs/**,/ai/schema,/ai/schema/**,/ai/swagger,/ai/swagger/**,/ai/docs,/ai/docs/**,/actuator/**,/user/api/auth/google,/api/auth/google,/schema,/schema/**,/v1/healthz"
+
+        # === Redis (Bitnami 기본 값 기준) ===
+        - name: SPRING_REDIS_HOST
+          value: "redis-svc.apps.svc.cluster.local"
+        - name: SPRING_REDIS_PORT
+          value: "6379"
+        - name: SPRING_REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis               # bitnami/redis 릴리스 기본 시크릿 이름
+              key: redis-password
+
+
+
+
+        readinessProbe:
+          httpGet: { path: /actuator/health/readiness, port: 8080 }
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          failureThreshold: 6
+        livenessProbe:
+          httpGet: { path: /actuator/health/liveness,  port: 8080 }
+          initialDelaySeconds: 40
+          periodSeconds: 10
+          failureThreshold: 6
+        lifecycle:
+          preStop:
+            exec: { command: ["sh","-lc","sleep 5"] }
+        # resources:
+        #   requests: { cpu: "100m", memory: "256Mi" }
+        #   limits:   { cpu: "500m", memory: "512Mi" }
+---
+# === PDB: 최소 2개 유지 (무중단/노드 드레인 대비) ===
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: gatewayserver-pdb
+  namespace: apps
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: gatewayserver
+---
+# === HPA: 자동 확장 (CPU 60% 기준) ===
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: gatewayserver
+  namespace: apps
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: gatewayserver
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 60

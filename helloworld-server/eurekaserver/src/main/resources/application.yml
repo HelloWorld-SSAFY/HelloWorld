@@ -1,0 +1,36 @@
+server:
+  port: 8761
+
+spring:
+  application:
+    name: eureka-server
+
+eureka:
+  instance:
+    # Pod별 고정 호스트네임 사용(컨테이너 env로 넘긴 값과 일치하도록)
+    hostname: ${EUREKA_INSTANCE_HOSTNAME}
+  client:
+    register-with-eureka: true
+    fetch-registry: true
+    service-url:
+      # 각 피어(Pod) 주소를 모두 기입 (Headless Service DNS)
+      defaultZone: >
+        http://eurekaserver-0.eurekaserver-hs.apps.svc.cluster.local:8761/eureka/,
+        http://eurekaserver-1.eurekaserver-hs.apps.svc.cluster.local:8761/eureka/
+
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  health:
+    probes:
+      enabled: true
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true

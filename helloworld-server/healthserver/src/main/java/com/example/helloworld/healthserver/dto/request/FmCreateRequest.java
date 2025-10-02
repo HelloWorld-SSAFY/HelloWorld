@@ -1,0 +1,11 @@
+package com.example.helloworld.healthserver.dto.request;
+
+import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.Size;
+
+import java.time.Instant;
+
+public record FmCreateRequest(
+        @Schema(description = "기록 시각(UTC). 비우면 서버 now()")
+        Instant recorded_at
+) {}

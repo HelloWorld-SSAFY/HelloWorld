@@ -1,0 +1,123 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: calendar-diary-server
+  namespace: apps
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
+  selector:
+    matchLabels: { app: calendar-diary-server }
+  template:
+    metadata:
+      labels: { app: calendar-diary-server }
+    spec:
+      imagePullSecrets:
+      - name: dockerhub-cred
+      terminationGracePeriodSeconds: 30
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector: { matchLabels: { app: calendar-diary-server } }
+      containers:
+      - name: calendar-diary-server
+        image: docker.io/opensongce/msa:calendar-diary-server-latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+
+        # Datasource (Service DNS, Secret에서 비번 주입)
+        - name: SPRING_DATASOURCE_URL
+          value: "jdbc:postgresql://calendar-postgres-svc.apps.svc.cluster.local:5432/calendar_db"
+        - name: SPRING_DATASOURCE_USERNAME
+          value: "postgres"
+        - name: SPRING_DATASOURCE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_PASSWORD
+
+        - name: S3_ACCESSKEY
+          valueFrom:
+            secretKeyRef:
+              name: s3-credentials
+              key: S3_ACCESSKEY
+        - name: S3_SECRETKEY
+          valueFrom:
+            secretKeyRef:
+              name: s3-credentials
+              key: S3_SECRETKEY
+
+        - name: APP_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: aiserver-apptoken
+              key: TOKEN
+
+        - name: GMS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: gms-credentials
+              key: GMS_KEY
+
+        # Actuator가 있다면 /actuator/health 사용, 없으면 / 로 교체
+        readinessProbe:
+          httpGet: { path: /actuator/health, port: 8080 }
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          failureThreshold: 6
+        livenessProbe:
+          httpGet: { path: /actuator/health, port: 8080 }
+          initialDelaySeconds: 40
+          periodSeconds: 10
+          failureThreshold: 6
+
+        lifecycle:
+          preStop:
+            exec: { command: ["sh","-lc","sleep 5"] }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: calendar-diary-server-pdb
+  namespace: apps
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: calendar-diary-server
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: calendar-diary-server
+  namespace: apps
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: calendar-diary-server
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 60
