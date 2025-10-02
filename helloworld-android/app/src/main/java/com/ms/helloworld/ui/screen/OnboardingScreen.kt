@@ -931,7 +931,7 @@ fun NightSceneContent() {
             Image(
                 painter = painterResource(id = R.drawable.ic_mom),
                 contentDescription = null,
-                modifier = Modifier.size(350.dp)
+                modifier = Modifier.size(250.dp)
             )
         }
     }
